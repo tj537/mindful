@@ -25,8 +25,8 @@ Mindful shows **one mind map in four views**. All of them work on the same data,
 
 | View | What it's for |
 |---|---|
-| **Mind map** | Collect ideas: add nodes, drag them, color them, collapse them, lay them out automatically |
 | **Markdown editor** | Write quickly as text: `#` central topic, `##` main branches, `-` children, plain text as notes; with live preview |
+| **Mind map** | Collect ideas: add nodes, drag them, color them, collapse them, lay them out automatically |
 | **Presentation** | Present: a title slide plus one slide per main branch, full screen; bullet points appear one by one |
 | **Camera tour** | Present right on the mind map: the camera flies from branch to branch, the current branch is spotlit and its children grow out of it |
 
@@ -36,6 +36,7 @@ Also:
 - Save and open as `.mindmap` files, import Markdown and plain-text outlines
 - Export as PNG image, SVG graphic or Markdown
 - Undo/redo, search, zoom, copy/paste, notes on every node
+- Presentation effects: slide transitions (slide, fade, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (aurora, starfield), title animations, slow camera drift in the tour, a laser pointer and a slide strip for jumping around
 - 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
 - Ready-made examples to try: **File → Open example → The Universe** (also available in German)
 
@@ -269,7 +270,8 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | **Presentation and tour** | |
 | → · Space · click | Next bullet point / slide / stop |
 | ← · right-click | Back |
-| G | Overview of all slides or stops |
+| G | Slide strip (also appears at the bottom edge) |
+| L | Laser pointer |
 | F · Esc | Full screen · end |
 
 ### Markdown format

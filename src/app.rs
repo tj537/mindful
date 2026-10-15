@@ -393,6 +393,8 @@ struct SavedState {
     show_welcome: bool,
     #[serde(default = "yes")]
     build_bullets: bool,
+    #[serde(default)]
+    effects: present::Effects,
 }
 
 fn yes() -> bool {
@@ -406,6 +408,7 @@ struct SavedStateRef<'a> {
     active: usize,
     show_welcome: bool,
     build_bullets: bool,
+    effects: present::Effects,
 }
 
 pub struct MindMapApp {
@@ -434,6 +437,8 @@ pub struct MindMapApp {
     show_welcome: bool,
     /// Stichpunkte auf Folien nacheinander aufdecken
     build_bullets: bool,
+    /// Übergänge, Hintergrund usw. für Präsentation und Tour
+    effects: present::Effects,
 }
 
 impl MindMapApp {
@@ -462,6 +467,7 @@ impl MindMapApp {
             fullscreen: false,
             show_welcome: true,
             build_bullets: true,
+            effects: present::Effects::default(),
         };
 
         if let Some(state) = cc
@@ -487,6 +493,7 @@ impl MindMapApp {
             app.active = state.active;
             app.show_welcome = state.show_welcome;
             app.build_bullets = state.build_bullets;
+            app.effects = state.effects;
         } else if Path::new("mindmap.json").exists() {
             // Datei aus der ersten Version übernehmen
             app.open_path(PathBuf::from("mindmap.json"));
@@ -1304,18 +1311,18 @@ impl MindMapApp {
                 ui.separator();
                 cmd_item(
                     ui,
-                    mode != Mode::Mindmap,
-                    &l(icon::GRAPH, "Mind map"),
-                    None,
-                    Command::SetMode(Mode::Mindmap),
-                    &mut out,
-                );
-                cmd_item(
-                    ui,
                     true,
                     &l(icon::TEXT_ALIGN_LEFT, "Markdown editor"),
                     Some(&SC_MARKDOWN),
                     Command::ToggleMarkdown,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    mode != Mode::Mindmap,
+                    &l(icon::GRAPH, "Mind map"),
+                    None,
+                    Command::SetMode(Mode::Mindmap),
                     &mut out,
                 );
                 cmd_item(
@@ -1335,6 +1342,9 @@ impl MindMapApp {
                     &mut out,
                 );
                 ui.checkbox(&mut self.build_bullets, "Reveal bullet points one by one");
+                ui.menu_button(l(icon::SPARKLE, "Presentation effects"), |ui| {
+                    present::effects_menu(ui, &mut self.effects, true, true)
+                });
                 ui.separator();
                 ui.menu_button(l(icon::PALETTE, "Theme"), |ui| {
                     theme_menu(ui, current_theme, &mut out)
@@ -1616,8 +1626,8 @@ impl MindMapApp {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             let modes = [
-                                (Mode::Mindmap, icon::GRAPH, "Mind map"),
                                 (Mode::Markdown, icon::TEXT_ALIGN_LEFT, "Markdown"),
+                                (Mode::Mindmap, icon::GRAPH, "Mind map"),
                                 (Mode::Present, icon::PRESENTATION, "Presentation"),
                                 (Mode::Tour, icon::PATH, "Tour"),
                             ];
@@ -1716,7 +1726,11 @@ impl MindMapApp {
             (f(&SC_MARKDOWN), "Toggle Markdown editor"),
             (f(&SC_PRESENT), "Start presentation"),
             (f(&SC_TOUR), "Start camera tour"),
-            ("G".into(), "Overview of all slides / stops"),
+            (
+                "G".into(),
+                "Slide strip (also: move the mouse to the bottom edge)",
+            ),
+            ("L".into(), "Laser pointer on/off"),
             ("→ · Space · click".into(), "Next slide"),
             ("← · right-click".into(), "Previous slide"),
             ("F · Esc".into(), "Full screen · end presentation"),
@@ -2191,10 +2205,11 @@ impl eframe::App for MindMapApp {
                 .frame(egui::Frame::default().fill(theme.background))
                 .show(ctx, |ui| {
                     let doc = &mut self.docs[self.active];
+                    let fx = &mut self.effects;
                     event = if mode == Mode::Tour {
-                        tour::show(ui, doc, theme)
+                        tour::show(ui, doc, theme, fx)
                     } else {
-                        present::show(ui, doc, theme, build_bullets)
+                        present::show(ui, doc, theme, build_bullets, fx)
                     };
                 });
             match event {
@@ -2271,6 +2286,7 @@ impl eframe::App for MindMapApp {
             active: self.active,
             show_welcome: self.show_welcome,
             build_bullets: self.build_bullets,
+            effects: self.effects,
         };
         eframe::set_value(storage, eframe::APP_KEY, &state);
     }

@@ -106,9 +106,12 @@ pub struct Document {
     /// Zeitpunkt, zu dem die letzte Gruppe eingeblendet wurde
     #[serde(skip)]
     pub build_time: f64,
-    /// Übersicht aller Folien bzw. Stationen (Taste G)
+    /// Zeitpunkt, zu dem die aktuelle Folie erschienen ist (für den Titel-Effekt)
     #[serde(skip)]
-    pub grid: bool,
+    pub slide_time: f64,
+    /// Folienstreifen unten per Taste G festgehalten
+    #[serde(skip)]
+    pub strip: bool,
     #[serde(skip)]
     pub tour: TourState,
 }
@@ -135,7 +138,8 @@ impl Document {
             slide: 0,
             build: 0,
             build_time: 0.0,
-            grid: false,
+            slide_time: 0.0,
+            strip: false,
             tour: TourState::default(),
         }
     }
@@ -213,14 +217,17 @@ impl Document {
                     .map(|i| i + 1)
                     .unwrap_or(0);
                 self.build = 0;
-                self.grid = false;
+                self.strip = false;
+                // NaN = „gerade gestartet“: der erste Frame setzt die echte Zeit,
+                // damit der Titel-Effekt auch auf der ersten Folie läuft
+                self.slide_time = f64::NAN;
             }
             Mode::Tour => {
                 self.tour = TourState {
                     needs_init: true,
                     ..TourState::default()
                 };
-                self.grid = false;
+                self.strip = false;
             }
             Mode::Mindmap => {
                 if self.mode == Mode::Markdown {

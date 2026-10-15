@@ -172,7 +172,8 @@ A `Document` is one tab. `MindMapApp` holds `docs: Vec<Document>` and the index 
 | `undo`, `redo` | no | undo history |
 | `md_text` | no | text in the Markdown editor |
 | `slide`, `build` | no | current slide, number of bullet groups revealed |
-| `grid` | no | overview (G) is open |
+| `strip` | no | slide strip pinned open (G) |
+| `slide_time` | no | when the current slide appeared (title animation) |
 | `tour` | no | camera tour state: current stop, start camera, flight start time |
 
 ### Undo and redo
@@ -276,9 +277,22 @@ All measurements are relative to a slide 1280 px wide (`s = width / 1280`) and s
 
 **Bullet points one by one:** a slide's bullets are split into *groups* – a top-level bullet together with its children. `doc.build` counts how many groups are visible. → reveals the next group before moving to the next slide, ← hides it again. Hidden groups still take up their space so nothing jumps around. The newest group slides in from the left (`doc.build_time`), older ones are dimmed. The behaviour can be switched off under *View → Reveal bullet points one by one*.
 
-**Overview (G):** `overview_grid()` shows all slides as tiles; a click jumps there. The camera tour uses the same function for its stops.
+**Effects** (`Effects`, stored app-wide in `app.ron`, chosen via the ✨ button while presenting or *View → Presentation effects*):
 
-`present.rs` also holds the parts shared with the tour: `read_nav()` (keys), `corner_buttons()`, `hint()`, `overview_grid()` and the easing curves.
+| Setting | Options | How |
+|---|---|---|
+| `transition` | Slide, Fade, Zoom, Rise | the slide card is shifted or scaled; all sizes depend on `s`, so scaling the card scales the content |
+| `bullets` | Slide in, Fade, Pop, Typewriter | each bullet group gets a start time – the reveal moment, or staggered after the slide appears when bullets aren't revealed one by one |
+| `background` | Aurora, Starfield, Plain | `backdrop()`: soft blobs in the branch colors drawn as stacked translucent circles / pseudo-random twinkling dots |
+| `drift` | on/off | tour only, see below |
+
+The title rises and fades in, the accent line draws itself and the chips on the title slide pop in one after another – all timed from `doc.slide_time`.
+
+**Slide strip (G):** `filmstrip()` slides in from the bottom when the mouse reaches the bottom edge or when pinned with G; a click jumps to that slide or stop.
+
+**Laser pointer (L):** `laser()` hides the cursor and draws a glowing dot with a short trail on the foreground layer.
+
+`present.rs` also holds the parts shared with the tour: `Effects`, `read_nav()` (keys), `corner_buttons()`, `hint()`, `backdrop()`, `filmstrip()`, `laser()` and the easing curves.
 
 ## Camera tour (`tour.rs`)
 
@@ -291,6 +305,8 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 **Growing children:** children of a main branch are hidden until the tour reaches that branch. There they appear level by level (`GROW_STEP` apart), moving out of their parent's position with a slight overshoot (`ease_out_back`). Going backwards shows them instantly.
 
 **Spotlight:** at a branch stop, everything outside that branch is dimmed to 22 %. The brightness blends from the previous stop to the current one during the flight.
+
+**Camera drift:** with `drift` on, `camera()` slowly zooms in by a few percent and wanders slightly after arriving at a stop (Ken Burns effect), so the picture never stands completely still.
 
 **Subtitle:** the note of the current stop (central topic at the start, the branch afterwards) fades in as a card at the bottom once the camera has arrived.
 

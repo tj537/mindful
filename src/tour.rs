@@ -9,8 +9,8 @@ use crate::document::{Camera, Document, TourState};
 use crate::model::MindMap;
 use crate::nodes::{node_size, node_style, paint_node};
 use crate::present::{
-    color_of, corner_buttons, ease_in_out_cubic, ease_out_back, ease_out_cubic, hint,
-    overview_grid, read_nav, Event, GridItem,
+    backdrop, color_of, corner_buttons, ease_in_out_cubic, ease_out_back, ease_out_cubic,
+    filmstrip, hint, laser, read_nav, Backdrop, Effects, Event, StripItem,
 };
 use crate::theme::Theme;
 use eframe::egui::{
@@ -180,7 +180,26 @@ fn note_of(map: &MindMap, stop: Stop) -> String {
         .unwrap_or_default()
 }
 
-pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Event> {
+/// Aktuelle Kamera: Flug zur Station, danach optional langsames Schweben
+fn camera(tour: &TourState, to: Camera, now: f64, area: Rect, drift: bool) -> Camera {
+    let t = ((now - tour.started) / FLIGHT).clamp(0.0, 1.0) as f32;
+    let mut cam = fly(tour.from, to, t, area);
+    if drift {
+        // Nach der Ankunft über ~30 s ganz leicht hineinzoomen und etwas wandern
+        let d = ease_in_out_cubic(((now - tour.started - FLIGHT) / 30.0).clamp(0.0, 1.0) as f32);
+        cam.zoom *= 1.0 + 0.06 * d;
+        let wobble = Vec2::new((now * 0.11).sin() as f32, (now * 0.07).cos() as f32);
+        cam.center += wobble * (10.0 / cam.zoom) * d;
+    }
+    cam
+}
+
+pub fn show(
+    ui: &mut egui::Ui,
+    doc: &mut Document,
+    theme: &Theme,
+    fx: &mut Effects,
+) -> Option<Event> {
     let ctx = ui.ctx().clone();
     let area = ui.max_rect();
     let now = ui.input(|i| i.time);
@@ -203,9 +222,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
         doc.tour.needs_init = false;
     }
 
-    let t = ((now - doc.tour.started) / FLIGHT).clamp(0.0, 1.0) as f32;
     let to = target(map, all[doc.tour.stop], &sizes, area);
-    let cam = fly(doc.tour.from, to, t, area);
+    let cam = camera(&doc.tour, to, now, area, fx.drift);
 
     // Zu einer anderen Station: Flug beginnt dort, wo die Kamera gerade ist
     let go_to = |tour: &mut TourState, stop: usize| {
@@ -220,37 +238,6 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
 
     let nav = read_nav(ui);
     let mut event = None;
-
-    // Übersicht aller Stationen
-    if doc.grid {
-        let items: Vec<GridItem> = all
-            .iter()
-            .enumerate()
-            .map(|(i, stop)| GridItem {
-                label: match stop {
-                    Stop::Overview => "Start".into(),
-                    Stop::Finale => "End".into(),
-                    Stop::Branch(_) => format!("{i} / {}", last - 1),
-                },
-                title: title_of(map, *stop),
-                color: match stop {
-                    Stop::Branch(b) => color_of(map, theme, *b),
-                    _ => theme.root,
-                },
-            })
-            .collect();
-        if let Some(i) = overview_grid(ui, area, theme, &items, doc.tour.stop) {
-            go_to(&mut doc.tour, i);
-            doc.grid = false;
-        }
-        if nav.grid || nav.escape {
-            doc.grid = false;
-        }
-        if nav.fullscreen {
-            event = Some(Event::ToggleFullscreen);
-        }
-        return event;
-    }
 
     let background = ui.allocate_rect(area, Sense::click());
     let current = doc.tour.stop;
@@ -272,32 +259,36 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
     if nav.fullscreen {
         event = Some(Event::ToggleFullscreen);
     }
-    if nav.grid {
-        doc.grid = true;
+    if nav.strip {
+        doc.strip = !doc.strip;
     }
 
     // Läuft noch eine Animation? Dann weiter neu zeichnen.
     let busy_until = doc.tour.started + FLIGHT + GROW_DELAY + map.nodes.len() as f64 * GROW_STEP;
-    if now < busy_until + GROW_TIME {
+    if now < busy_until + GROW_TIME || fx.drift {
         ctx.request_repaint();
     }
 
     // Kamera kann sich durch einen Tastendruck gerade geändert haben
     let t = ((now - doc.tour.started) / FLIGHT).clamp(0.0, 1.0) as f32;
     let to = target(map, all[doc.tour.stop], &sizes, area);
-    let cam = fly(doc.tour.from, to, t, area);
+    let cam = camera(&doc.tour, to, now, area, fx.drift);
     let to_screen = |p: Vec2| area.center() + (p - cam.center) * cam.zoom;
 
-    // Hintergrund mit Punktraster, das mit der Kamera mitzieht
+    // Hintergrund: animiert oder Punktraster, das mit der Kamera mitzieht
     let painter = ui.painter().clone();
     painter.rect_filled(area, 0.0, theme.background);
+    let plain = fx.background == Backdrop::Plain;
+    if !plain && backdrop(&painter, area, theme, fx.background, now) {
+        ctx.request_repaint();
+    }
     let origin = to_screen(Vec2::ZERO);
     let mut spacing = 28.0 * cam.zoom;
     while spacing < 14.0 {
         spacing *= 2.0;
     }
     let mut y = area.top() + (origin.y - area.top()).rem_euclid(spacing);
-    while y < area.bottom() {
+    while plain && y < area.bottom() {
         let mut x = area.left() + (origin.x - area.left()).rem_euclid(spacing);
         while x < area.right() {
             painter.circle_filled(Pos2::new(x, y), 1.3, theme.grid);
@@ -441,17 +432,47 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
             &painter,
             Pos2::new(area.center().x, area.bottom() - 24.0),
             theme,
-            "←  →  navigate   ·   G  overview   ·   F  full screen   ·   Esc  exit",
+            "←  →  navigate   ·   G  stops   ·   L  laser   ·   F  full screen   ·   Esc  exit",
         );
     }
 
-    let (corner_event, grid_clicked) = corner_buttons(ui, area, "End tour (Esc)");
+    let (corner_event, strip_clicked) = corner_buttons(ui, area, "End tour (Esc)", fx, true);
     if corner_event.is_some() {
         event = corner_event;
     }
-    if grid_clicked {
-        doc.grid = true;
+    if strip_clicked {
+        doc.strip = !doc.strip;
     }
+
+    // Stationen als Folienstreifen, Laserpointer obenauf
+    let items: Vec<StripItem> = all
+        .iter()
+        .enumerate()
+        .map(|(i, stop)| StripItem {
+            label: match stop {
+                Stop::Overview => "Start".into(),
+                Stop::Finale => "End".into(),
+                Stop::Branch(_) => format!("{i} / {}", last - 1),
+            },
+            title: title_of(map, *stop),
+            color: match stop {
+                Stop::Branch(b) => color_of(map, theme, *b),
+                _ => theme.root,
+            },
+        })
+        .collect();
+    if let Some(i) = filmstrip(ui, area, theme, &items, doc.tour.stop, doc.strip) {
+        let cam = camera(&doc.tour, to, now, area, fx.drift);
+        let tour = &mut doc.tour;
+        if i != tour.stop {
+            tour.from = cam;
+            tour.backwards = i < tour.stop;
+            tour.prev_stop = tour.stop;
+            tour.stop = i;
+            tour.started = now;
+        }
+    }
+    laser(ui, nav.laser, now);
 
     event
 }
