@@ -1,121 +1,121 @@
 # Mindful
 
-Mindmaps, Markdown und Präsentationen in einer schlanken Desktop-App – geschrieben in Rust mit [egui](https://github.com/emilk/egui).
+Mind maps, Markdown and presentations in one lightweight desktop app – written in Rust with [egui](https://github.com/emilk/egui).
 
-![Beispiel-Mindmap „Das Weltall“](docs/beispiel-weltall.png)
+![Example mind map “The Universe”](docs/example-universe.png)
 
-**Inhalt**
+**Contents**
 
-1. [Was Mindful kann](#was-mindful-kann)
-2. [Stand je Betriebssystem](#stand-je-betriebssystem)
-3. [Wer macht was?](#wer-macht-was)
-4. [Für Nutzer:innen: Installieren und loslegen](#für-nutzerinnen-installieren-und-loslegen)
-5. [Für Entwickler:innen: Einrichten](#für-entwicklerinnen-einrichten)
-6. [Arbeitsablauf im Team](#arbeitsablauf-im-team)
-7. [Releases bauen](#releases-bauen)
-8. [Bedienung und Tastenkürzel](#bedienung-und-tastenkürzel)
-9. [Projektaufbau](#projektaufbau)
-10. [Bekannte Grenzen und Ideen](#bekannte-grenzen-und-ideen)
+1. [What Mindful does](#what-mindful-does)
+2. [Status per operating system](#status-per-operating-system)
+3. [Who does what?](#who-does-what)
+4. [For users: install and get started](#for-users-install-and-get-started)
+5. [For developers: setup](#for-developers-setup)
+6. [Team workflow](#team-workflow)
+7. [Building releases](#building-releases)
+8. [Usage and keyboard shortcuts](#usage-and-keyboard-shortcuts)
+9. [Project structure](#project-structure)
+10. [Known limitations and ideas](#known-limitations-and-ideas)
 
 ---
 
-## Was Mindful kann
+## What Mindful does
 
-Mindful zeigt **eine Mindmap in drei Ansichten**. Alle drei arbeiten auf denselben Daten, eine Änderung in der einen ist sofort in den anderen sichtbar.
+Mindful shows **one mind map in three views**. All three work on the same data, so a change in one appears in the others immediately.
 
-| Ansicht | Wozu |
+| View | What it's for |
 |---|---|
-| **Mindmap** | Gedanken sammeln: Knoten anlegen, ziehen, einfärben, einklappen, automatisch anordnen |
-| **Markdown-Editor** | Schnell als Text schreiben: `#` Mitte, `##` Hauptzweige, `-` Unterpunkte, Fließtext als Notiz; mit Live-Vorschau |
-| **Präsentation** | Vortragen: Titelfolie plus eine Folie pro Hauptzweig, im Vollbild |
+| **Mind map** | Collect ideas: add nodes, drag them, color them, collapse them, lay them out automatically |
+| **Markdown editor** | Write quickly as text: `#` central topic, `##` main branches, `-` children, plain text as notes; with live preview |
+| **Presentation** | Present: a title slide plus one slide per main branch, full screen |
 
-Außerdem:
+Also:
 
-- Mehrere Mindmaps in Tabs. Beim Beenden wird alles gesichert, auch Ungespeichertes.
-- Speichern und Öffnen als `.mindmap`-Datei, Import von Markdown- und Textdateien
-- Export als PNG-Bild, SVG-Grafik oder Markdown
-- Rückgängig/Wiederholen, Suche, Zoom, Kopieren/Einfügen, Notizen pro Knoten
-- 8 Farbschemas (Dunkel ist Standard), darunter Catppuccin; Icons von [Phosphor](https://phosphoricons.com)
-- Ein fertiges Beispiel zum Ausprobieren: **Datei → Beispiel öffnen → Weltall**
+- Several mind maps in tabs. Everything is restored on the next start, including unsaved changes.
+- Save and open as `.mindmap` files, import Markdown and plain-text outlines
+- Export as PNG image, SVG graphic or Markdown
+- Undo/redo, search, zoom, copy/paste, notes on every node
+- 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
+- Ready-made examples to try: **File → Open example → The Universe** (also available in German)
 
 ---
 
-## Stand je Betriebssystem
+## Status per operating system
 
-| System | Status | Fertiges Paket | Hinweise |
+| System | Status | Ready-made package | Notes |
 |---|---|---|---|
-| **macOS, Apple Silicon (M1–M4)** | ✅ entwickelt und getestet | `Mindful.app` über `scripts/build-mac.sh` | Hauptplattform |
-| **macOS, Intel** | 🟡 baubar, ungetestet | per Cross-Build vom Apple-Silicon-Mac | siehe [Releases bauen](#releases-bauen) |
-| **Windows 10/11** | 🟡 Code vorbereitet, ungetestet | noch keins, `mindful.exe` selbst bauen | Konsolenfenster ist schon abgeschaltet, Icon in der `.exe` fehlt noch |
-| **Linux** | 🟡 sollte laufen, ungetestet | noch keins | braucht ein paar Systembibliotheken |
+| **macOS, Apple silicon (M1–M4)** | ✅ developed and tested | `Mindful.app` via `scripts/build-mac.sh` | main platform |
+| **macOS, Intel** | 🟡 builds, untested | cross-build from an Apple-silicon Mac | see [Building releases](#building-releases) |
+| **Windows 10/11** | 🟡 code prepared, untested | none yet, build `mindful.exe` yourself | console window already disabled, icon not yet embedded in the `.exe` |
+| **Linux** | 🟡 should work, untested | none yet | needs a few system libraries |
 
-Der Code ist für alle Systeme derselbe. Unterschiede gibt es nur beim Einrichten und beim Bauen des fertigen Pakets.
+The code is the same on every system. Only setup and packaging differ.
 
 ---
 
-## Wer macht was?
+## Who does what?
 
-| Rolle | Braucht | Aufgaben |
+| Role | Needs | Tasks |
 |---|---|---|
-| **Nutzer:in** | Mac (später auch Windows) | App installieren und benutzen, Fehler melden (GitHub → *Issues*) |
-| **Entwickler:in** | macOS, Windows oder Linux mit Rust | Funktionen bauen, Fehler beheben, Tests schreiben, Pull Requests stellen |
-| **Mac-Release** | einen Mac | `scripts/build-mac.sh` ausführen, `Mindful.app` weitergeben |
-| **Windows-Release** | einen Windows-PC (oder Cross-Build) | `mindful.exe` bauen und weitergeben, Windows-Paket aufbauen (offen) |
-| **Repo-Verwaltung** (tj537) | GitHub-Zugang | Mitwirkende einladen, Pull Requests freigeben, Sichtbarkeit und Lizenz festlegen |
+| **User** | a Mac (Windows later) | install and use the app, report bugs (GitHub → *Issues*) |
+| **Developer** | macOS, Windows or Linux with Rust | build features, fix bugs, write tests, open pull requests |
+| **Mac release** | a Mac | run `scripts/build-mac.sh`, hand out `Mindful.app` |
+| **Windows release** | a Windows PC (or a cross-build) | build and hand out `mindful.exe`, set up Windows packaging (open) |
+| **Repository admin** (tj537) | GitHub access | invite contributors, review and merge pull requests, decide on visibility and license |
 
-Eine Person kann natürlich mehrere Rollen haben. Wichtig ist nur: **Ein Mac-Paket lässt sich nur auf einem Mac bauen**, ein Windows-Paket am einfachsten auf Windows.
+One person can of course have several roles. The important part: **a Mac package can only be built on a Mac**, and a Windows package is easiest to build on Windows.
 
 ---
 
-## Für Nutzer:innen: Installieren und loslegen
+## For users: install and get started
 
 ### macOS
 
-1. `Mindful.app` von der Person bekommen, die das Mac-Release baut, oder [selbst bauen](#macos).
-2. In den Ordner **Programme** ziehen, dann bei Bedarf ins Dock.
-3. **Beim ersten Start:** Rechtsklick auf die App → **Öffnen** → **Öffnen**.
-   Die App ist nur lokal signiert, nicht von Apple beglaubigt. macOS fragt deshalb einmal nach. Danach startet sie normal per Doppelklick.
+1. Get `Mindful.app` from whoever builds the Mac release, or [build it yourself](#macos-2).
+2. Drag it into **Applications**, then into the Dock if you like.
+3. **On first launch:** right-click the app → **Open** → **Open**.
+   The app is only signed locally, not notarized by Apple, so macOS asks once. After that it opens normally with a double-click.
 
 ### Windows
 
-Ein fertiges Paket gibt es noch nicht. Bis dahin [selbst bauen](#windows) und die `mindful.exe` per Rechtsklick → **An Taskleiste anheften**. Beim ersten Start warnt Windows SmartScreen, weil die Datei nicht signiert ist: **Weitere Informationen → Trotzdem ausführen**.
+There is no ready-made package yet. Until then, [build it yourself](#windows-2) and right-click `mindful.exe` → **Pin to taskbar**. On first launch Windows SmartScreen warns because the file isn't signed: **More info → Run anyway**.
 
-### Wo Mindful Daten ablegt
+### Where Mindful stores data
 
-| Was | macOS | Windows | Linux |
+| What | macOS | Windows | Linux |
 |---|---|---|---|
-| Deine Mindmaps | wo du sie speicherst (`.mindmap`) | wo du sie speicherst | wo du sie speicherst |
-| Offene Tabs, Farbschema, Fenstergröße | `~/Library/Application Support/Mindful/` | `%APPDATA%\Mindful\data\` | `~/.local/share/mindful/` |
+| Your mind maps | wherever you save them (`.mindmap`) | wherever you save them | wherever you save them |
+| Open tabs, theme, window size | `~/Library/Application Support/Mindful/` | `%APPDATA%\Mindful\data\` | `~/.local/share/mindful/` |
 
-Löschst du den App-Ordner aus der Tabelle, startet Mindful wie neu installiert.
+Deleting the app folder from this table resets Mindful to a fresh install.
 
 ---
 
-## Für Entwickler:innen: Einrichten
+## For developers: setup
 
-Für alle Systeme gilt: Rust wird über **rustup** installiert, die aktuelle stabile Version reicht. Entwickelt wurde mit Rust 1.99.
+On every system, Rust is installed via **rustup**. The current stable version is enough. Mindful was developed with Rust 1.99.
 
 ### macOS
 
 ```bash
 xcode-select --install
 ```
-Das installiert die Xcode-Kommandozeilenwerkzeuge (Compiler, Linker, `iconutil`, `codesign`). Falls macOS danach beim Bauen meldet, dass die Lizenz nicht akzeptiert ist:
+This installs the Xcode command line tools (compiler, linker, `iconutil`, `codesign`). If a build later complains that the license hasn't been accepted:
 ```bash
 sudo xcodebuild -license
 ```
-Dann Rust installieren:
+Then install Rust:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 ### Windows
 
-1. **Visual Studio Build Tools** installieren ([Download](https://visualstudio.microsoft.com/de/visual-cpp-build-tools/)) und dabei die Arbeitsauslastung **„Desktopentwicklung mit C++“** wählen. Rust braucht daraus den Linker und das Windows-SDK.
-2. **Rust** mit `rustup-init.exe` von [rustup.rs](https://rustup.rs) installieren und die Standardeinstellungen übernehmen.
-3. **Git** installieren ([git-scm.com](https://git-scm.com)), optional die GitHub-CLI ([cli.github.com](https://cli.github.com)).
+1. Install the **Visual Studio Build Tools** ([download](https://visualstudio.microsoft.com/visual-cpp-build-tools/)) and select the **“Desktop development with C++”** workload. Rust needs its linker and the Windows SDK.
+2. Install **Rust** with `rustup-init.exe` from [rustup.rs](https://rustup.rs) and accept the defaults.
+3. Install **Git** ([git-scm.com](https://git-scm.com)), and optionally the GitHub CLI ([cli.github.com](https://cli.github.com)).
 
-Alle Befehle unten funktionieren in PowerShell genauso, nur Pfade schreibt man mit `\`.
+All commands below work the same in PowerShell; just write paths with `\`.
 
 ### Linux (Debian/Ubuntu)
 
@@ -125,11 +125,11 @@ sudo apt install build-essential libxcb-render0-dev libxcb-shape0-dev libxcb-xfi
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-Die Dateidialoge laufen über das Desktop-Portal (`xdg-desktop-portal`), das bei GNOME und KDE normalerweise schon installiert ist. `zenity` braucht es für die Rückfrage beim Schließen ungespeicherter Tabs.
+File dialogs use the desktop portal (`xdg-desktop-portal`), which GNOME and KDE usually ship already. `zenity` is needed for the prompt when closing a tab with unsaved changes.
 
-### Projekt holen und starten
+### Get the project and run it
 
-Das Repository ist privat. Die Repo-Verwaltung muss dich zuerst einladen (GitHub → *Settings → Collaborators*).
+The repository is private, so the repository admin has to invite you first (GitHub → *Settings → Collaborators*).
 
 ```bash
 git clone https://github.com/tj537/mindful.git
@@ -141,43 +141,43 @@ cd mindful
 cargo run
 ```
 
-Der erste Build lädt alle Bibliotheken und dauert einige Minuten. Danach geht es in Sekunden.
+The first build downloads all libraries and takes a few minutes. After that it takes seconds.
 
-### Die wichtigsten Befehle
+### The most important commands
 
-| Befehl | Was er tut |
+| Command | What it does |
 |---|---|
-| `cargo run` | App bauen (Debug) und starten |
-| `cargo test` | Alle Tests ausführen |
-| `cargo clippy` | Code auf typische Fehler und Stilprobleme prüfen |
-| `cargo fmt` | Code einheitlich formatieren |
-| `cargo build --release` | Optimierte Version bauen → `target/release/mindful` (Windows: `mindful.exe`) |
+| `cargo run` | build (debug) and start the app |
+| `cargo test` | run all tests |
+| `cargo clippy` | check the code for common mistakes and style issues |
+| `cargo fmt` | format the code consistently |
+| `cargo build --release` | build the optimized version → `target/release/mindful` (Windows: `mindful.exe`) |
 
 ---
 
-## Arbeitsablauf im Team
+## Team workflow
 
-1. **Neuen Branch** für jede Änderung anlegen:
+1. Create a **new branch** for every change:
    ```bash
-   git switch -c feature/kurzer-name
+   git switch -c feature/short-name
    ```
-2. Ändern, dann vor jedem Commit prüfen:
+2. Make your changes, then check before every commit:
    ```bash
    cargo fmt && cargo clippy && cargo test
    ```
-   Alle drei sollten ohne Warnungen und Fehler durchlaufen. So ist der Stand auf `main`.
-3. Committen und hochladen:
+   All three should finish without warnings or errors – that's the state of `main`.
+3. Commit and push:
    ```bash
-   git push -u origin feature/kurzer-name
+   git push -u origin feature/short-name
    ```
-4. Auf GitHub einen **Pull Request** gegen `main` öffnen. Die Repo-Verwaltung schaut drüber und führt ihn zusammen.
-5. **Plattform-spezifische Änderungen** (Schriften, Dateipfade, Tastenkürzel) möglichst auf dem betroffenen System ausprobieren. Im Code erkennt man sie an `cfg!(target_os = "...")`.
+4. Open a **pull request** against `main` on GitHub. The repository admin reviews and merges it.
+5. Try **platform-specific changes** (fonts, file paths, shortcuts) on the affected system if you can. In the code they are marked with `cfg!(target_os = "...")`.
 
-Commit-Nachrichten auf Deutsch, kurz und im Imperativ: „Notizen im Export ergänzen“.
+Commit messages in English, short and in the imperative: “Add notes to the export”.
 
 ---
 
-## Releases bauen
+## Building releases
 
 ### macOS
 
@@ -185,16 +185,16 @@ Commit-Nachrichten auf Deutsch, kurz und im Imperativ: „Notizen im Export erg�
 ./scripts/build-mac.sh
 ```
 
-Das Skript:
+The script:
 
-1. baut die optimierte Version (`cargo build --release`),
-2. rendert das Icon aus `assets/icon.svg` in alle Größen (`examples/make_icon.rs`) und macht daraus eine `.icns`-Datei,
-3. stellt `dist/Mindful.app` zusammen (Programm, Icon, `packaging/macos/Info.plist`),
-4. signiert das Paket lokal (`codesign --sign -`).
+1. builds the optimized version (`cargo build --release`),
+2. renders the icon from `assets/icon.svg` in every size (`examples/make_icon.rs`) and turns it into an `.icns` file,
+3. assembles `dist/Mindful.app` (binary, icon, `packaging/macos/Info.plist`),
+4. signs the bundle locally (`codesign --sign -`).
 
-Die Versionsnummer kommt aus `Cargo.toml`. Das Ergebnis läuft auf Macs mit **dem gleichen Prozessortyp** wie der, auf dem gebaut wurde.
+The version number comes from `Cargo.toml`. The result runs on Macs with **the same processor type** as the one it was built on.
 
-**Für Intel-Macs** oder als **Universal-App für beide** zusätzlich:
+**For Intel Macs**, or as a **universal app for both**, additionally run:
 ```bash
 rustup target add x86_64-apple-darwin aarch64-apple-darwin
 ```
@@ -204,126 +204,127 @@ cargo build --release --target x86_64-apple-darwin && cargo build --release --ta
 ```bash
 lipo -create -output target/release/mindful target/x86_64-apple-darwin/release/mindful target/aarch64-apple-darwin/release/mindful
 ```
-Danach die Schritte 2–4 des Skripts von Hand ausführen oder das Skript entsprechend anpassen (offen).
+Then do steps 2–4 of the script by hand, or extend the script (open).
 
-**Weitergabe ohne Rückfrage von macOS** erfordert eine Apple-Developer-ID (99 $/Jahr) und eine Notarisierung bei Apple. Das ist noch nicht eingerichtet.
+**Distributing without the macOS warning** requires an Apple Developer ID ($99/year) and notarization by Apple. That isn't set up yet.
 
 ### Windows
 
-Auf dem Windows-PC im Projektordner:
+On the Windows PC, in the project folder:
 ```powershell
 cargo build --release
 ```
-Das Ergebnis ist `target\release\mindful.exe`, eine einzelne Datei ohne weitere Abhängigkeiten. Im Release-Build öffnet sich kein Konsolenfenster daneben.
+The result is `target\release\mindful.exe`, a single file with no further dependencies. The release build doesn't open a console window next to the app.
 
-Noch offen:
-- App-Icon in die `.exe` einbetten (z. B. mit dem Crate `winresource` in einer `build.rs`)
-- ein Skript `scripts/build-windows.ps1` analog zum Mac-Skript
-- optional ein Installer und eine Code-Signatur gegen die SmartScreen-Warnung
+Still open:
+- embed the app icon in the `.exe` (e.g. with the `winresource` crate in a `build.rs`)
+- a `scripts/build-windows.ps1` script like the Mac one
+- optionally an installer and code signing to avoid the SmartScreen warning
 
 ### Linux
 
 ```bash
 cargo build --release
 ```
-Ergebnis: `target/release/mindful`. Ein Paket (AppImage, `.deb`, Flatpak) gibt es noch nicht.
+Result: `target/release/mindful`. There is no package (AppImage, `.deb`, Flatpak) yet.
 
 ---
 
-## Bedienung und Tastenkürzel
+## Usage and keyboard shortcuts
 
-Umschalten zwischen den Ansichten: rechts in der Tableiste oder per Tastenkürzel. **F1** zeigt in der App alle Kürzel.
-Auf dem Mac gilt ⌘, unter Windows und Linux Strg.
+Switch views on the right of the tab bar or with a shortcut. **F1** shows every shortcut inside the app.
+On the Mac use ⌘, on Windows and Linux use Ctrl.
 
-| Taste | Aktion |
+| Key | Action |
 |---|---|
-| **Mindmap** | |
-| Tab | Unterpunkt anlegen (auch direkt beim Tippen) |
-| Enter | Nachbar anlegen / Tippen beenden |
-| F2 · Doppelklick | Umbenennen |
-| Entf | Knoten samt Unterpunkten löschen |
-| Leertaste | Ein- und ausklappen |
-| Pfeiltasten | Auswahl bewegen |
-| ⌘C · ⌘X · ⌘V · ⌘D | Kopieren · Ausschneiden · Einfügen · Duplizieren |
-| ⌘L | Automatisch anordnen |
-| ⌘F | Suchen (Enter: nächster Treffer) |
-| ⌘0 · ⌘+ · ⌘− | Alles anzeigen · Zoomen |
-| Rechtsklick | Menü mit Farbe, Notiz und mehr |
-| **Allgemein** | |
-| ⌘E | Markdown-Editor ein/aus |
-| F5 | Präsentation starten |
-| ⌘Z · ⇧⌘Z | Rückgängig · Wiederholen |
-| ⌘T · ⌘W | Neuer Tab · Tab schließen |
-| Ctrl+Tab · ⌘1…9 | Tab wechseln |
-| ⌘S · ⇧⌘S · ⌘O | Speichern · Speichern unter · Öffnen |
-| **Präsentation** | |
-| → · Leertaste · Klick | Nächste Folie |
-| ← · Rechtsklick | Vorherige Folie |
-| F · Esc | Vollbild · Beenden |
+| **Mind map** | |
+| Tab | Add child (also while typing) |
+| Enter | Add sibling / finish typing |
+| F2 · double-click | Rename |
+| Del · Backspace | Delete node and its children |
+| Space | Collapse / expand |
+| Arrow keys | Move selection |
+| ⌘C · ⌘X · ⌘V · ⌘D | Copy · cut · paste · duplicate |
+| ⌘L | Auto layout |
+| ⌘F | Find (Enter: next match) |
+| ⌘0 · ⌘+ · ⌘− | Fit to window · zoom |
+| Right-click | Menu with color, note and more |
+| **General** | |
+| ⌘E | Toggle Markdown editor |
+| F5 | Start presentation |
+| ⌘Z · ⇧⌘Z | Undo · redo |
+| ⌘T · ⌘W | New tab · close tab |
+| Ctrl+Tab · ⌘1…9 | Switch tab |
+| ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
+| **Presentation** | |
+| → · Space · click | Next slide |
+| ← · right-click | Previous slide |
+| F · Esc | Full screen · end presentation |
 
-### Markdown-Format
+### Markdown format
 
 ```markdown
-# Titel der Mindmap
+# Title of the mind map
 
-Notiz zur Mitte (wird zum Untertitel der Titelfolie).
+Note on the central topic (becomes the subtitle of the title slide).
 
-## Hauptzweig
+## Main branch
 
-Notiz zum Zweig (steht auf der Folie unter der Überschrift).
+Note on the branch (shown on the slide below the heading).
 
-- Unterpunkt
-  Notiz zum Unterpunkt
-  - noch tiefer
+- Child
+  Note on the child
+  - deeper
 ```
 
 ---
 
-## Projektaufbau
+## Project structure
 
 ```
 mindful/
 ├── src/
-│   ├── main.rs            Start, Fenster, Icon, Übernahme alter Daten
-│   ├── app.rs             Hauptfenster: Menüs, Tabs, Mindmap-Fläche, Tastatur
-│   ├── document.rs        Ein Tab: Datei, Ansicht, Rückgängig/Wiederholen
-│   ├── model.rs           Mindmap-Daten, Anordnen, Markdown lesen und schreiben
-│   ├── markdown_view.rs   Markdown-Editor mit Hervorhebung und Vorschau
-│   ├── present.rs         Präsentationsmodus
-│   ├── export.rs          SVG- und PNG-Export
-│   └── theme.rs           Farbschemas, Schrift, Widget-Stil
+│   ├── main.rs            startup, window, icon, migration of old data
+│   ├── app.rs             main window: menus, tabs, mind map canvas, keyboard
+│   ├── document.rs        one tab: file, view, undo/redo
+│   ├── model.rs           mind map data, auto layout, reading and writing Markdown
+│   ├── markdown_view.rs   Markdown editor with highlighting and preview
+│   ├── present.rs         presentation mode
+│   ├── export.rs          SVG and PNG export
+│   └── theme.rs           themes, fonts, widget style
 ├── assets/
-│   ├── icon.svg / icon.png    App-Icon (Vorlage / fürs Fenster)
-│   └── beispiele/weltall.md   Mitgeliefertes Beispiel
-├── examples/make_icon.rs  Rendert das Icon für das Mac-Paket
-├── packaging/macos/       Info.plist für Mindful.app
-├── scripts/build-mac.sh   Baut dist/Mindful.app
-└── docs/                  Architektur und Bilder
+│   ├── icon.svg / icon.png    app icon (source / for the window)
+│   └── examples/              bundled examples (English and German)
+├── examples/make_icon.rs  renders the icon for the Mac bundle
+├── packaging/macos/       Info.plist for Mindful.app
+├── scripts/build-mac.sh   builds dist/Mindful.app
+└── docs/                  architecture and images
 ```
 
-**Wie das alles zusammenspielt** – Datenmodell, Ablauf eines Frames, Markdown-Abgleich, Dateiformat und wie man neue Funktionen einbaut – steht ausführlich in **[docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md)**.
+**How it all fits together** – data model, the flow of a frame, Markdown sync, file format and how to add features – is explained in detail in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-### Verwendete Bibliotheken
+### Libraries
 
-| Crate | Wofür |
+| Crate | Used for |
 |---|---|
-| `eframe` / `egui` 0.31 | Fenster und Oberfläche |
-| `egui-phosphor` 0.9 | Icons (Version muss zu egui passen) |
-| `rfd` | Native Datei- und Hinweisdialoge |
-| `resvg` | SVG in PNG umwandeln (Export, Icon) |
-| `serde` / `serde_json` | Speichern und Laden |
+| `eframe` / `egui` 0.31 | window and user interface |
+| `egui-phosphor` 0.9 | icons (version must match egui) |
+| `rfd` | native file and message dialogs |
+| `resvg` | rendering SVG to PNG (export, icon) |
+| `serde` / `serde_json` | saving and loading |
 
 ---
 
-## Bekannte Grenzen und Ideen
+## Known limitations and ideas
 
-- **Windows-Paket** mit Icon und Build-Skript fehlt noch.
-- Das Menü liegt im Fenster, nicht in der macOS-Menüleiste (Eigenheit von egui).
-- Doppelklick auf eine `.mindmap`-Datei im Finder öffnet Mindful noch nicht.
-- Unter Windows und Linux wird die eingebaute egui-Schrift verwendet, auf dem Mac die Systemschrift (SF).
-- Folien zeigen Unterpunkte bis zur dritten Ebene. Notizen von Unterpunkten erscheinen nicht auf den Folien.
-- Bei einem Update von egui sind Anpassungen am Code nötig, weil sich dessen Schnittstelle häufig ändert.
+- A **Windows package** with icon and build script is still missing.
+- The menu lives inside the window, not in the macOS menu bar (an egui limitation).
+- Double-clicking a `.mindmap` file in Finder doesn't open Mindful yet.
+- Windows and Linux use egui's built-in font; the Mac uses the system font (SF).
+- Slides show children down to the third level. Notes on children don't appear on slides.
+- Updating egui requires code changes because its API changes frequently.
+- Code comments are still in German.
 
-## Lizenz
+## License
 
-Noch keine festgelegt. Das Repository ist privat. Vor einer Veröffentlichung sollte eine Lizenz gewählt werden (z. B. MIT oder Apache-2.0).
+Not chosen yet; the repository is private. Pick a license (e.g. MIT or Apache-2.0) before making it public.

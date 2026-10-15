@@ -131,9 +131,9 @@ pub fn svg_to_png(svg: &str, path: &Path) -> Result<(), String> {
         .size()
         .to_int_size()
         .scale_by(scale)
-        .ok_or_else(|| "Bild ist zu groß".to_string())?;
+        .ok_or_else(|| "Image is too large".to_string())?;
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
-        .ok_or_else(|| "Bild ist zu groß".to_string())?;
+        .ok_or_else(|| "Image is too large".to_string())?;
     resvg::render(
         &tree,
         tiny_skia::Transform::from_scale(scale, scale),

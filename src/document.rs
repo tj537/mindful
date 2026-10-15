@@ -103,7 +103,7 @@ impl Document {
 
         if matches!(ext.as_str(), "md" | "markdown" | "txt") {
             let map = MindMap::from_outline(&text)
-                .ok_or_else(|| "Die Datei enthält keine Gliederung".to_string())?;
+                .ok_or_else(|| "The file contains no outline".to_string())?;
             // Import: ohne Pfad, damit Speichern nach einem .mindmap-Namen fragt
             let mut doc = Self::new(map, None);
             doc.layout_pending = true;
@@ -111,9 +111,9 @@ impl Document {
             Ok(doc)
         } else {
             let map: MindMap =
-                serde_json::from_str(&text).map_err(|e| format!("Keine gültige Mindmap ({e})"))?;
+                serde_json::from_str(&text).map_err(|e| format!("Not a valid mind map ({e})"))?;
             if map.root().is_none() {
-                return Err("Die Mindmap hat keinen Mittelpunkt".into());
+                return Err("The mind map has no central topic".into());
             }
             Ok(Self::new(map, Some(path.to_path_buf())))
         }
@@ -140,7 +140,7 @@ impl Document {
             .map(|n| n.text.trim().to_string())
             .unwrap_or_default();
         if root.is_empty() {
-            return "Unbenannt".into();
+            return "Untitled".into();
         }
         let mut short: String = root.chars().take(24).collect();
         if root.chars().count() > 24 {

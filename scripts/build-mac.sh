@@ -1,5 +1,5 @@
 #!/bin/bash
-# Baut dist/Mindful.app – zum Doppelklicken und Anpinnen im Dock.
+# Builds dist/Mindful.app – double-click it or pin it to the Dock.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -9,21 +9,21 @@ VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
 APP=dist/Mindful.app
 ICONSET=target/AppIcon.iconset
 
-echo "==> Programm bauen (Release)"
+echo "==> Building release binary"
 "$CARGO" build --release
 
-echo "==> Icon erzeugen"
+echo "==> Rendering icon"
 rm -rf "$ICONSET"
 "$CARGO" run --quiet --release --example make_icon -- "$ICONSET"
 
-echo "==> App-Paket zusammenstellen"
+echo "==> Assembling app bundle"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp target/release/mindful "$APP/Contents/MacOS/mindful"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 sed "s/__VERSION__/$VERSION/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
 
-# Lokale Signatur ohne Apple-Konto, damit macOS das Paket als Ganzes akzeptiert
+# Local ad-hoc signature (no Apple account needed) so macOS accepts the bundle as a whole
 codesign --force --deep --sign - "$APP"
 
-echo "==> Fertig: $APP"
+echo "==> Done: $APP"

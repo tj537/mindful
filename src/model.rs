@@ -2,7 +2,7 @@ use eframe::egui::Vec2;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-pub const DEFAULT_TEXT: &str = "Neuer Gedanke";
+pub const DEFAULT_TEXT: &str = "New idea";
 
 /// Zeilenhöhe beim automatischen Anordnen
 const ROW: f32 = 54.0;
@@ -449,7 +449,7 @@ impl MindMap {
             && items.iter().filter(|i| i.level == min).count() == 1;
         let (root_text, root_note, rest) = match items.first() {
             Some(first) if single_root => (first.text.clone(), first.note.clone(), &items[1..]),
-            Some(_) => ("Mindmap".to_string(), String::new(), &items[..]),
+            Some(_) => ("Mind map".to_string(), String::new(), &items[..]),
             None => (String::new(), String::new(), &items[..]),
         };
 
@@ -726,8 +726,22 @@ mod example_tests {
     use super::*;
 
     #[test]
+    fn universe_example_is_complete() {
+        let md = include_str!("../assets/examples/universe.md");
+        let map = MindMap::from_outline(md).unwrap();
+        let root = map.root().unwrap();
+        assert_eq!(map.get(root).unwrap().text, "The Universe");
+        let branches: Vec<&Node> = map.children(root).collect();
+        assert_eq!(branches.len(), 7);
+        assert!(branches
+            .iter()
+            .all(|b| !b.note.is_empty() && map.has_children(b.id)));
+        assert_eq!(map.to_markdown(), md);
+    }
+
+    #[test]
     fn weltall_example_is_complete() {
-        let md = include_str!("../assets/beispiele/weltall.md");
+        let md = include_str!("../assets/examples/weltall.md");
         let map = MindMap::from_outline(md).unwrap();
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "Das Weltall");

@@ -106,7 +106,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool)
                         .desired_width(f32::INFINITY)
                         .desired_rows(30)
                         .lock_focus(true)
-                        .hint_text("# Thema\n\n## Zweig\n\nNotiz zum Zweig\n\n- Unterpunkt\n  - noch tiefer")
+                        .hint_text("# Topic\n\n## Branch\n\nA note about the branch\n\n- Child\n  - deeper")
                         .layouter(&mut layouter);
                     if ui.add(editor).changed() {
                         doc.markdown_changed();
@@ -136,7 +136,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
         return;
     };
     ui.label(
-        RichText::new(format!("{}  Vorschau", icon::EYE))
+        RichText::new(format!("{}  Preview", icon::EYE))
             .small()
             .weak(),
     );

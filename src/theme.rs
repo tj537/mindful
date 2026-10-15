@@ -27,7 +27,7 @@ const fn hex(v: u32) -> Color32 {
 
 pub const THEMES: [Theme; 8] = [
     Theme {
-        name: "Hell",
+        name: "Light",
         dark: false,
         background: rgb(246, 247, 251),
         grid: rgb(214, 218, 230),
@@ -46,7 +46,7 @@ pub const THEMES: [Theme; 8] = [
         ],
     },
     Theme {
-        name: "Dunkel",
+        name: "Dark",
         dark: true,
         background: rgb(24, 26, 33),
         grid: rgb(48, 52, 64),
@@ -65,7 +65,7 @@ pub const THEMES: [Theme; 8] = [
         ],
     },
     Theme {
-        name: "Ozean",
+        name: "Ocean",
         dark: true,
         background: rgb(12, 32, 48),
         grid: rgb(28, 56, 78),
@@ -84,7 +84,7 @@ pub const THEMES: [Theme; 8] = [
         ],
     },
     Theme {
-        name: "Sonnenuntergang",
+        name: "Sunset",
         dark: false,
         background: rgb(255, 246, 238),
         grid: rgb(240, 218, 202),
@@ -103,7 +103,7 @@ pub const THEMES: [Theme; 8] = [
         ],
     },
     Theme {
-        name: "Wald",
+        name: "Forest",
         dark: false,
         background: rgb(240, 244, 236),
         grid: rgb(208, 220, 200),

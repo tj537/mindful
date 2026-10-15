@@ -6,11 +6,11 @@ use resvg::{tiny_skia, usvg};
 use std::path::PathBuf;
 
 fn main() {
-    let out = PathBuf::from(std::env::args().nth(1).expect("Zielordner angeben"));
-    std::fs::create_dir_all(&out).expect("Zielordner anlegen");
+    let out = PathBuf::from(std::env::args().nth(1).expect("usage: make_icon <output.iconset>"));
+    std::fs::create_dir_all(&out).expect("could not create output folder");
 
     let svg = include_str!("../assets/icon.svg");
-    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).expect("SVG lesen");
+    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).expect("could not read SVG");
 
     for base in [16u32, 32, 128, 256, 512] {
         for scale in [1u32, 2] {
@@ -24,7 +24,7 @@ fn main() {
             );
             let suffix = if scale == 2 { "@2x" } else { "" };
             let name = format!("icon_{base}x{base}{suffix}.png");
-            pixmap.save_png(out.join(name)).expect("PNG schreiben");
+            pixmap.save_png(out.join(name)).expect("could not write PNG");
         }
     }
 }

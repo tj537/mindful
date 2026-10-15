@@ -161,14 +161,14 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
     let big = |ic: &str| RichText::new(ic).size(18.0);
     if corner
         .button(big(icon::X))
-        .on_hover_text("Präsentation beenden (Esc)")
+        .on_hover_text("End presentation (Esc)")
         .clicked()
     {
         event = Some(Event::Exit);
     }
     if corner
         .button(big(icon::CORNERS_OUT))
-        .on_hover_text("Vollbild (F)")
+        .on_hover_text("Full screen (F)")
         .clicked()
     {
         event = Some(Event::ToggleFullscreen);
@@ -288,7 +288,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
     painter.text(
         egui::pos2(area.center().x, card.bottom() + 24.0),
         Align2::CENTER_CENTER,
-        "←  →  blättern   ·   F  Vollbild   ·   Esc  beenden",
+        "←  →  navigate   ·   F  full screen   ·   Esc  exit",
         FontId::proportional(13.0),
         theme.text.gamma_multiply(0.45),
     );

@@ -16,11 +16,20 @@ use std::sync::Arc;
 const MIN_ZOOM: f32 = 0.25;
 const MAX_ZOOM: f32 = 3.0;
 const MIN_NODE: Vec2 = Vec2::new(90.0, 34.0);
-/// Farbschema beim ersten Start: "Dunkel"
+/// Farbschema beim ersten Start: "Dark"
 const DEFAULT_THEME: usize = 1;
 
 /// Mitgelieferte Beispiele (Name, Markdown)
-const EXAMPLES: [(&str, &str); 1] = [("Weltall", include_str!("../assets/beispiele/weltall.md"))];
+const EXAMPLES: [(&str, &str); 2] = [
+    (
+        "The Universe",
+        include_str!("../assets/examples/universe.md"),
+    ),
+    (
+        "Das Weltall (Deutsch)",
+        include_str!("../assets/examples/weltall.md"),
+    ),
+];
 
 // ---------------------------------------------------------------------------
 // Tastenkürzel (Cmd auf dem Mac, Strg sonst)
@@ -288,7 +297,7 @@ fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
     cmd_item(
         ui,
         true,
-        &l(icon::IMAGE, "Bild (PNG) …"),
+        &l(icon::IMAGE, "Image (PNG) …"),
         None,
         Command::Export(ExportKind::Png),
         out,
@@ -296,7 +305,7 @@ fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
     cmd_item(
         ui,
         true,
-        &l(icon::FILE_SVG, "Vektorgrafik (SVG) …"),
+        &l(icon::FILE_SVG, "Vector graphic (SVG) …"),
         None,
         Command::Export(ExportKind::Svg),
         out,
@@ -304,7 +313,7 @@ fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
     cmd_item(
         ui,
         true,
-        &l(icon::MARKDOWN_LOGO, "Gliederung (Markdown) …"),
+        &l(icon::MARKDOWN_LOGO, "Outline (Markdown) …"),
         None,
         Command::Export(ExportKind::Markdown),
         out,
@@ -365,7 +374,7 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         true,
-        &l(icon::PLUS_CIRCLE, "Neuer Unterpunkt"),
+        &l(icon::PLUS_CIRCLE, "New child"),
         "Tab",
         Action::AddChild(id),
         out,
@@ -373,7 +382,7 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         true,
-        &l(icon::ARROW_BEND_DOWN_RIGHT, "Neuer Nachbar"),
+        &l(icon::ARROW_BEND_DOWN_RIGHT, "New sibling"),
         "Enter",
         Action::AddSibling(id),
         out,
@@ -381,33 +390,26 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         true,
-        &l(icon::PENCIL_SIMPLE, "Umbenennen"),
+        &l(icon::PENCIL_SIMPLE, "Rename"),
         "F2",
         Action::Rename(id),
         out,
     );
     let toggle = if collapsed {
-        l(icon::ARROWS_OUT_SIMPLE, "Ausklappen")
+        l(icon::ARROWS_OUT_SIMPLE, "Expand")
     } else {
-        l(icon::ARROWS_IN_SIMPLE, "Einklappen")
+        l(icon::ARROWS_IN_SIMPLE, "Collapse")
     };
-    action_item(
-        ui,
-        has_children,
-        &toggle,
-        "Leertaste",
-        Action::Toggle(id),
-        out,
-    );
+    action_item(ui, has_children, &toggle, "Space", Action::Toggle(id), out);
     action_item(
         ui,
         true,
-        &l(icon::NOTE_PENCIL, "Notiz …"),
+        &l(icon::NOTE_PENCIL, "Note …"),
         "",
         Action::EditNote(id),
         out,
     );
-    ui.menu_button(l(icon::PALETTE, "Farbe"), |ui| {
+    ui.menu_button(l(icon::PALETTE, "Color"), |ui| {
         ui.horizontal(|ui| {
             for (i, color) in theme.branches.iter().enumerate() {
                 let swatch = egui::Button::new("")
@@ -419,7 +421,7 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
                 }
             }
         });
-        if ui.button("Automatisch").clicked() {
+        if ui.button("Automatic").clicked() {
             *out = Some(Action::SetColor(id, None));
             ui.close_menu();
         }
@@ -428,7 +430,7 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         true,
-        &l(icon::COPY, "Kopieren"),
+        &l(icon::COPY, "Copy"),
         &copy,
         Action::Copy(id),
         out,
@@ -436,7 +438,7 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         !is_root,
-        &l(icon::SCISSORS, "Ausschneiden"),
+        &l(icon::SCISSORS, "Cut"),
         &cut,
         Action::Cut(id),
         out,
@@ -444,7 +446,7 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         !is_root,
-        &l(icon::COPY_SIMPLE, "Duplizieren"),
+        &l(icon::COPY_SIMPLE, "Duplicate"),
         &dup,
         Action::Duplicate(id),
         out,
@@ -453,8 +455,8 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         !is_root,
-        &l(icon::TRASH, "Löschen"),
-        "Entf",
+        &l(icon::TRASH, "Delete"),
+        "Del",
         Action::Delete(id),
         out,
     );
@@ -544,7 +546,7 @@ impl MindMapApp {
             search: String::new(),
             search_focus: false,
             show_help: false,
-            status: "Bereit".into(),
+            status: "Ready".into(),
             window_title: String::new(),
             canvas_rect: Rect::NOTHING,
             md_preview: true,
@@ -558,6 +560,15 @@ impl MindMapApp {
             .and_then(|s| eframe::get_value::<SavedState>(s, eframe::APP_KEY))
         {
             if let Some(name) = state.theme_name {
+                // Farbschemas hießen früher deutsch
+                let name = match name.as_str() {
+                    "Hell" => "Light",
+                    "Dunkel" => "Dark",
+                    "Ozean" => "Ocean",
+                    "Sonnenuntergang" => "Sunset",
+                    "Wald" => "Forest",
+                    other => other,
+                };
                 app.theme = THEMES
                     .iter()
                     .position(|t| t.name == name)
@@ -602,7 +613,7 @@ impl MindMapApp {
             doc.end_edit();
         }
         self.docs
-            .push(Document::new(MindMap::new("Zentrales Thema"), None));
+            .push(Document::new(MindMap::new("Central topic"), None));
         self.active = self.docs.len() - 1;
     }
 
@@ -616,7 +627,7 @@ impl MindMapApp {
 
     fn open_dialog(&mut self) {
         let Some(paths) = rfd::FileDialog::new()
-            .add_filter("Mindmap", &["mindmap", "json"])
+            .add_filter("Mind map", &["mindmap", "json"])
             .add_filter("Markdown / Text", &["md", "markdown", "txt"])
             .pick_files()
         else {
@@ -640,9 +651,9 @@ impl MindMapApp {
         match Document::open(&path) {
             Ok(doc) => {
                 self.push_doc(doc);
-                self.status = format!("Geöffnet: {}", path.display());
+                self.status = format!("Opened: {}", path.display());
             }
-            Err(e) => self.status = format!("Öffnen fehlgeschlagen: {e}"),
+            Err(e) => self.status = format!("Could not open file: {e}"),
         }
     }
 
@@ -671,7 +682,7 @@ impl MindMapApp {
         let mut doc = Document::new(map, None);
         doc.layout_pending = true;
         self.push_doc(doc);
-        self.status = format!("Beispiel „{name}“ geöffnet – F5 startet die Präsentation");
+        self.status = format!("Opened example “{name}” – press F5 to present");
     }
 
     /// Gibt `false` zurück, wenn nicht gespeichert wurde (z. B. Dialog abgebrochen).
@@ -690,7 +701,7 @@ impl MindMapApp {
     fn save_doc_as(&mut self, i: usize) -> bool {
         self.docs[i].end_edit();
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("Mindmap", &["mindmap"])
+            .add_filter("Mind map", &["mindmap"])
             .set_file_name(format!("{}.mindmap", self.docs[i].title()));
         if let Some(dir) = self.docs[i].path.as_ref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
@@ -704,11 +715,11 @@ impl MindMapApp {
     fn write_doc(&mut self, i: usize, path: &Path) -> bool {
         match self.docs[i].save_to(path) {
             Ok(()) => {
-                self.status = format!("Gespeichert: {}", path.display());
+                self.status = format!("Saved: {}", path.display());
                 true
             }
             Err(e) => {
-                self.status = format!("Speichern fehlgeschlagen: {e}");
+                self.status = format!("Could not save: {e}");
                 false
             }
         }
@@ -724,15 +735,15 @@ impl MindMapApp {
             self.active = i;
             let answer = rfd::MessageDialog::new()
                 .set_level(rfd::MessageLevel::Warning)
-                .set_title("Ungespeicherte Änderungen")
+                .set_title("Unsaved changes")
                 .set_description(format!(
-                    "„{}“ wurde geändert. Sollen die Änderungen gespeichert werden?",
+                    "“{}” has been modified. Do you want to save your changes?",
                     self.docs[i].title()
                 ))
                 .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
-                    "Speichern".into(),
-                    "Nicht speichern".into(),
-                    "Abbrechen".into(),
+                    "Save".into(),
+                    "Don't Save".into(),
+                    "Cancel".into(),
                 ))
                 .show();
             match answer {
@@ -741,13 +752,13 @@ impl MindMapApp {
                         return;
                     }
                 }
-                rfd::MessageDialogResult::Custom(s) if s == "Speichern" => {
+                rfd::MessageDialogResult::Custom(s) if s == "Save" => {
                     if !self.save_doc(i) {
                         return;
                     }
                 }
                 rfd::MessageDialogResult::No => {}
-                rfd::MessageDialogResult::Custom(s) if s == "Nicht speichern" => {}
+                rfd::MessageDialogResult::Custom(s) if s == "Don't Save" => {}
                 _ => return,
             }
         }
@@ -789,8 +800,8 @@ impl MindMapApp {
     fn export(&mut self, ctx: &egui::Context, kind: ExportKind) {
         self.doc_mut().end_edit();
         let (ext, filter) = match kind {
-            ExportKind::Png => ("png", "PNG-Bild"),
-            ExportKind::Svg => ("svg", "SVG-Grafik"),
+            ExportKind::Png => ("png", "PNG image"),
+            ExportKind::Svg => ("svg", "SVG graphic"),
             ExportKind::Markdown => ("md", "Markdown"),
         };
         let Some(path) = rfd::FileDialog::new()
@@ -814,8 +825,8 @@ impl MindMapApp {
             }
         };
         self.status = match result {
-            Ok(()) => format!("Exportiert: {}", path.display()),
-            Err(e) => format!("Export fehlgeschlagen: {e}"),
+            Ok(()) => format!("Exported: {}", path.display()),
+            Err(e) => format!("Export failed: {e}"),
         };
     }
 
@@ -844,7 +855,7 @@ impl MindMapApp {
             .map(|n| n.id)
             .collect();
         if hits.is_empty() {
-            self.status = format!("Nichts gefunden für „{}“", self.search.trim());
+            self.status = format!("Nothing found for “{}”", self.search.trim());
             return;
         }
         let next = doc
@@ -856,7 +867,7 @@ impl MindMapApp {
         doc.map.expand_to(id);
         doc.selected = Some(id);
         doc.reveal = Some(id);
-        self.status = format!("Treffer {} von {}", next + 1, hits.len());
+        self.status = format!("Match {} of {}", next + 1, hits.len());
     }
 
     fn run(&mut self, ctx: &egui::Context, cmd: Command) {
@@ -986,8 +997,7 @@ impl MindMapApp {
             }
             Action::Copy(id) => {
                 ctx.copy_text(doc.map.clip_json(id));
-                self.status =
-                    "Kopiert – mit Einfügen unter einem anderen Knoten wieder einsetzen".into();
+                self.status = "Copied – select another node and paste to insert it there".into();
             }
             Action::Cut(id) => {
                 if let Some(parent) = doc.map.parent_of(id) {
@@ -995,7 +1005,7 @@ impl MindMapApp {
                     doc.checkpoint();
                     doc.map.remove(id);
                     doc.selected = Some(parent);
-                    self.status = "Ausgeschnitten".into();
+                    self.status = "Cut".into();
                 }
             }
             Action::Duplicate(id) => {
@@ -1032,7 +1042,7 @@ impl MindMapApp {
             Action::OpenExample(i) => self.open_example(i),
             Action::HideWelcome => {
                 self.show_welcome = false;
-                self.status = "Tipps ausgeblendet – im Hilfe-Menü wieder einschaltbar".into();
+                self.status = "Tips hidden – turn them back on in the Help menu".into();
             }
             Action::EditNote(id) => {
                 doc.end_edit();
@@ -1199,12 +1209,12 @@ impl MindMapApp {
             ui.label(egui::RichText::new("Mindful").strong().size(15.0));
             ui.add_space(6.0);
 
-            ui.menu_button("Datei", |ui| {
+            ui.menu_button("File", |ui| {
                 ui.set_min_width(240.0);
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::FILE_PLUS, "Neuer Tab"),
+                    &l(icon::FILE_PLUS, "New tab"),
                     Some(&SC_NEW_TAB),
                     Command::NewTab,
                     &mut out,
@@ -1212,12 +1222,12 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::FOLDER_OPEN, "Öffnen …"),
+                    &l(icon::FOLDER_OPEN, "Open …"),
                     Some(&SC_OPEN),
                     Command::Open,
                     &mut out,
                 );
-                ui.menu_button(l(icon::BOOK_OPEN, "Beispiel öffnen"), |ui| {
+                ui.menu_button(l(icon::BOOK_OPEN, "Open example"), |ui| {
                     ui.set_min_width(180.0);
                     for (i, (name, _)) in EXAMPLES.iter().enumerate() {
                         cmd_item(
@@ -1234,7 +1244,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::FLOPPY_DISK, "Speichern"),
+                    &l(icon::FLOPPY_DISK, "Save"),
                     Some(&SC_SAVE),
                     Command::Save,
                     &mut out,
@@ -1242,31 +1252,29 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::FLOPPY_DISK, "Speichern unter …"),
+                    &l(icon::FLOPPY_DISK, "Save as …"),
                     Some(&SC_SAVE_AS),
                     Command::SaveAs,
                     &mut out,
                 );
-                ui.menu_button(l(icon::EXPORT, "Exportieren"), |ui| {
-                    export_menu(ui, &mut out)
-                });
+                ui.menu_button(l(icon::EXPORT, "Export"), |ui| export_menu(ui, &mut out));
                 ui.separator();
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::X, "Tab schließen"),
+                    &l(icon::X, "Close tab"),
                     Some(&SC_CLOSE),
                     Command::CloseTab(active),
                     &mut out,
                 );
             });
 
-            ui.menu_button("Bearbeiten", |ui| {
+            ui.menu_button("Edit", |ui| {
                 ui.set_min_width(250.0);
                 cmd_item(
                     ui,
                     can_undo,
-                    &l(icon::ARROW_COUNTER_CLOCKWISE, "Rückgängig"),
+                    &l(icon::ARROW_COUNTER_CLOCKWISE, "Undo"),
                     Some(&SC_UNDO),
                     Command::Undo,
                     &mut out,
@@ -1274,7 +1282,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     can_redo,
-                    &l(icon::ARROW_CLOCKWISE, "Wiederholen"),
+                    &l(icon::ARROW_CLOCKWISE, "Redo"),
                     Some(&SC_REDO),
                     Command::Redo,
                     &mut out,
@@ -1283,7 +1291,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     has_sel,
-                    &l(icon::COPY, "Kopieren"),
+                    &l(icon::COPY, "Copy"),
                     Some(&SC_COPY),
                     Command::Copy,
                     &mut out,
@@ -1291,7 +1299,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     has_sel,
-                    &l(icon::SCISSORS, "Ausschneiden"),
+                    &l(icon::SCISSORS, "Cut"),
                     Some(&SC_CUT),
                     Command::Cut,
                     &mut out,
@@ -1299,7 +1307,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     has_sel,
-                    &l(icon::COPY_SIMPLE, "Duplizieren"),
+                    &l(icon::COPY_SIMPLE, "Duplicate"),
                     Some(&SC_DUPLICATE),
                     Command::Duplicate,
                     &mut out,
@@ -1307,7 +1315,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     has_sel,
-                    &l(icon::TRASH, "Löschen"),
+                    &l(icon::TRASH, "Delete"),
                     None,
                     Command::Delete,
                     &mut out,
@@ -1316,7 +1324,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::TREE_STRUCTURE, "Automatisch anordnen"),
+                    &l(icon::TREE_STRUCTURE, "Auto layout"),
                     Some(&SC_LAYOUT),
                     Command::AutoLayout,
                     &mut out,
@@ -1324,7 +1332,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::ARROWS_IN_SIMPLE, "Alle Zweige einklappen"),
+                    &l(icon::ARROWS_IN_SIMPLE, "Collapse all branches"),
                     None,
                     Command::CollapseAll,
                     &mut out,
@@ -1332,7 +1340,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::ARROWS_OUT_SIMPLE, "Alle Zweige ausklappen"),
+                    &l(icon::ARROWS_OUT_SIMPLE, "Expand all branches"),
                     None,
                     Command::ExpandAll,
                     &mut out,
@@ -1341,19 +1349,19 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::MAGNIFYING_GLASS, "Suchen"),
+                    &l(icon::MAGNIFYING_GLASS, "Find"),
                     Some(&SC_FIND),
                     Command::Find,
                     &mut out,
                 );
             });
 
-            ui.menu_button("Ansicht", |ui| {
+            ui.menu_button("View", |ui| {
                 ui.set_min_width(240.0);
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::MAGNIFYING_GLASS_PLUS, "Vergrößern"),
+                    &l(icon::MAGNIFYING_GLASS_PLUS, "Zoom in"),
                     Some(&SC_ZOOM_IN),
                     Command::ZoomIn,
                     &mut out,
@@ -1361,7 +1369,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::MAGNIFYING_GLASS_MINUS, "Verkleinern"),
+                    &l(icon::MAGNIFYING_GLASS_MINUS, "Zoom out"),
                     Some(&SC_ZOOM_OUT),
                     Command::ZoomOut,
                     &mut out,
@@ -1369,7 +1377,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::MAGNIFYING_GLASS, "Originalgröße"),
+                    &l(icon::MAGNIFYING_GLASS, "Actual size"),
                     None,
                     Command::ZoomReset,
                     &mut out,
@@ -1377,7 +1385,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::ARROWS_OUT, "Alles anzeigen"),
+                    &l(icon::ARROWS_OUT, "Fit to window"),
                     Some(&SC_FIT),
                     Command::Fit,
                     &mut out,
@@ -1386,7 +1394,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     mode != Mode::Mindmap,
-                    &l(icon::GRAPH, "Mindmap"),
+                    &l(icon::GRAPH, "Mind map"),
                     None,
                     Command::SetMode(Mode::Mindmap),
                     &mut out,
@@ -1394,7 +1402,7 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::TEXT_ALIGN_LEFT, "Markdown-Editor"),
+                    &l(icon::TEXT_ALIGN_LEFT, "Markdown editor"),
                     Some(&SC_MARKDOWN),
                     Command::ToggleMarkdown,
                     &mut out,
@@ -1402,23 +1410,23 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::PRESENTATION, "Präsentation"),
+                    &l(icon::PRESENTATION, "Presentation"),
                     Some(&SC_PRESENT),
                     Command::SetMode(Mode::Present),
                     &mut out,
                 );
                 ui.separator();
-                ui.menu_button(l(icon::PALETTE, "Farbschema"), |ui| {
+                ui.menu_button(l(icon::PALETTE, "Theme"), |ui| {
                     theme_menu(ui, current_theme, &mut out)
                 });
             });
 
-            ui.menu_button("Hilfe", |ui| {
+            ui.menu_button("Help", |ui| {
                 ui.set_min_width(220.0);
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::KEYBOARD, "Tastenkürzel"),
+                    &l(icon::KEYBOARD, "Keyboard shortcuts"),
                     Some(&SC_HELP),
                     Command::Help,
                     &mut out,
@@ -1426,13 +1434,13 @@ impl MindMapApp {
                 cmd_item(
                     ui,
                     true,
-                    &l(icon::ROCKET_LAUNCH, "Beispiel: Weltall"),
+                    &l(icon::ROCKET_LAUNCH, "Example: The Universe"),
                     None,
                     Command::OpenExample(0),
                     &mut out,
                 );
                 ui.separator();
-                ui.checkbox(&mut self.show_welcome, "Tipps auf leeren Mindmaps");
+                ui.checkbox(&mut self.show_welcome, "Tips on empty mind maps");
             });
 
             // Werkzeugleiste
@@ -1450,7 +1458,7 @@ impl MindMapApp {
             tool(
                 ui,
                 icon::FILE_PLUS,
-                "Neuer Tab",
+                "New tab",
                 Some(&SC_NEW_TAB),
                 true,
                 Command::NewTab,
@@ -1458,7 +1466,7 @@ impl MindMapApp {
             tool(
                 ui,
                 icon::FOLDER_OPEN,
-                "Öffnen",
+                "Open",
                 Some(&SC_OPEN),
                 true,
                 Command::Open,
@@ -1466,7 +1474,7 @@ impl MindMapApp {
             tool(
                 ui,
                 icon::FLOPPY_DISK,
-                "Speichern",
+                "Save",
                 Some(&SC_SAVE),
                 true,
                 Command::Save,
@@ -1475,7 +1483,7 @@ impl MindMapApp {
             tool(
                 ui,
                 icon::ARROW_COUNTER_CLOCKWISE,
-                "Rückgängig",
+                "Undo",
                 Some(&SC_UNDO),
                 can_undo,
                 Command::Undo,
@@ -1483,7 +1491,7 @@ impl MindMapApp {
             tool(
                 ui,
                 icon::ARROW_CLOCKWISE,
-                "Wiederholen",
+                "Redo",
                 Some(&SC_REDO),
                 can_redo,
                 Command::Redo,
@@ -1493,7 +1501,7 @@ impl MindMapApp {
                 tool(
                     ui,
                     icon::PLUS_CIRCLE,
-                    "Neuer Unterpunkt (Tab)",
+                    "New child (Tab)",
                     None,
                     true,
                     Command::AddChild,
@@ -1501,7 +1509,7 @@ impl MindMapApp {
                 tool(
                     ui,
                     icon::TRASH,
-                    "Löschen (Entf)",
+                    "Delete (Del)",
                     None,
                     has_sel,
                     Command::Delete,
@@ -1510,7 +1518,7 @@ impl MindMapApp {
                 tool(
                     ui,
                     icon::TREE_STRUCTURE,
-                    "Automatisch anordnen",
+                    "Auto layout",
                     Some(&SC_LAYOUT),
                     true,
                     Command::AutoLayout,
@@ -1518,7 +1526,7 @@ impl MindMapApp {
                 tool(
                     ui,
                     icon::ARROWS_OUT,
-                    "Alles anzeigen",
+                    "Fit to window",
                     Some(&SC_FIT),
                     true,
                     Command::Fit,
@@ -1526,7 +1534,7 @@ impl MindMapApp {
                 tool(
                     ui,
                     icon::MAGNIFYING_GLASS_MINUS,
-                    "Verkleinern",
+                    "Zoom out",
                     Some(&SC_ZOOM_OUT),
                     true,
                     Command::ZoomOut,
@@ -1534,16 +1542,16 @@ impl MindMapApp {
                 tool(
                     ui,
                     icon::MAGNIFYING_GLASS_PLUS,
-                    "Vergrößern",
+                    "Zoom in",
                     Some(&SC_ZOOM_IN),
                     true,
                     Command::ZoomIn,
                 );
             } else {
                 let tip = if md_preview {
-                    "Vorschau ausblenden"
+                    "Hide preview"
                 } else {
-                    "Vorschau einblenden"
+                    "Show preview"
                 };
                 tool(
                     ui,
@@ -1557,7 +1565,7 @@ impl MindMapApp {
             tool(
                 ui,
                 icon::PLAY,
-                "Präsentation starten",
+                "Start presentation",
                 Some(&SC_PRESENT),
                 true,
                 Command::SetMode(Mode::Present),
@@ -1567,18 +1575,18 @@ impl MindMapApp {
                 export_menu(ui, &mut out)
             })
             .response
-            .on_hover_text("Exportieren");
+            .on_hover_text("Export");
             ui.menu_button(egui::RichText::new(icon::PALETTE).size(17.0), |ui| {
                 theme_menu(ui, current_theme, &mut out)
             })
             .response
-            .on_hover_text("Farbschema");
+            .on_hover_text("Theme");
 
             // Suche rechts in der Leiste
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let resp = ui.add(
                     egui::TextEdit::singleline(&mut self.search)
-                        .hint_text("Suchen …")
+                        .hint_text("Search …")
                         .desired_width(170.0)
                         .margin(Vec2::new(8.0, 4.0)),
                 );
@@ -1602,7 +1610,7 @@ impl MindMapApp {
                         .iter()
                         .filter(|n| n.text.to_lowercase().contains(&query))
                         .count();
-                    ui.weak(format!("{n} Treffer"));
+                    ui.weak(format!("{n} matches"));
                 }
             });
         });
@@ -1659,13 +1667,13 @@ impl MindMapApp {
                             let close = ui.add(
                                 egui::Button::new(egui::RichText::new(icon::X).size(12.0)).small(),
                             );
-                            if close.on_hover_text("Tab schließen").clicked() {
+                            if close.on_hover_text("Close tab").clicked() {
                                 out = Some(Command::CloseTab(i));
                             }
                         });
                     });
             }
-            if icon_button(ui, icon::PLUS, "Neuer Tab", Some(&SC_NEW_TAB), true) {
+            if icon_button(ui, icon::PLUS, "New tab", Some(&SC_NEW_TAB), true) {
                 out = Some(Command::NewTab);
             }
 
@@ -1680,9 +1688,9 @@ impl MindMapApp {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             let modes = [
-                                (Mode::Mindmap, icon::GRAPH, "Mindmap"),
+                                (Mode::Mindmap, icon::GRAPH, "Mind map"),
                                 (Mode::Markdown, icon::TEXT_ALIGN_LEFT, "Markdown"),
-                                (Mode::Present, icon::PRESENTATION, "Präsentation"),
+                                (Mode::Present, icon::PRESENTATION, "Presentation"),
                             ];
                             for (mode, ic, label) in modes {
                                 if ui
@@ -1710,15 +1718,15 @@ impl MindMapApp {
                         .split_whitespace()
                         .filter(|w| w.chars().any(char::is_alphanumeric))
                         .count();
-                    ui.label(format!("{} {words} Wörter", icon::TEXT_AA));
+                    ui.label(format!("{} {words} words", icon::TEXT_AA));
                     ui.separator();
                     ui.label(format!(
-                        "{} {} Knoten",
+                        "{} {} nodes",
                         icon::TREE_STRUCTURE,
                         doc.map.nodes.len()
                     ));
                     ui.separator();
-                    ui.weak("## Überschrift = Zweig · - Aufzählung = Unterpunkt · Text = Notiz");
+                    ui.weak("## heading = branch · - bullet = child · text = note");
                 } else {
                     ui.label(format!(
                         "{} {:.0} %",
@@ -1727,13 +1735,13 @@ impl MindMapApp {
                     ));
                     ui.separator();
                     ui.label(format!(
-                        "{} {} Knoten",
+                        "{} {} nodes",
                         icon::TREE_STRUCTURE,
                         doc.map.nodes.len()
                     ));
                     ui.separator();
                     ui.weak(format!(
-                        "{} Rechtsklick: Menü · F1: Tastenkürzel",
+                        "{} Right-click: menu · F1: shortcuts",
                         icon::KEYBOARD
                     ));
                 }
@@ -1746,49 +1754,43 @@ impl MindMapApp {
         let cmd = if cfg!(target_os = "macos") {
             "⌘"
         } else {
-            "Strg"
+            "Ctrl"
         };
         let rows: Vec<(String, &str)> = vec![
-            ("Tab".into(), "Unterpunkt anlegen (auch beim Tippen)"),
-            ("Enter".into(), "Nachbar anlegen / Tippen beenden"),
-            ("F2 · Doppelklick".into(), "Umbenennen"),
-            ("Entf".into(), "Knoten samt Unterpunkten löschen"),
-            ("Leertaste".into(), "Ein- und ausklappen"),
-            ("Pfeiltasten".into(), "Auswahl bewegen"),
-            ("Esc".into(), "Auswahl aufheben"),
-            (f(&SC_COPY), "Teilbaum kopieren"),
-            (f(&SC_CUT), "Teilbaum ausschneiden"),
-            (f(&SC_PASTE), "Einfügen (auch Text als Gliederung)"),
-            (f(&SC_DUPLICATE), "Duplizieren"),
-            (f(&SC_UNDO), "Rückgängig"),
-            (f(&SC_REDO), "Wiederholen"),
-            (f(&SC_LAYOUT), "Automatisch anordnen"),
-            (f(&SC_FIND), "Suchen (Enter: nächster Treffer)"),
-            (f(&SC_FIT), "Alles anzeigen"),
-            (
-                format!("{} / {}", f(&SC_ZOOM_IN), f(&SC_ZOOM_OUT)),
-                "Zoomen",
-            ),
-            (format!("{cmd} + Scrollen · Pinch"), "Zoomen an der Maus"),
-            ("Fläche ziehen · Scrollen".into(), "Ansicht verschieben"),
-            (
-                "Knoten ziehen".into(),
-                "Knoten samt Unterpunkten verschieben",
-            ),
-            (f(&SC_NEW_TAB), "Neuer Tab"),
-            (f(&SC_CLOSE), "Tab schließen"),
-            ("Ctrl + Tab".into(), "Nächster Tab"),
-            (format!("{cmd} 1 … 9"), "Zu Tab springen"),
-            (f(&SC_SAVE), "Speichern"),
-            (f(&SC_SAVE_AS), "Speichern unter"),
-            (f(&SC_OPEN), "Öffnen (auch Markdown importieren)"),
-            (f(&SC_MARKDOWN), "Markdown-Editor ein/aus"),
-            (f(&SC_PRESENT), "Präsentation starten"),
-            ("→ · Leertaste · Klick".into(), "Nächste Folie"),
-            ("← · Rechtsklick".into(), "Vorherige Folie"),
-            ("F · Esc".into(), "Vollbild · Präsentation beenden"),
+            ("Tab".into(), "Add child (also while typing)"),
+            ("Enter".into(), "Add sibling / finish typing"),
+            ("F2 · double-click".into(), "Rename"),
+            ("Del".into(), "Delete node and its children"),
+            ("Space".into(), "Collapse / expand"),
+            ("Arrow keys".into(), "Move selection"),
+            ("Esc".into(), "Clear selection"),
+            (f(&SC_COPY), "Copy branch"),
+            (f(&SC_CUT), "Cut branch"),
+            (f(&SC_PASTE), "Paste (plain text becomes an outline)"),
+            (f(&SC_DUPLICATE), "Duplicate"),
+            (f(&SC_UNDO), "Undo"),
+            (f(&SC_REDO), "Redo"),
+            (f(&SC_LAYOUT), "Auto layout"),
+            (f(&SC_FIND), "Find (Enter: next match)"),
+            (f(&SC_FIT), "Fit to window"),
+            (format!("{} / {}", f(&SC_ZOOM_IN), f(&SC_ZOOM_OUT)), "Zoom"),
+            (format!("{cmd} + scroll · pinch"), "Zoom at the pointer"),
+            ("Drag canvas · scroll".into(), "Pan the view"),
+            ("Drag node".into(), "Move node and its children"),
+            (f(&SC_NEW_TAB), "New tab"),
+            (f(&SC_CLOSE), "Close tab"),
+            ("Ctrl + Tab".into(), "Next tab"),
+            (format!("{cmd} 1 … 9"), "Jump to tab"),
+            (f(&SC_SAVE), "Save"),
+            (f(&SC_SAVE_AS), "Save as"),
+            (f(&SC_OPEN), "Open (also imports Markdown)"),
+            (f(&SC_MARKDOWN), "Toggle Markdown editor"),
+            (f(&SC_PRESENT), "Start presentation"),
+            ("→ · Space · click".into(), "Next slide"),
+            ("← · right-click".into(), "Previous slide"),
+            ("F · Esc".into(), "Full screen · end presentation"),
         ];
-        egui::Window::new("Tastenkürzel")
+        egui::Window::new("Keyboard shortcuts")
             .open(&mut self.show_help)
             .collapsible(false)
             .resizable(false)
@@ -2020,7 +2022,7 @@ impl MindMapApp {
                     ui.id().with(("badge", id)),
                     Sense::click(),
                 );
-                if badge.on_hover_text("Ausklappen").clicked() {
+                if badge.on_hover_text("Expand").clicked() {
                     action = Some(Action::Toggle(id));
                 }
             }
@@ -2083,18 +2085,18 @@ impl MindMapApp {
                                 .color(theme.selection),
                         );
                         ui.vertical(|ui| {
-                            ui.strong("Leere Mindmap");
-                            ui.weak("Tab legt Unterpunkte an, Rechtsklick öffnet das Menü.");
+                            ui.strong("Empty mind map");
+                            ui.weak("Tab adds a child, right-click opens the menu.");
                         });
                         ui.add_space(10.0);
                         if ui
-                            .button(format!("{}  Beispiel: Weltall", icon::ROCKET_LAUNCH))
+                            .button(format!("{}  Example: The Universe", icon::ROCKET_LAUNCH))
                             .clicked()
                         {
                             action = Some(Action::OpenExample(0));
                         }
                         let close = ui.add(egui::Button::new(icon::X).frame(false));
-                        if close.on_hover_text("Tipps ausblenden").clicked() {
+                        if close.on_hover_text("Hide tips").clicked() {
                             action = Some(Action::HideWelcome);
                         }
                     });
@@ -2112,7 +2114,7 @@ impl MindMapApp {
                 action_item(
                     ui,
                     true,
-                    "Neuer Hauptzweig",
+                    "New main branch",
                     "",
                     Action::AddChild(root),
                     &mut action,
@@ -2121,21 +2123,14 @@ impl MindMapApp {
             action_item(
                 ui,
                 true,
-                "Automatisch anordnen",
+                "Auto layout",
                 &layout_sc,
                 Action::AutoLayout,
                 &mut action,
             );
-            action_item(
-                ui,
-                true,
-                "Alles anzeigen",
-                &fit_sc,
-                Action::Fit,
-                &mut action,
-            );
+            action_item(ui, true, "Fit to window", &fit_sc, Action::Fit, &mut action);
             ui.separator();
-            ui.menu_button("Farbschema", |ui| {
+            ui.menu_button("Theme", |ui| {
                 for (i, t) in THEMES.iter().enumerate() {
                     if ui.radio(current_theme == i, t.name).clicked() {
                         action = Some(Action::SetTheme(i));
@@ -2188,9 +2183,9 @@ impl MindMapApp {
                 let edit = egui::TextEdit::multiline(&mut node.note)
                     .desired_rows(8)
                     .desired_width(f32::INFINITY)
-                    .hint_text("Notiz zu diesem Knoten …");
+                    .hint_text("Note for this node …");
                 changed = ui.add(edit).changed();
-                ui.weak("Erscheint im Markdown-Editor und auf den Folien.");
+                ui.weak("Shown in the Markdown editor and on the slides.");
             });
         if changed {
             doc.dirty = true;
