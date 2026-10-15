@@ -1,0 +1,161 @@
+//! Markdown-Modus: Editor links (mit Hervorhebung), Vorschau rechts.
+//! Jede Änderung im Text wird sofort in die Mindmap übernommen.
+
+use crate::document::Document;
+use crate::model::MindMap;
+use crate::theme::Theme;
+use eframe::egui::{self, text::LayoutJob, Color32, FontId, Margin, RichText, Sense, TextFormat, Vec2};
+use egui_phosphor::regular as icon;
+
+const BODY: f32 = 15.0;
+
+/// Länge des Aufzählungszeichens am Zeilenanfang ("- ", "* ", "1. " …)
+fn bullet_len(trimmed: &str) -> Option<usize> {
+    for bullet in ["- [ ] ", "- [x] ", "- ", "* ", "+ "] {
+        if trimmed.starts_with(bullet) {
+            return Some(bullet.len());
+        }
+    }
+    let digits = trimmed.chars().take_while(|c| c.is_ascii_digit()).count();
+    (digits > 0 && trimmed[digits..].starts_with(". ")).then_some(digits + 2)
+}
+
+/// Färbt Überschriften und Aufzählungszeichen ein – in der Farbe des
+/// Hauptzweigs, zu dem sie gehören, wie in der Mindmap.
+fn highlight(text: &str, theme: &Theme) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    let fmt = |size: f32, color: Color32| TextFormat {
+        font_id: FontId::proportional(size),
+        color,
+        ..Default::default()
+    };
+    let note_color = theme.text.gamma_multiply(0.72);
+    let mut branch_color = theme.root;
+    let mut branch = 0;
+
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        let indent = line.len() - trimmed.len();
+        let hashes = trimmed.chars().take_while(|&c| c == '#').count();
+
+        if hashes > 0 && trimmed[hashes..].starts_with(' ') {
+            let size = match hashes {
+                1 => 26.0,
+                2 => 20.0,
+                _ => 17.0,
+            };
+            let marker = match hashes {
+                1 => theme.root,
+                2 => {
+                    branch_color = theme.branches[branch % theme.branches.len()];
+                    branch += 1;
+                    branch_color
+                }
+                _ => branch_color,
+            };
+            let split = indent + hashes + 1;
+            job.append(&line[..split], 0.0, fmt(size, marker.gamma_multiply(0.75)));
+            job.append(&line[split..], 0.0, fmt(size, theme.text));
+        } else if let Some(len) = bullet_len(trimmed) {
+            let split = indent + len;
+            job.append(&line[..split], 0.0, fmt(BODY, branch_color));
+            job.append(&line[split..], 0.0, fmt(BODY, theme.text));
+        } else {
+            job.append(line, 0.0, fmt(BODY, note_color));
+        }
+    }
+    job
+}
+
+pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool) {
+    if preview {
+        egui::SidePanel::right("md_preview")
+            .resizable(true)
+            .default_width(ui.available_width() * 0.42)
+            .min_width(240.0)
+            .frame(egui::Frame::default().fill(theme.card).inner_margin(Margin::symmetric(28, 20)))
+            .show_inside(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("md_preview_scroll")
+                    .auto_shrink([false; 2])
+                    .show(ui, |ui| preview_outline(ui, &doc.map, theme));
+            });
+    }
+
+    egui::CentralPanel::default()
+        .frame(egui::Frame::default().fill(theme.background).inner_margin(Margin::symmetric(36, 22)))
+        .show_inside(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("md_editor_scroll")
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    let mut layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
+                        let mut job = highlight(text, theme);
+                        job.wrap.max_width = wrap_width;
+                        ui.fonts(|f| f.layout_job(job))
+                    };
+                    let editor = egui::TextEdit::multiline(&mut doc.md_text)
+                        .id_salt("md_editor")
+                        .frame(false)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(30)
+                        .lock_focus(true)
+                        .hint_text("# Thema\n\n## Zweig\n\nNotiz zum Zweig\n\n- Unterpunkt\n  - noch tiefer")
+                        .layouter(&mut layouter);
+                    if ui.add(editor).changed() {
+                        doc.markdown_changed();
+                    }
+                });
+        });
+}
+
+fn branch_color(map: &MindMap, theme: &Theme, id: u64) -> Color32 {
+    map.color_index(id)
+        .map(|c| theme.branches[c % theme.branches.len()])
+        .unwrap_or(theme.root)
+}
+
+fn note(ui: &mut egui::Ui, note: &str, indent: f32) {
+    if note.trim().is_empty() {
+        return;
+    }
+    ui.horizontal_top(|ui| {
+        ui.add_space(indent);
+        ui.add(egui::Label::new(RichText::new(note.trim()).weak()).wrap());
+    });
+}
+
+fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
+    let Some(root) = map.root().and_then(|r| map.get(r)) else {
+        return;
+    };
+    ui.label(RichText::new(format!("{}  Vorschau", icon::EYE)).small().weak());
+    ui.add_space(6.0);
+    ui.add(egui::Label::new(RichText::new(root.text.as_str()).size(26.0).strong()).wrap());
+    note(ui, &root.note, 0.0);
+
+    for branch in map.children(root.id) {
+        let color = branch_color(map, theme, branch.id);
+        ui.add_space(16.0);
+        ui.horizontal(|ui| {
+            let (bar, _) = ui.allocate_exact_size(Vec2::new(4.0, 22.0), Sense::hover());
+            ui.painter().rect_filled(bar, 2.0, color);
+            ui.add(egui::Label::new(RichText::new(branch.text.as_str()).size(19.0).strong()).wrap());
+        });
+        note(ui, &branch.note, 12.0);
+        bullets(ui, map, branch.id, 0, color);
+    }
+}
+
+fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color32) {
+    for child in map.children(id) {
+        let indent = 12.0 + depth as f32 * 20.0;
+        ui.horizontal_top(|ui| {
+            ui.add_space(indent);
+            ui.label(RichText::new("•").color(color).strong());
+            ui.add(egui::Label::new(child.text.as_str()).wrap());
+        });
+        note(ui, &child.note, indent + 16.0);
+        bullets(ui, map, child.id, depth + 1, color);
+    }
+}

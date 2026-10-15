@@ -1,0 +1,1776 @@
+use crate::document::{Document, Mode};
+use crate::{markdown_view, present};
+use crate::export::{self, ExportNode};
+use crate::model::{parse_outline, Clip, MindMap, Node, DEFAULT_TEXT};
+use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
+use egui_phosphor::regular as icon;
+use eframe::egui::{
+    self, epaint::CubicBezierShape, Align, Align2, Color32, FontId, Key, KeyboardShortcut, Layout,
+    Modifiers, Pos2, Rect, Sense, Stroke, Vec2,
+};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+const MIN_ZOOM: f32 = 0.25;
+const MAX_ZOOM: f32 = 3.0;
+const MIN_NODE: Vec2 = Vec2::new(90.0, 34.0);
+/// Farbschema beim ersten Start: "Dunkel"
+const DEFAULT_THEME: usize = 1;
+
+/// Mitgelieferte Beispiele (Name, Markdown)
+const EXAMPLES: [(&str, &str); 1] = [("Weltall", include_str!("../assets/beispiele/weltall.md"))];
+
+// ---------------------------------------------------------------------------
+// Tastenkürzel (Cmd auf dem Mac, Strg sonst)
+// ---------------------------------------------------------------------------
+
+const CMD: Modifiers = Modifiers::COMMAND;
+const CMD_SHIFT: Modifiers = Modifiers {
+    shift: true,
+    ..Modifiers::COMMAND
+};
+
+const fn shortcut(modifiers: Modifiers, key: Key) -> KeyboardShortcut {
+    KeyboardShortcut::new(modifiers, key)
+}
+
+const SC_NEW_TAB: KeyboardShortcut = shortcut(CMD, Key::T);
+const SC_NEW: KeyboardShortcut = shortcut(CMD, Key::N);
+const SC_OPEN: KeyboardShortcut = shortcut(CMD, Key::O);
+const SC_SAVE: KeyboardShortcut = shortcut(CMD, Key::S);
+const SC_SAVE_AS: KeyboardShortcut = shortcut(CMD_SHIFT, Key::S);
+const SC_CLOSE: KeyboardShortcut = shortcut(CMD, Key::W);
+const SC_UNDO: KeyboardShortcut = shortcut(CMD, Key::Z);
+const SC_REDO: KeyboardShortcut = shortcut(CMD_SHIFT, Key::Z);
+const SC_COPY: KeyboardShortcut = shortcut(CMD, Key::C);
+const SC_CUT: KeyboardShortcut = shortcut(CMD, Key::X);
+const SC_PASTE: KeyboardShortcut = shortcut(CMD, Key::V);
+const SC_DUPLICATE: KeyboardShortcut = shortcut(CMD, Key::D);
+const SC_FIND: KeyboardShortcut = shortcut(CMD, Key::F);
+const SC_LAYOUT: KeyboardShortcut = shortcut(CMD, Key::L);
+const SC_FIT: KeyboardShortcut = shortcut(CMD, Key::Num0);
+const SC_ZOOM_IN: KeyboardShortcut = shortcut(CMD, Key::Plus);
+const SC_ZOOM_OUT: KeyboardShortcut = shortcut(CMD, Key::Minus);
+const SC_HELP: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F1);
+const SC_MARKDOWN: KeyboardShortcut = shortcut(CMD, Key::E);
+const SC_PRESENT: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F5);
+
+// ---------------------------------------------------------------------------
+// Befehle
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy)]
+enum ExportKind {
+    Png,
+    Svg,
+    Markdown,
+}
+
+/// Befehle aus Menü, Tableiste und Tastenkürzeln
+#[derive(Clone, Copy)]
+enum Command {
+    NewTab,
+    Open,
+    Save,
+    SaveAs,
+    Export(ExportKind),
+    CloseTab(usize),
+    SelectTab(usize),
+    NextTab(i32),
+    Undo,
+    Redo,
+    Copy,
+    Cut,
+    Duplicate,
+    Delete,
+    AutoLayout,
+    CollapseAll,
+    ExpandAll,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
+    Fit,
+    Find,
+    FindNext,
+    AddChild,
+    Help,
+    Theme(usize),
+    SetMode(Mode),
+    ToggleMarkdown,
+    TogglePreview,
+    OpenExample(usize),
+}
+
+/// Änderungen an einzelnen Knoten der aktiven Mindmap
+enum Action {
+    AddChild(u64),
+    AddSibling(u64),
+    Rename(u64),
+    Delete(u64),
+    Toggle(u64),
+    SetColor(u64, Option<usize>),
+    Copy(u64),
+    Cut(u64),
+    Duplicate(u64),
+    Paste(String),
+    AutoLayout,
+    Fit,
+    SetTheme(usize),
+    EditNote(u64),
+    OpenExample(usize),
+    HideWelcome,
+}
+
+// ---------------------------------------------------------------------------
+// Aussehen der Knoten
+// ---------------------------------------------------------------------------
+
+struct NodeStyle {
+    fill: Color32,
+    text: Color32,
+    /// Farbiger Rand (ab der 2. Ebene) und Farbe der Verbindungslinie
+    accent: Color32,
+    outlined: bool,
+    font_size: f32,
+    padding: Vec2,
+    edge_width: f32,
+}
+
+fn node_style(map: &MindMap, theme: &Theme, id: u64) -> NodeStyle {
+    let accent = match map.color_index(id) {
+        Some(i) => theme.branches[i % theme.branches.len()],
+        None => theme.root,
+    };
+    match map.depth(id) {
+        0 => NodeStyle {
+            fill: accent,
+            text: theme.on_accent,
+            accent,
+            outlined: false,
+            font_size: 20.0,
+            padding: Vec2::new(44.0, 26.0),
+            edge_width: 3.5,
+        },
+        1 => NodeStyle {
+            fill: accent,
+            text: theme.on_accent,
+            accent,
+            outlined: false,
+            font_size: 16.0,
+            padding: Vec2::new(30.0, 16.0),
+            edge_width: 3.5,
+        },
+        _ => NodeStyle {
+            fill: theme.card,
+            text: theme.text,
+            accent,
+            outlined: true,
+            font_size: 14.5,
+            padding: Vec2::new(30.0, 16.0),
+            edge_width: 2.0,
+        },
+    }
+}
+
+/// Größe eines Knotens bei Zoom 1
+fn node_size(ctx: &egui::Context, map: &MindMap, theme: &Theme, node: &Node) -> Vec2 {
+    let style = node_style(map, theme, node.id);
+    let galley = ctx.fonts(|f| {
+        f.layout_no_wrap(node.text.clone(), FontId::proportional(style.font_size), style.text)
+    });
+    (galley.size() + style.padding).max(MIN_NODE)
+}
+
+fn paint_node(painter: &egui::Painter, theme: &Theme, rect: Rect, style: &NodeStyle, zoom: f32, selected: bool, hit: bool) {
+    let radius = rect.height() / 2.0;
+    painter.rect_filled(
+        rect.translate(Vec2::new(0.0, 3.0 * zoom)).expand(zoom),
+        radius,
+        Color32::from_black_alpha(if theme.dark { 90 } else { 30 }),
+    );
+    if hit {
+        let grow = 9.0 * zoom;
+        painter.rect_filled(rect.expand(grow), radius + grow, theme.selection.gamma_multiply(0.35));
+    }
+    if selected {
+        let grow = 5.0 * zoom;
+        painter.rect_filled(rect.expand(grow), radius + grow, theme.selection);
+    }
+    if style.outlined {
+        let grow = 2.0 * zoom;
+        painter.rect_filled(rect.expand(grow), radius + grow, style.accent);
+    }
+    painter.rect_filled(rect, radius, style.fill);
+}
+
+/// Zoomt so, dass der Punkt `p` auf dem Bildschirm an seiner Stelle bleibt.
+fn zoom_at(doc: &mut Document, area: Rect, p: Pos2, zoom: f32) {
+    let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
+    let world = (p - area.center() - doc.pan) / doc.zoom;
+    doc.pan = p - area.center() - world * zoom;
+    doc.zoom = zoom;
+}
+
+fn fit_view(doc: &mut Document, area: Rect, sizes: &HashMap<u64, Vec2>) {
+    let mut bounds = Rect::NOTHING;
+    for n in doc.map.nodes.iter().filter(|n| !doc.map.is_hidden(n.id)) {
+        let size = sizes.get(&n.id).copied().unwrap_or(MIN_NODE);
+        bounds = bounds.union(Rect::from_center_size(Pos2::new(n.pos[0], n.pos[1]), size));
+    }
+    if !bounds.is_positive() {
+        return;
+    }
+    let zoom = ((area.width() - 80.0) / bounds.width())
+        .min((area.height() - 80.0) / bounds.height())
+        .clamp(MIN_ZOOM, 1.25);
+    doc.zoom = zoom;
+    doc.pan = -bounds.center().to_vec2() * zoom;
+}
+
+fn cmd_item(ui: &mut egui::Ui, enabled: bool, label: &str, sc: Option<&KeyboardShortcut>, cmd: Command, out: &mut Option<Command>) {
+    let mut button = egui::Button::new(label);
+    if let Some(sc) = sc {
+        button = button.shortcut_text(ui.ctx().format_shortcut(sc));
+    }
+    if ui.add_enabled(enabled, button).clicked() {
+        *out = Some(cmd);
+        ui.close_menu();
+    }
+}
+
+/// Flacher Icon-Button mit Tooltip (samt Tastenkürzel)
+fn icon_button(ui: &mut egui::Ui, ic: &str, tip: &str, sc: Option<&KeyboardShortcut>, enabled: bool) -> bool {
+    let tip = match sc {
+        Some(sc) => format!("{tip}   {}", ui.ctx().format_shortcut(sc)),
+        None => tip.to_string(),
+    };
+    let button = egui::Button::new(egui::RichText::new(ic).size(17.0)).min_size(Vec2::splat(30.0));
+    ui.add_enabled(enabled, button)
+        .on_hover_text(&tip)
+        .on_disabled_hover_text(&tip)
+        .clicked()
+}
+
+fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
+    ui.set_min_width(220.0);
+    let l = |ic: &str, text: &str| format!("{ic}  {text}");
+    cmd_item(ui, true, &l(icon::IMAGE, "Bild (PNG) …"), None, Command::Export(ExportKind::Png), out);
+    cmd_item(ui, true, &l(icon::FILE_SVG, "Vektorgrafik (SVG) …"), None, Command::Export(ExportKind::Svg), out);
+    cmd_item(ui, true, &l(icon::MARKDOWN_LOGO, "Gliederung (Markdown) …"), None, Command::Export(ExportKind::Markdown), out);
+}
+
+/// Farbschemas mit kleiner Farbvorschau
+fn theme_menu(ui: &mut egui::Ui, current: usize, out: &mut Option<Command>) {
+    ui.set_min_width(230.0);
+    for (i, t) in THEMES.iter().enumerate() {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 3.0;
+            for c in [t.background, t.root, t.branches[0], t.branches[1], t.branches[2]] {
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
+                ui.painter().circle_filled(rect.center(), 5.5, c);
+            }
+            ui.add_space(6.0);
+            if ui.selectable_label(current == i, t.name).clicked() {
+                *out = Some(Command::Theme(i));
+                ui.close_menu();
+            }
+        });
+    }
+}
+
+fn action_item(ui: &mut egui::Ui, enabled: bool, label: &str, shortcut: &str, action: Action, out: &mut Option<Action>) {
+    if ui
+        .add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut))
+        .clicked()
+    {
+        *out = Some(action);
+        ui.close_menu();
+    }
+}
+
+fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut Option<Action>) {
+    ui.set_min_width(220.0);
+    let fmt = |sc: &KeyboardShortcut| ui.ctx().format_shortcut(sc);
+    let (copy, cut, dup) = (fmt(&SC_COPY), fmt(&SC_CUT), fmt(&SC_DUPLICATE));
+    let is_root = map.parent_of(id).is_none();
+    let has_children = map.has_children(id);
+    let collapsed = map.get(id).is_some_and(|n| n.collapsed);
+
+    let l = |ic: &str, text: &str| format!("{ic}  {text}");
+    action_item(ui, true, &l(icon::PLUS_CIRCLE, "Neuer Unterpunkt"), "Tab", Action::AddChild(id), out);
+    action_item(ui, true, &l(icon::ARROW_BEND_DOWN_RIGHT, "Neuer Nachbar"), "Enter", Action::AddSibling(id), out);
+    action_item(ui, true, &l(icon::PENCIL_SIMPLE, "Umbenennen"), "F2", Action::Rename(id), out);
+    let toggle = if collapsed {
+        l(icon::ARROWS_OUT_SIMPLE, "Ausklappen")
+    } else {
+        l(icon::ARROWS_IN_SIMPLE, "Einklappen")
+    };
+    action_item(ui, has_children, &toggle, "Leertaste", Action::Toggle(id), out);
+    action_item(ui, true, &l(icon::NOTE_PENCIL, "Notiz …"), "", Action::EditNote(id), out);
+    ui.menu_button(l(icon::PALETTE, "Farbe"), |ui| {
+        ui.horizontal(|ui| {
+            for (i, color) in theme.branches.iter().enumerate() {
+                let swatch = egui::Button::new("").fill(*color).min_size(Vec2::splat(24.0));
+                if ui.add(swatch).clicked() {
+                    *out = Some(Action::SetColor(id, Some(i)));
+                    ui.close_menu();
+                }
+            }
+        });
+        if ui.button("Automatisch").clicked() {
+            *out = Some(Action::SetColor(id, None));
+            ui.close_menu();
+        }
+    });
+    ui.separator();
+    action_item(ui, true, &l(icon::COPY, "Kopieren"), &copy, Action::Copy(id), out);
+    action_item(ui, !is_root, &l(icon::SCISSORS, "Ausschneiden"), &cut, Action::Cut(id), out);
+    action_item(ui, !is_root, &l(icon::COPY_SIMPLE, "Duplizieren"), &dup, Action::Duplicate(id), out);
+    ui.separator();
+    action_item(ui, !is_root, &l(icon::TRASH, "Löschen"), "Entf", Action::Delete(id), out);
+}
+
+/// Ein sichtbarer Knoten mit fertig berechneter Bildschirmposition
+struct Laid {
+    id: u64,
+    rect: Rect,
+    galley: Arc<egui::Galley>,
+    style: NodeStyle,
+    collapsed: bool,
+    /// Auf welcher Seite des Elternknotens er liegt (+1 rechts, -1 links)
+    side: f32,
+    hit: bool,
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+/// Wird beim Beenden gesichert und beim Start wiederhergestellt
+#[derive(Deserialize)]
+struct SavedState {
+    /// Name statt Nummer, damit neue Farbschemas die Auswahl nicht verschieben
+    #[serde(default)]
+    theme_name: Option<String>,
+    docs: Vec<Document>,
+    active: usize,
+    #[serde(default = "yes")]
+    show_welcome: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Serialize)]
+struct SavedStateRef<'a> {
+    theme_name: &'a str,
+    docs: &'a [Document],
+    active: usize,
+    show_welcome: bool,
+}
+
+pub struct MindMapApp {
+    docs: Vec<Document>,
+    active: usize,
+    theme: usize,
+    applied_theme: Option<usize>,
+    /// Tab wurde gedrückt (wird abgefangen, bevor egui damit den Fokus wechselt)
+    tab_pressed: bool,
+    /// Ctrl+Tab / Ctrl+Shift+Tab
+    tab_switch: i32,
+    /// Textfeld des Knotens soll im nächsten Frame den Fokus bekommen
+    focus_pending: bool,
+    search: String,
+    search_focus: bool,
+    show_help: bool,
+    status: String,
+    window_title: String,
+    canvas_rect: Rect,
+    /// Vorschau neben dem Markdown-Editor
+    md_preview: bool,
+    /// Offenes Notizfenster: Knoten und Stand vorher (für Rückgängig)
+    note_edit: Option<(u64, MindMap)>,
+    fullscreen: bool,
+    /// Tipp-Karte mit Beispiel-Button auf leeren Mindmaps
+    show_welcome: bool,
+}
+
+impl MindMapApp {
+    pub fn new(cc: &eframe::CreationContext) -> Self {
+        // Cmd +/- soll die Mindmap zoomen, nicht die ganze Oberfläche
+        cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        install_fonts(&cc.egui_ctx);
+        cc.egui_ctx.style_mut(apply_spacing);
+
+        let mut app = Self {
+            docs: Vec::new(),
+            active: 0,
+            theme: DEFAULT_THEME,
+            applied_theme: None,
+            tab_pressed: false,
+            tab_switch: 0,
+            focus_pending: false,
+            search: String::new(),
+            search_focus: false,
+            show_help: false,
+            status: "Bereit".into(),
+            window_title: String::new(),
+            canvas_rect: Rect::NOTHING,
+            md_preview: true,
+            note_edit: None,
+            fullscreen: false,
+            show_welcome: true,
+        };
+
+        if let Some(state) = cc
+            .storage
+            .and_then(|s| eframe::get_value::<SavedState>(s, eframe::APP_KEY))
+        {
+            if let Some(name) = state.theme_name {
+                app.theme = THEMES.iter().position(|t| t.name == name).unwrap_or(DEFAULT_THEME);
+            }
+            app.docs = state.docs;
+            app.active = state.active;
+            app.show_welcome = state.show_welcome;
+        } else if Path::new("mindmap.json").exists() {
+            // Datei aus der ersten Version übernehmen
+            app.open_path(PathBuf::from("mindmap.json"));
+        }
+        if app.docs.is_empty() {
+            app.new_tab();
+        }
+        app.active = app.active.min(app.docs.len() - 1);
+        // Gespeicherten Modus wiederherstellen, aber nie direkt in die Präsentation
+        for doc in &mut app.docs {
+            let mode = if doc.mode == Mode::Present { Mode::Mindmap } else { doc.mode };
+            doc.set_mode(mode);
+        }
+        app
+    }
+
+    fn doc(&self) -> &Document {
+        &self.docs[self.active]
+    }
+
+    fn doc_mut(&mut self) -> &mut Document {
+        &mut self.docs[self.active]
+    }
+
+    // -- Tabs und Dateien -----------------------------------------------------
+
+    fn new_tab(&mut self) {
+        self.close_note();
+        if let Some(doc) = self.docs.get_mut(self.active) {
+            doc.end_edit();
+        }
+        self.docs.push(Document::new(MindMap::new("Zentrales Thema"), None));
+        self.active = self.docs.len() - 1;
+    }
+
+    fn select_tab(&mut self, i: usize) {
+        if i < self.docs.len() {
+            self.close_note();
+            self.doc_mut().end_edit();
+            self.active = i;
+        }
+    }
+
+    fn open_dialog(&mut self) {
+        let Some(paths) = rfd::FileDialog::new()
+            .add_filter("Mindmap", &["mindmap", "json"])
+            .add_filter("Markdown / Text", &["md", "markdown", "txt"])
+            .pick_files()
+        else {
+            return;
+        };
+        for path in paths {
+            self.open_path(path);
+        }
+    }
+
+    fn open_path(&mut self, path: PathBuf) {
+        let path = path.canonicalize().unwrap_or(path);
+        if let Some(i) = self.docs.iter().position(|d| d.path.as_deref() == Some(path.as_path())) {
+            self.select_tab(i);
+            return;
+        }
+        match Document::open(&path) {
+            Ok(doc) => {
+                self.push_doc(doc);
+                self.status = format!("Geöffnet: {}", path.display());
+            }
+            Err(e) => self.status = format!("Öffnen fehlgeschlagen: {e}"),
+        }
+    }
+
+    /// Zeigt ein Dokument an: ersetzt einen leeren, unberührten Tab, sonst neuer Tab.
+    fn push_doc(&mut self, doc: Document) {
+        self.close_note();
+        let replace = self
+            .docs
+            .get(self.active)
+            .is_some_and(|d| !d.dirty && d.path.is_none() && d.map.nodes.len() == 1);
+        if replace {
+            self.docs[self.active] = doc;
+        } else {
+            self.docs.push(doc);
+            self.active = self.docs.len() - 1;
+        }
+    }
+
+    fn open_example(&mut self, i: usize) {
+        let Some((name, text)) = EXAMPLES.get(i) else { return };
+        let Some(map) = MindMap::from_outline(text) else { return };
+        let mut doc = Document::new(map, None);
+        doc.layout_pending = true;
+        self.push_doc(doc);
+        self.status = format!("Beispiel „{name}“ geöffnet – F5 startet die Präsentation");
+    }
+
+    /// Gibt `false` zurück, wenn nicht gespeichert wurde (z. B. Dialog abgebrochen).
+    fn save_doc(&mut self, i: usize) -> bool {
+        let is_mindmap = |p: &PathBuf| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("mindmap") || e.eq_ignore_ascii_case("json"))
+        };
+        match self.docs[i].path.clone().filter(is_mindmap) {
+            Some(path) => self.write_doc(i, &path),
+            None => self.save_doc_as(i),
+        }
+    }
+
+    fn save_doc_as(&mut self, i: usize) -> bool {
+        self.docs[i].end_edit();
+        let mut dialog = rfd::FileDialog::new()
+            .add_filter("Mindmap", &["mindmap"])
+            .set_file_name(format!("{}.mindmap", self.docs[i].title()));
+        if let Some(dir) = self.docs[i].path.as_ref().and_then(|p| p.parent()) {
+            dialog = dialog.set_directory(dir);
+        }
+        match dialog.save_file() {
+            Some(path) => self.write_doc(i, &path),
+            None => false,
+        }
+    }
+
+    fn write_doc(&mut self, i: usize, path: &Path) -> bool {
+        match self.docs[i].save_to(path) {
+            Ok(()) => {
+                self.status = format!("Gespeichert: {}", path.display());
+                true
+            }
+            Err(e) => {
+                self.status = format!("Speichern fehlgeschlagen: {e}");
+                false
+            }
+        }
+    }
+
+    fn close_tab(&mut self, i: usize) {
+        if i >= self.docs.len() {
+            return;
+        }
+        self.close_note();
+        self.docs[i].end_edit();
+        if self.docs[i].dirty {
+            self.active = i;
+            let answer = rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Warning)
+                .set_title("Ungespeicherte Änderungen")
+                .set_description(format!(
+                    "„{}“ wurde geändert. Sollen die Änderungen gespeichert werden?",
+                    self.docs[i].title()
+                ))
+                .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
+                    "Speichern".into(),
+                    "Nicht speichern".into(),
+                    "Abbrechen".into(),
+                ))
+                .show();
+            match answer {
+                rfd::MessageDialogResult::Yes => {
+                    if !self.save_doc(i) {
+                        return;
+                    }
+                }
+                rfd::MessageDialogResult::Custom(s) if s == "Speichern" => {
+                    if !self.save_doc(i) {
+                        return;
+                    }
+                }
+                rfd::MessageDialogResult::No => {}
+                rfd::MessageDialogResult::Custom(s) if s == "Nicht speichern" => {}
+                _ => return,
+            }
+        }
+        self.docs.remove(i);
+        if self.docs.is_empty() {
+            self.new_tab();
+        } else {
+            if self.active > i {
+                self.active -= 1;
+            }
+            self.active = self.active.min(self.docs.len() - 1);
+        }
+    }
+
+    fn export_nodes(&self, ctx: &egui::Context) -> Vec<ExportNode> {
+        let theme = &THEMES[self.theme];
+        let map = &self.doc().map;
+        map.nodes
+            .iter()
+            .filter(|n| !map.is_hidden(n.id))
+            .map(|n| {
+                let style = node_style(map, theme, n.id);
+                ExportNode {
+                    center: Pos2::new(n.pos[0], n.pos[1]),
+                    size: node_size(ctx, map, theme, n),
+                    parent: n.parent.map(|p| map.pos(p).to_pos2()),
+                    fill: style.fill,
+                    text_color: style.text,
+                    accent: style.accent,
+                    outlined: style.outlined,
+                    font_size: style.font_size,
+                    edge_width: style.edge_width,
+                    text: n.text.clone(),
+                }
+            })
+            .collect()
+    }
+
+    fn export(&mut self, ctx: &egui::Context, kind: ExportKind) {
+        self.doc_mut().end_edit();
+        let (ext, filter) = match kind {
+            ExportKind::Png => ("png", "PNG-Bild"),
+            ExportKind::Svg => ("svg", "SVG-Grafik"),
+            ExportKind::Markdown => ("md", "Markdown"),
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter(filter, &[ext])
+            .set_file_name(format!("{}.{ext}", self.doc().title()))
+            .save_file()
+        else {
+            return;
+        };
+        let theme = &THEMES[self.theme];
+        let result = match kind {
+            ExportKind::Markdown => {
+                std::fs::write(&path, self.doc().map.to_markdown()).map_err(|e| e.to_string())
+            }
+            ExportKind::Svg => {
+                let svg = export::to_svg(&self.export_nodes(ctx), theme);
+                std::fs::write(&path, svg).map_err(|e| e.to_string())
+            }
+            ExportKind::Png => export::svg_to_png(&export::to_svg(&self.export_nodes(ctx), theme), &path),
+        };
+        self.status = match result {
+            Ok(()) => format!("Exportiert: {}", path.display()),
+            Err(e) => format!("Export fehlgeschlagen: {e}"),
+        };
+    }
+
+    // -- Befehle ausführen ----------------------------------------------------
+
+    fn zoom_by(&mut self, factor: f32) {
+        let area = self.canvas_rect;
+        if area.is_positive() {
+            let doc = self.doc_mut();
+            let zoom = doc.zoom * factor;
+            zoom_at(doc, area, area.center(), zoom);
+        }
+    }
+
+    fn find_next(&mut self) {
+        let query = self.search.trim().to_lowercase();
+        if query.is_empty() {
+            return;
+        }
+        let doc = &mut self.docs[self.active];
+        let hits: Vec<u64> = doc
+            .map
+            .nodes
+            .iter()
+            .filter(|n| n.text.to_lowercase().contains(&query))
+            .map(|n| n.id)
+            .collect();
+        if hits.is_empty() {
+            self.status = format!("Nichts gefunden für „{}“", self.search.trim());
+            return;
+        }
+        let next = doc
+            .selected
+            .and_then(|s| hits.iter().position(|h| *h == s))
+            .map(|i| (i + 1) % hits.len())
+            .unwrap_or(0);
+        let id = hits[next];
+        doc.map.expand_to(id);
+        doc.selected = Some(id);
+        doc.reveal = Some(id);
+        self.status = format!("Treffer {} von {}", next + 1, hits.len());
+    }
+
+    fn run(&mut self, ctx: &egui::Context, cmd: Command) {
+        let selected = self.doc().selected;
+        match cmd {
+            Command::NewTab => self.new_tab(),
+            Command::Open => self.open_dialog(),
+            Command::Save => {
+                self.save_doc(self.active);
+            }
+            Command::SaveAs => {
+                self.save_doc_as(self.active);
+            }
+            Command::Export(kind) => self.export(ctx, kind),
+            Command::CloseTab(i) => self.close_tab(i),
+            Command::SelectTab(i) => self.select_tab(i),
+            Command::NextTab(step) => {
+                let n = self.docs.len() as i32;
+                self.select_tab((self.active as i32 + step).rem_euclid(n) as usize);
+            }
+            Command::Undo => self.doc_mut().undo(),
+            Command::Redo => self.doc_mut().redo(),
+            Command::Copy => {
+                if let Some(id) = selected {
+                    self.apply(ctx, Action::Copy(id));
+                }
+            }
+            Command::Cut => {
+                if let Some(id) = selected {
+                    self.apply(ctx, Action::Cut(id));
+                }
+            }
+            Command::Duplicate => {
+                if let Some(id) = selected {
+                    self.apply(ctx, Action::Duplicate(id));
+                }
+            }
+            Command::Delete => {
+                if let Some(id) = selected {
+                    self.apply(ctx, Action::Delete(id));
+                }
+            }
+            Command::AutoLayout => self.apply(ctx, Action::AutoLayout),
+            Command::CollapseAll | Command::ExpandAll => {
+                let doc = self.doc_mut();
+                doc.checkpoint();
+                doc.map.set_all_collapsed(matches!(cmd, Command::CollapseAll));
+                if doc.selected.is_some_and(|id| doc.map.is_hidden(id)) {
+                    doc.selected = doc.map.root();
+                }
+            }
+            Command::ZoomIn => self.zoom_by(1.25),
+            Command::ZoomOut => self.zoom_by(0.8),
+            Command::ZoomReset => {
+                let doc_zoom = self.doc().zoom;
+                self.zoom_by(1.0 / doc_zoom);
+            }
+            Command::Fit => self.apply(ctx, Action::Fit),
+            Command::Find => self.search_focus = true,
+            Command::FindNext => self.find_next(),
+            Command::AddChild => {
+                if let Some(id) = selected.or(self.doc().map.root()) {
+                    self.apply(ctx, Action::AddChild(id));
+                }
+            }
+            Command::Help => self.show_help = !self.show_help,
+            Command::Theme(i) => self.theme = i,
+            Command::SetMode(mode) => self.set_mode(ctx, mode),
+            Command::ToggleMarkdown => {
+                let mode = if self.doc().mode == Mode::Markdown { Mode::Mindmap } else { Mode::Markdown };
+                self.set_mode(ctx, mode);
+            }
+            Command::TogglePreview => self.md_preview = !self.md_preview,
+            Command::OpenExample(i) => self.open_example(i),
+        }
+    }
+
+    fn apply(&mut self, ctx: &egui::Context, action: Action) {
+        let doc = &mut self.docs[self.active];
+        match action {
+            Action::AddChild(id) => {
+                if doc.map.get(id).is_some() {
+                    doc.checkpoint();
+                    let child = doc.map.add_child(id);
+                    doc.begin_edit(child, false);
+                    self.focus_pending = true;
+                }
+            }
+            Action::AddSibling(id) => {
+                // An der Wurzel gibt es keine Geschwister, also Kind
+                let parent = doc.map.parent_of(id).unwrap_or(id);
+                doc.checkpoint();
+                let sibling = doc.map.add_child(parent);
+                doc.begin_edit(sibling, false);
+                self.focus_pending = true;
+            }
+            Action::Rename(id) => {
+                doc.begin_edit(id, true);
+                self.focus_pending = true;
+            }
+            Action::Delete(id) => {
+                // Die Wurzel bleibt immer stehen
+                if let Some(parent) = doc.map.parent_of(id) {
+                    doc.checkpoint();
+                    doc.map.remove(id);
+                    doc.selected = Some(parent);
+                }
+            }
+            Action::Toggle(id) => {
+                if doc.map.has_children(id) {
+                    doc.checkpoint();
+                    if let Some(n) = doc.map.get_mut(id) {
+                        n.collapsed = !n.collapsed;
+                    }
+                }
+            }
+            Action::SetColor(id, color) => {
+                doc.checkpoint();
+                if let Some(n) = doc.map.get_mut(id) {
+                    n.color = color;
+                }
+            }
+            Action::Copy(id) => {
+                ctx.copy_text(doc.map.clip_json(id));
+                self.status = "Kopiert – mit Einfügen unter einem anderen Knoten wieder einsetzen".into();
+            }
+            Action::Cut(id) => {
+                if let Some(parent) = doc.map.parent_of(id) {
+                    ctx.copy_text(doc.map.clip_json(id));
+                    doc.checkpoint();
+                    doc.map.remove(id);
+                    doc.selected = Some(parent);
+                    self.status = "Ausgeschnitten".into();
+                }
+            }
+            Action::Duplicate(id) => {
+                if let Some(parent) = doc.map.parent_of(id) {
+                    doc.checkpoint();
+                    let nodes = doc.map.extract(id);
+                    doc.selected = doc.map.insert_subtree(parent, nodes);
+                }
+            }
+            Action::Paste(text) => {
+                let target = doc
+                    .selected
+                    .filter(|id| doc.map.get(*id).is_some())
+                    .or(doc.map.root());
+                let Some(target) = target else { return };
+                doc.checkpoint();
+                // Eigener kopierter Teilbaum, sonst Text als Gliederung
+                let first = match serde_json::from_str::<Clip>(&text) {
+                    Ok(clip) => doc.map.insert_subtree(target, clip.mindmap_clip),
+                    Err(_) => doc.map.add_outline(target, &parse_outline(&text)).first().copied(),
+                };
+                doc.selected = first.or(Some(target));
+            }
+            Action::AutoLayout => {
+                doc.checkpoint();
+                doc.layout_pending = true;
+            }
+            Action::Fit => doc.fit_pending = true,
+            Action::SetTheme(i) => self.theme = i,
+            Action::OpenExample(i) => self.open_example(i),
+            Action::HideWelcome => {
+                self.show_welcome = false;
+                self.status = "Tipps ausgeblendet – im Hilfe-Menü wieder einschaltbar".into();
+            }
+            Action::EditNote(id) => {
+                doc.end_edit();
+                doc.selected = Some(id);
+                self.note_edit = Some((id, doc.map.clone()));
+            }
+        }
+    }
+
+    // -- Tastatur -------------------------------------------------------------
+
+    fn shortcuts(&mut self, ctx: &egui::Context) -> Vec<Command> {
+        let typing = ctx.wants_keyboard_input();
+        let active = self.active;
+        let mut out = Vec::new();
+        ctx.input_mut(|i| {
+            let mut check = |sc: KeyboardShortcut, cmd: Command| {
+                if i.consume_shortcut(&sc) {
+                    out.push(cmd);
+                }
+            };
+            // Varianten mit Shift zuerst, sonst greift die ohne
+            check(SC_SAVE_AS, Command::SaveAs);
+            check(SC_SAVE, Command::Save);
+            check(SC_OPEN, Command::Open);
+            check(SC_NEW_TAB, Command::NewTab);
+            check(SC_NEW, Command::NewTab);
+            check(SC_CLOSE, Command::CloseTab(active));
+            check(SC_FIND, Command::Find);
+            check(SC_FIT, Command::Fit);
+            check(SC_ZOOM_IN, Command::ZoomIn);
+            check(shortcut(CMD, Key::Equals), Command::ZoomIn);
+            check(SC_ZOOM_OUT, Command::ZoomOut);
+            check(SC_HELP, Command::Help);
+            check(SC_MARKDOWN, Command::ToggleMarkdown);
+            check(SC_PRESENT, Command::SetMode(Mode::Present));
+            if !typing {
+                check(SC_REDO, Command::Redo);
+                check(SC_UNDO, Command::Undo);
+                check(SC_DUPLICATE, Command::Duplicate);
+                check(SC_LAYOUT, Command::AutoLayout);
+            }
+            let digits = [
+                Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7,
+                Key::Num8, Key::Num9,
+            ];
+            for (n, key) in digits.into_iter().enumerate() {
+                check(shortcut(CMD, key), Command::SelectTab(n));
+            }
+        });
+        out
+    }
+
+    fn node_keys(&mut self, ctx: &egui::Context) -> Option<Action> {
+        let typing = ctx.wants_keyboard_input();
+        let tab = std::mem::take(&mut self.tab_pressed);
+        let doc = &mut self.docs[self.active];
+
+        // Tab legt immer ein Kind an – auch direkt aus dem Textfeld heraus
+        if tab && (doc.editing.is_some() || !typing) {
+            let target = doc
+                .editing
+                .or(doc.selected)
+                .filter(|id| doc.map.get(*id).is_some());
+            doc.end_edit();
+            return target.map(Action::AddChild);
+        }
+        // Während getippt wird, gehören die übrigen Tasten dem Textfeld
+        if doc.editing.is_some() || typing {
+            return None;
+        }
+
+        let mut paste = None;
+        let (mut copy, mut cut) = (false, false);
+        ctx.input(|i| {
+            for event in &i.events {
+                match event {
+                    egui::Event::Copy => copy = true,
+                    egui::Event::Cut => cut = true,
+                    egui::Event::Paste(text) => paste = Some(text.clone()),
+                    _ => {}
+                }
+            }
+        });
+        if let Some(text) = paste {
+            return Some(Action::Paste(text));
+        }
+
+        let pressed = |key: Key| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, key));
+        let arrows = [
+            (Key::ArrowLeft, Vec2::new(-1.0, 0.0)),
+            (Key::ArrowRight, Vec2::X),
+            (Key::ArrowUp, Vec2::new(0.0, -1.0)),
+            (Key::ArrowDown, Vec2::Y),
+        ];
+
+        let Some(sel) = doc.selected.filter(|id| doc.map.get(*id).is_some()) else {
+            doc.selected = None;
+            // Ohne Auswahl wählt eine Pfeiltaste den Mittelpunkt
+            if arrows.iter().any(|(k, _)| pressed(*k)) {
+                doc.selected = doc.map.root();
+            }
+            return None;
+        };
+
+        if copy {
+            return Some(Action::Copy(sel));
+        }
+        if cut {
+            return Some(Action::Cut(sel));
+        }
+        if pressed(Key::Enter) {
+            return Some(Action::AddSibling(sel));
+        }
+        if pressed(Key::Delete) || pressed(Key::Backspace) {
+            return Some(Action::Delete(sel));
+        }
+        if pressed(Key::F2) {
+            return Some(Action::Rename(sel));
+        }
+        if pressed(Key::Space) {
+            return Some(Action::Toggle(sel));
+        }
+        if pressed(Key::Escape) {
+            doc.selected = None;
+            return None;
+        }
+        for (key, dir) in arrows {
+            if pressed(key) {
+                if let Some(next) = doc.map.neighbor(sel, dir) {
+                    doc.selected = Some(next);
+                    doc.reveal = Some(next);
+                }
+                return None;
+            }
+        }
+        None
+    }
+
+    // -- Oberfläche -----------------------------------------------------------
+
+    fn menu_bar(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        let mut out = None;
+        let active = self.active;
+        let (can_undo, can_redo, has_sel) = {
+            let d = self.doc();
+            (d.can_undo(), d.can_redo(), d.selected.is_some())
+        };
+        let current_theme = self.theme;
+        let mode = self.doc().mode;
+        let md_preview = self.md_preview;
+        let accent = THEMES[self.theme].branches[0];
+        let l = |ic: &str, text: &str| format!("{ic}  {text}");
+
+        egui::menu::bar(ui, |ui| {
+            ui.label(egui::RichText::new(icon::GRAPH).size(20.0).color(accent));
+            ui.label(egui::RichText::new("Mindful").strong().size(15.0));
+            ui.add_space(6.0);
+
+            ui.menu_button("Datei", |ui| {
+                ui.set_min_width(240.0);
+                cmd_item(ui, true, &l(icon::FILE_PLUS, "Neuer Tab"), Some(&SC_NEW_TAB), Command::NewTab, &mut out);
+                cmd_item(ui, true, &l(icon::FOLDER_OPEN, "Öffnen …"), Some(&SC_OPEN), Command::Open, &mut out);
+                ui.menu_button(l(icon::BOOK_OPEN, "Beispiel öffnen"), |ui| {
+                    ui.set_min_width(180.0);
+                    for (i, (name, _)) in EXAMPLES.iter().enumerate() {
+                        cmd_item(ui, true, &l(icon::PLANET, name), None, Command::OpenExample(i), &mut out);
+                    }
+                });
+                ui.separator();
+                cmd_item(ui, true, &l(icon::FLOPPY_DISK, "Speichern"), Some(&SC_SAVE), Command::Save, &mut out);
+                cmd_item(ui, true, &l(icon::FLOPPY_DISK, "Speichern unter …"), Some(&SC_SAVE_AS), Command::SaveAs, &mut out);
+                ui.menu_button(l(icon::EXPORT, "Exportieren"), |ui| export_menu(ui, &mut out));
+                ui.separator();
+                cmd_item(ui, true, &l(icon::X, "Tab schließen"), Some(&SC_CLOSE), Command::CloseTab(active), &mut out);
+            });
+
+            ui.menu_button("Bearbeiten", |ui| {
+                ui.set_min_width(250.0);
+                cmd_item(ui, can_undo, &l(icon::ARROW_COUNTER_CLOCKWISE, "Rückgängig"), Some(&SC_UNDO), Command::Undo, &mut out);
+                cmd_item(ui, can_redo, &l(icon::ARROW_CLOCKWISE, "Wiederholen"), Some(&SC_REDO), Command::Redo, &mut out);
+                ui.separator();
+                cmd_item(ui, has_sel, &l(icon::COPY, "Kopieren"), Some(&SC_COPY), Command::Copy, &mut out);
+                cmd_item(ui, has_sel, &l(icon::SCISSORS, "Ausschneiden"), Some(&SC_CUT), Command::Cut, &mut out);
+                cmd_item(ui, has_sel, &l(icon::COPY_SIMPLE, "Duplizieren"), Some(&SC_DUPLICATE), Command::Duplicate, &mut out);
+                cmd_item(ui, has_sel, &l(icon::TRASH, "Löschen"), None, Command::Delete, &mut out);
+                ui.separator();
+                cmd_item(ui, true, &l(icon::TREE_STRUCTURE, "Automatisch anordnen"), Some(&SC_LAYOUT), Command::AutoLayout, &mut out);
+                cmd_item(ui, true, &l(icon::ARROWS_IN_SIMPLE, "Alle Zweige einklappen"), None, Command::CollapseAll, &mut out);
+                cmd_item(ui, true, &l(icon::ARROWS_OUT_SIMPLE, "Alle Zweige ausklappen"), None, Command::ExpandAll, &mut out);
+                ui.separator();
+                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS, "Suchen"), Some(&SC_FIND), Command::Find, &mut out);
+            });
+
+            ui.menu_button("Ansicht", |ui| {
+                ui.set_min_width(240.0);
+                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS_PLUS, "Vergrößern"), Some(&SC_ZOOM_IN), Command::ZoomIn, &mut out);
+                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS_MINUS, "Verkleinern"), Some(&SC_ZOOM_OUT), Command::ZoomOut, &mut out);
+                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS, "Originalgröße"), None, Command::ZoomReset, &mut out);
+                cmd_item(ui, true, &l(icon::ARROWS_OUT, "Alles anzeigen"), Some(&SC_FIT), Command::Fit, &mut out);
+                ui.separator();
+                cmd_item(ui, mode != Mode::Mindmap, &l(icon::GRAPH, "Mindmap"), None, Command::SetMode(Mode::Mindmap), &mut out);
+                cmd_item(ui, true, &l(icon::TEXT_ALIGN_LEFT, "Markdown-Editor"), Some(&SC_MARKDOWN), Command::ToggleMarkdown, &mut out);
+                cmd_item(ui, true, &l(icon::PRESENTATION, "Präsentation"), Some(&SC_PRESENT), Command::SetMode(Mode::Present), &mut out);
+                ui.separator();
+                ui.menu_button(l(icon::PALETTE, "Farbschema"), |ui| theme_menu(ui, current_theme, &mut out));
+            });
+
+            ui.menu_button("Hilfe", |ui| {
+                ui.set_min_width(220.0);
+                cmd_item(ui, true, &l(icon::KEYBOARD, "Tastenkürzel"), Some(&SC_HELP), Command::Help, &mut out);
+                cmd_item(ui, true, &l(icon::ROCKET_LAUNCH, "Beispiel: Weltall"), None, Command::OpenExample(0), &mut out);
+                ui.separator();
+                ui.checkbox(&mut self.show_welcome, "Tipps auf leeren Mindmaps");
+            });
+
+            // Werkzeugleiste
+            ui.separator();
+            let mut tool = |ui: &mut egui::Ui, ic: &str, tip: &str, sc: Option<&KeyboardShortcut>, enabled: bool, cmd: Command| {
+                if icon_button(ui, ic, tip, sc, enabled) {
+                    out = Some(cmd);
+                }
+            };
+            tool(ui, icon::FILE_PLUS, "Neuer Tab", Some(&SC_NEW_TAB), true, Command::NewTab);
+            tool(ui, icon::FOLDER_OPEN, "Öffnen", Some(&SC_OPEN), true, Command::Open);
+            tool(ui, icon::FLOPPY_DISK, "Speichern", Some(&SC_SAVE), true, Command::Save);
+            ui.separator();
+            tool(ui, icon::ARROW_COUNTER_CLOCKWISE, "Rückgängig", Some(&SC_UNDO), can_undo, Command::Undo);
+            tool(ui, icon::ARROW_CLOCKWISE, "Wiederholen", Some(&SC_REDO), can_redo, Command::Redo);
+            ui.separator();
+            if mode == Mode::Mindmap {
+                tool(ui, icon::PLUS_CIRCLE, "Neuer Unterpunkt (Tab)", None, true, Command::AddChild);
+                tool(ui, icon::TRASH, "Löschen (Entf)", None, has_sel, Command::Delete);
+                ui.separator();
+                tool(ui, icon::TREE_STRUCTURE, "Automatisch anordnen", Some(&SC_LAYOUT), true, Command::AutoLayout);
+                tool(ui, icon::ARROWS_OUT, "Alles anzeigen", Some(&SC_FIT), true, Command::Fit);
+                tool(ui, icon::MAGNIFYING_GLASS_MINUS, "Verkleinern", Some(&SC_ZOOM_OUT), true, Command::ZoomOut);
+                tool(ui, icon::MAGNIFYING_GLASS_PLUS, "Vergrößern", Some(&SC_ZOOM_IN), true, Command::ZoomIn);
+            } else {
+                let tip = if md_preview { "Vorschau ausblenden" } else { "Vorschau einblenden" };
+                tool(ui, icon::SIDEBAR_SIMPLE, tip, None, true, Command::TogglePreview);
+            }
+            tool(ui, icon::PLAY, "Präsentation starten", Some(&SC_PRESENT), true, Command::SetMode(Mode::Present));
+            ui.separator();
+            ui.menu_button(egui::RichText::new(icon::EXPORT).size(17.0), |ui| export_menu(ui, &mut out))
+                .response
+                .on_hover_text("Exportieren");
+            ui.menu_button(egui::RichText::new(icon::PALETTE).size(17.0), |ui| theme_menu(ui, current_theme, &mut out))
+                .response
+                .on_hover_text("Farbschema");
+
+            // Suche rechts in der Leiste
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let resp = ui.add(
+                    egui::TextEdit::singleline(&mut self.search)
+                        .hint_text("Suchen …")
+                        .desired_width(170.0)
+                        .margin(Vec2::new(8.0, 4.0)),
+                );
+                if std::mem::take(&mut self.search_focus) {
+                    resp.request_focus();
+                }
+                if resp.lost_focus() {
+                    if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter)) {
+                        out = Some(Command::FindNext);
+                        resp.request_focus();
+                    } else if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
+                        self.search.clear();
+                    }
+                }
+                ui.label(egui::RichText::new(icon::MAGNIFYING_GLASS).size(16.0));
+                let query = self.search.trim().to_lowercase();
+                if !query.is_empty() {
+                    let n = self.docs[active]
+                        .map
+                        .nodes
+                        .iter()
+                        .filter(|n| n.text.to_lowercase().contains(&query))
+                        .count();
+                    ui.weak(format!("{n} Treffer"));
+                }
+            });
+        });
+        out
+    }
+
+    fn tab_bar(&mut self, ui: &mut egui::Ui, theme: &Theme) -> Option<Command> {
+        let mut out = None;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            for (i, doc) in self.docs.iter().enumerate() {
+                let active = i == self.active;
+                let (fill, stroke) = if active {
+                    (theme.background, Stroke::new(1.0_f32, theme.grid))
+                } else {
+                    (Color32::TRANSPARENT, Stroke::NONE)
+                };
+                egui::Frame::default()
+                    .fill(fill)
+                    .stroke(stroke)
+                    .corner_radius(8.0)
+                    .inner_margin(egui::Margin::symmetric(10, 4))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 6.0;
+                            let dot = if active { theme.branches[0] } else { theme.grid };
+                            ui.label(egui::RichText::new(icon::GRAPH).color(dot));
+                            let mut title = doc.title();
+                            if doc.dirty {
+                                title.push_str(" •");
+                            }
+                            let mut text = egui::RichText::new(title);
+                            if active {
+                                text = text.strong();
+                            }
+                            let label = ui.add(egui::Label::new(text).selectable(false).sense(Sense::click()));
+                            if label.clicked() {
+                                out = Some(Command::SelectTab(i));
+                            }
+                            if label.middle_clicked() {
+                                out = Some(Command::CloseTab(i));
+                            }
+                            if let Some(path) = &doc.path {
+                                label.on_hover_text(path.display().to_string());
+                            }
+                            let close = ui.add(egui::Button::new(egui::RichText::new(icon::X).size(12.0)).small());
+                            if close.on_hover_text("Tab schließen").clicked() {
+                                out = Some(Command::CloseTab(i));
+                            }
+                        });
+                    });
+            }
+            if icon_button(ui, icon::PLUS, "Neuer Tab", Some(&SC_NEW_TAB), true) {
+                out = Some(Command::NewTab);
+            }
+
+            // Modus-Umschalter rechts
+            let current = self.docs[self.active].mode;
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                egui::Frame::default()
+                    .fill(theme.background)
+                    .corner_radius(9.0)
+                    .inner_margin(egui::Margin::same(3))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 2.0;
+                            let modes = [
+                                (Mode::Mindmap, icon::GRAPH, "Mindmap"),
+                                (Mode::Markdown, icon::TEXT_ALIGN_LEFT, "Markdown"),
+                                (Mode::Present, icon::PRESENTATION, "Präsentation"),
+                            ];
+                            for (mode, ic, label) in modes {
+                                if ui.selectable_label(current == mode, format!("{ic}  {label}")).clicked() {
+                                    out = Some(Command::SetMode(mode));
+                                }
+                            }
+                        });
+                    });
+            });
+        });
+        out
+    }
+
+    fn status_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(self.status.as_str());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let doc = &self.docs[self.active];
+                if doc.mode == Mode::Markdown {
+                    let words = doc.md_text.split_whitespace().filter(|w| w.chars().any(char::is_alphanumeric)).count();
+                    ui.label(format!("{} {words} Wörter", icon::TEXT_AA));
+                    ui.separator();
+                    ui.label(format!("{} {} Knoten", icon::TREE_STRUCTURE, doc.map.nodes.len()));
+                    ui.separator();
+                    ui.weak("## Überschrift = Zweig · - Aufzählung = Unterpunkt · Text = Notiz");
+                } else {
+                    ui.label(format!("{} {:.0} %", icon::MAGNIFYING_GLASS, doc.zoom * 100.0));
+                    ui.separator();
+                    ui.label(format!("{} {} Knoten", icon::TREE_STRUCTURE, doc.map.nodes.len()));
+                    ui.separator();
+                    ui.weak(format!("{} Rechtsklick: Menü · F1: Tastenkürzel", icon::KEYBOARD));
+                }
+            });
+        });
+    }
+
+    fn help_window(&mut self, ctx: &egui::Context) {
+        let f = |sc: &KeyboardShortcut| ctx.format_shortcut(sc);
+        let cmd = if cfg!(target_os = "macos") { "⌘" } else { "Strg" };
+        let rows: Vec<(String, &str)> = vec![
+            ("Tab".into(), "Unterpunkt anlegen (auch beim Tippen)"),
+            ("Enter".into(), "Nachbar anlegen / Tippen beenden"),
+            ("F2 · Doppelklick".into(), "Umbenennen"),
+            ("Entf".into(), "Knoten samt Unterpunkten löschen"),
+            ("Leertaste".into(), "Ein- und ausklappen"),
+            ("Pfeiltasten".into(), "Auswahl bewegen"),
+            ("Esc".into(), "Auswahl aufheben"),
+            (f(&SC_COPY), "Teilbaum kopieren"),
+            (f(&SC_CUT), "Teilbaum ausschneiden"),
+            (f(&SC_PASTE), "Einfügen (auch Text als Gliederung)"),
+            (f(&SC_DUPLICATE), "Duplizieren"),
+            (f(&SC_UNDO), "Rückgängig"),
+            (f(&SC_REDO), "Wiederholen"),
+            (f(&SC_LAYOUT), "Automatisch anordnen"),
+            (f(&SC_FIND), "Suchen (Enter: nächster Treffer)"),
+            (f(&SC_FIT), "Alles anzeigen"),
+            (format!("{} / {}", f(&SC_ZOOM_IN), f(&SC_ZOOM_OUT)), "Zoomen"),
+            (format!("{cmd} + Scrollen · Pinch"), "Zoomen an der Maus"),
+            ("Fläche ziehen · Scrollen".into(), "Ansicht verschieben"),
+            ("Knoten ziehen".into(), "Knoten samt Unterpunkten verschieben"),
+            (f(&SC_NEW_TAB), "Neuer Tab"),
+            (f(&SC_CLOSE), "Tab schließen"),
+            ("Ctrl + Tab".into(), "Nächster Tab"),
+            (format!("{cmd} 1 … 9"), "Zu Tab springen"),
+            (f(&SC_SAVE), "Speichern"),
+            (f(&SC_SAVE_AS), "Speichern unter"),
+            (f(&SC_OPEN), "Öffnen (auch Markdown importieren)"),
+            (f(&SC_MARKDOWN), "Markdown-Editor ein/aus"),
+            (f(&SC_PRESENT), "Präsentation starten"),
+            ("→ · Leertaste · Klick".into(), "Nächste Folie"),
+            ("← · Rechtsklick".into(), "Vorherige Folie"),
+            ("F · Esc".into(), "Vollbild · Präsentation beenden"),
+        ];
+        egui::Window::new("Tastenkürzel")
+            .open(&mut self.show_help)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                egui::Grid::new("help")
+                    .num_columns(2)
+                    .spacing([24.0, 6.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for (keys, what) in rows {
+                            ui.strong(keys);
+                            ui.label(what);
+                            ui.end_row();
+                        }
+                    });
+            });
+    }
+
+    fn canvas(&mut self, ui: &mut egui::Ui) -> Option<Action> {
+        let theme = &THEMES[self.theme];
+        let query = self.search.trim().to_lowercase();
+        let focus_pending = &mut self.focus_pending;
+        let doc = &mut self.docs[self.active];
+        let ctx = ui.ctx().clone();
+        let (bg, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
+        let area = bg.rect;
+        self.canvas_rect = area;
+        let mut action = None;
+
+        // Anordnen und "alles anzeigen" brauchen die echten Knotengrößen
+        if doc.layout_pending || doc.fit_pending {
+            let sizes: HashMap<u64, Vec2> = doc
+                .map
+                .nodes
+                .iter()
+                .map(|n| (n.id, node_size(&ctx, &doc.map, theme, n)))
+                .collect();
+            if doc.layout_pending {
+                let widths = sizes.iter().map(|(id, s)| (*id, s.x)).collect();
+                doc.map.auto_layout(&widths);
+                doc.layout_pending = false;
+                doc.fit_pending = true;
+            }
+            if doc.fit_pending {
+                fit_view(doc, area, &sizes);
+                doc.fit_pending = false;
+            }
+        }
+
+        // Zoomen (Cmd+Scrollen, Pinch) an der Maus, sonst Scrollen = Verschieben
+        if ui.rect_contains_pointer(area) {
+            let (zoom_delta, scroll, hover) =
+                ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
+            if zoom_delta != 1.0 {
+                if let Some(p) = hover {
+                    let zoom = doc.zoom * zoom_delta;
+                    zoom_at(doc, area, p, zoom);
+                }
+            } else {
+                doc.pan += scroll;
+            }
+        }
+        if bg.dragged() {
+            doc.pan += bg.drag_delta();
+        }
+        if bg.clicked() {
+            doc.end_edit();
+            doc.selected = None;
+        }
+
+        let zoom = doc.zoom;
+        let origin = area.center() + doc.pan;
+        let to_screen = |p: [f32; 2]| origin + Vec2::new(p[0], p[1]) * zoom;
+
+        // Hintergrund mit Punktraster, das sich mitbewegt
+        painter.rect_filled(area, 0.0, theme.background);
+        let mut spacing = 28.0 * zoom;
+        while spacing < 14.0 {
+            spacing *= 2.0;
+        }
+        let mut y = area.top() + (origin.y - area.top()).rem_euclid(spacing);
+        while y < area.bottom() {
+            let mut x = area.left() + (origin.x - area.left()).rem_euclid(spacing);
+            while x < area.right() {
+                painter.circle_filled(Pos2::new(x, y), 1.3, theme.grid);
+                x += spacing;
+            }
+            y += spacing;
+        }
+
+        // Sichtbare Knoten berechnen
+        let layout: Vec<Laid> = doc
+            .map
+            .nodes
+            .iter()
+            .filter(|n| !doc.map.is_hidden(n.id))
+            .map(|n| {
+                let style = node_style(&doc.map, theme, n.id);
+                let galley = painter.layout_no_wrap(
+                    n.text.clone(),
+                    FontId::proportional(style.font_size * zoom),
+                    style.text,
+                );
+                let size = (galley.size() + style.padding * zoom).max(MIN_NODE * zoom);
+                let side = match n.parent {
+                    Some(p) if n.pos[0] < doc.map.pos(p).x => -1.0,
+                    _ => 1.0,
+                };
+                Laid {
+                    id: n.id,
+                    rect: Rect::from_center_size(to_screen(n.pos), size),
+                    galley,
+                    style,
+                    collapsed: n.collapsed && doc.map.has_children(n.id),
+                    side,
+                    hit: !query.is_empty() && n.text.to_lowercase().contains(&query),
+                }
+            })
+            .collect();
+        let rects: HashMap<u64, Rect> = layout.iter().map(|l| (l.id, l.rect)).collect();
+
+        // Ausgewählten Knoten ins Bild holen, falls er außerhalb liegt
+        if let Some(id) = doc.reveal.take() {
+            if let Some(r) = rects.get(&id) {
+                if !area.shrink(30.0).contains_rect(*r) {
+                    doc.pan += area.center() - r.center();
+                    ctx.request_repaint();
+                }
+            }
+        }
+
+        // Geschwungene Verbindungslinien, unter den Knoten
+        for l in &layout {
+            let Some(parent) = doc.map.parent_of(l.id).and_then(|p| rects.get(&p)) else {
+                continue;
+            };
+            let (a, b) = (parent.center(), l.rect.center());
+            let dx = (b.x - a.x) * 0.5;
+            painter.add(CubicBezierShape::from_points_stroke(
+                [a, a + Vec2::new(dx, 0.0), b - Vec2::new(dx, 0.0), b],
+                false,
+                Color32::TRANSPARENT,
+                Stroke::new(l.style.edge_width * zoom.clamp(0.5, 2.0), l.style.accent.gamma_multiply(0.8)),
+            ));
+        }
+
+        for l in &layout {
+            let (id, rect) = (l.id, l.rect);
+            let resp = ui.interact(rect, ui.id().with(("node", id)), Sense::click_and_drag());
+
+            if resp.clicked() || resp.drag_started() || resp.secondary_clicked() {
+                doc.selected = Some(id);
+            }
+            if resp.double_clicked() {
+                action = Some(Action::Rename(id));
+            }
+            if resp.drag_started() {
+                doc.checkpoint();
+            }
+            if resp.dragged() {
+                // Knoten samt Unterbaum verschieben
+                let d = resp.drag_delta() / zoom;
+                for nid in doc.map.subtree(id) {
+                    if let Some(n) = doc.map.get_mut(nid) {
+                        n.pos[0] += d.x;
+                        n.pos[1] += d.y;
+                    }
+                }
+            }
+            resp.context_menu(|ui| node_menu(ui, theme, &doc.map, id, &mut action));
+
+            paint_node(&painter, theme, rect, &l.style, zoom, doc.selected == Some(id), l.hit);
+
+            // Notiz-Symbol oben rechts; die Notiz erscheint beim Drüberfahren
+            let note = doc.map.get(id).map(|n| n.note.trim().to_string()).unwrap_or_default();
+            if !note.is_empty() {
+                let c = rect.right_top() + Vec2::new(-10.0, 2.0) * zoom;
+                painter.circle_filled(c, 9.0 * zoom, theme.card);
+                painter.circle_stroke(c, 9.0 * zoom, Stroke::new(1.5 * zoom, l.style.accent));
+                painter.text(c, Align2::CENTER_CENTER, icon::NOTE, FontId::proportional(10.0 * zoom), l.style.accent);
+                if doc.editing != Some(id) && !resp.dragged() {
+                    resp.on_hover_text(note);
+                }
+            }
+
+            // Zähler für eingeklappte Unterpunkte; Klick klappt aus
+            if l.collapsed {
+                let count = doc.map.subtree(id).len() - 1;
+                let c = rect.center() + Vec2::new(l.side * (rect.width() / 2.0 + 16.0 * zoom), 0.0);
+                painter.line_segment(
+                    [rect.center() + Vec2::new(l.side * rect.width() / 2.0, 0.0), c],
+                    Stroke::new(2.0 * zoom, l.style.accent),
+                );
+                painter.circle_filled(c, 11.0 * zoom, l.style.accent);
+                painter.text(
+                    c,
+                    Align2::CENTER_CENTER,
+                    count.to_string(),
+                    FontId::proportional(11.0 * zoom),
+                    theme.on_accent,
+                );
+                let badge = ui.interact(
+                    Rect::from_center_size(c, Vec2::splat(22.0 * zoom)),
+                    ui.id().with(("badge", id)),
+                    Sense::click(),
+                );
+                if badge.on_hover_text("Ausklappen").clicked() {
+                    action = Some(Action::Toggle(id));
+                }
+            }
+
+            if doc.editing == Some(id) {
+                let mut lost = false;
+                if let Some(node) = doc.map.get_mut(id) {
+                    let edit = ui.put(
+                        rect.shrink2(Vec2::new(12.0, 4.0) * zoom),
+                        egui::TextEdit::singleline(&mut node.text)
+                            .font(FontId::proportional(l.style.font_size * zoom))
+                            .text_color(l.style.text)
+                            .frame(false)
+                            .horizontal_align(Align::Center)
+                            .vertical_align(Align::Center)
+                            .hint_text(DEFAULT_TEXT),
+                    );
+                    if *focus_pending {
+                        edit.request_focus();
+                        *focus_pending = false;
+                    } else if edit.lost_focus() {
+                        // Enter, Esc oder Klick daneben beendet das Bearbeiten
+                        lost = true;
+                    }
+                }
+                if lost {
+                    doc.end_edit();
+                }
+            } else {
+                painter.galley(rect.center() - l.galley.size() / 2.0, l.galley.clone(), l.style.text);
+            }
+        }
+
+        // Tipp-Karte auf einer leeren, unberührten Mindmap
+        let pristine = doc.map.nodes.len() == 1 && doc.path.is_none() && !doc.dirty;
+        if self.show_welcome && pristine {
+            let card = Rect::from_center_size(
+                Pos2::new(area.center().x, area.bottom() - 70.0),
+                Vec2::new(area.width().min(640.0), 80.0),
+            );
+            let mut card_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(card)
+                    .layout(Layout::top_down(Align::Center)),
+            );
+            egui::Frame::default()
+                .fill(theme.card)
+                .stroke(Stroke::new(1.0_f32, theme.grid))
+                .corner_radius(12.0)
+                .inner_margin(egui::Margin::symmetric(16, 10))
+                .show(&mut card_ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(icon::LIGHTBULB).size(22.0).color(theme.selection));
+                        ui.vertical(|ui| {
+                            ui.strong("Leere Mindmap");
+                            ui.weak("Tab legt Unterpunkte an, Rechtsklick öffnet das Menü.");
+                        });
+                        ui.add_space(10.0);
+                        if ui.button(format!("{}  Beispiel: Weltall", icon::ROCKET_LAUNCH)).clicked() {
+                            action = Some(Action::OpenExample(0));
+                        }
+                        let close = ui.add(egui::Button::new(icon::X).frame(false));
+                        if close.on_hover_text("Tipps ausblenden").clicked() {
+                            action = Some(Action::HideWelcome);
+                        }
+                    });
+                });
+        }
+
+        // Rechtsklick auf die freie Fläche
+        let root = doc.map.root();
+        let current_theme = self.theme;
+        bg.context_menu(|ui| {
+            ui.set_min_width(220.0);
+            let layout_sc = ui.ctx().format_shortcut(&SC_LAYOUT);
+            let fit_sc = ui.ctx().format_shortcut(&SC_FIT);
+            if let Some(root) = root {
+                action_item(ui, true, "Neuer Hauptzweig", "", Action::AddChild(root), &mut action);
+            }
+            action_item(ui, true, "Automatisch anordnen", &layout_sc, Action::AutoLayout, &mut action);
+            action_item(ui, true, "Alles anzeigen", &fit_sc, Action::Fit, &mut action);
+            ui.separator();
+            ui.menu_button("Farbschema", |ui| {
+                for (i, t) in THEMES.iter().enumerate() {
+                    if ui.radio(current_theme == i, t.name).clicked() {
+                        action = Some(Action::SetTheme(i));
+                        ui.close_menu();
+                    }
+                }
+            });
+        });
+
+        action
+    }
+
+    fn set_mode(&mut self, ctx: &egui::Context, mode: Mode) {
+        let was = self.doc().mode;
+        if was == mode {
+            return;
+        }
+        self.close_note();
+        self.doc_mut().set_mode(mode);
+        // Präsentation läuft im Vollbild
+        if mode == Mode::Present || was == Mode::Present {
+            self.fullscreen = mode == Mode::Present;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+        }
+    }
+
+    fn close_note(&mut self) {
+        if let Some((_, before)) = self.note_edit.take() {
+            self.doc_mut().record(before);
+        }
+    }
+
+    fn note_window(&mut self, ctx: &egui::Context) {
+        let Some(id) = self.note_edit.as_ref().map(|(id, _)| *id) else {
+            return;
+        };
+        let doc = &mut self.docs[self.active];
+        let Some(node) = doc.map.get_mut(id) else {
+            self.note_edit = None;
+            return;
+        };
+        let mut open = true;
+        let mut changed = false;
+        egui::Window::new(format!("{}  {}", icon::NOTE_PENCIL, node.text))
+            .id(egui::Id::new("note_window"))
+            .open(&mut open)
+            .collapsible(false)
+            .default_width(380.0)
+            .show(ctx, |ui| {
+                let edit = egui::TextEdit::multiline(&mut node.note)
+                    .desired_rows(8)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("Notiz zu diesem Knoten …");
+                changed = ui.add(edit).changed();
+                ui.weak("Erscheint im Markdown-Editor und auf den Folien.");
+            });
+        if changed {
+            doc.dirty = true;
+        }
+        if !open {
+            self.close_note();
+        }
+    }
+
+    fn update_title(&mut self, ctx: &egui::Context) {
+        let doc = self.doc();
+        let title = format!("{}{} – Mindful", doc.title(), if doc.dirty { " •" } else { "" });
+        if title != self.window_title {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.window_title = title;
+        }
+    }
+}
+
+impl eframe::App for MindMapApp {
+    /// egui wechselt bei Tab sonst den Fokus durch die Buttons der Leiste.
+    /// Darum wird Tab hier abgefangen, bevor egui es sieht.
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // Im Markdown-Editor rückt Tab ein und bleibt deshalb unangetastet
+        let markdown = self.docs.get(self.active).is_some_and(|d| d.mode == Mode::Markdown);
+        raw_input.events.retain(|event| match event {
+            egui::Event::Key { key: Key::Tab, modifiers, .. } if markdown && !modifiers.ctrl => true,
+            egui::Event::Key { key: Key::Tab, pressed, modifiers, .. } => {
+                if *pressed {
+                    if modifiers.ctrl {
+                        self.tab_switch += if modifiers.shift { -1 } else { 1 };
+                    } else if modifiers.is_none() {
+                        self.tab_pressed = true;
+                    }
+                }
+                false
+            }
+            _ => true,
+        });
+    }
+
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.applied_theme != Some(self.theme) {
+            ctx.set_visuals(visuals_for(&THEMES[self.theme]));
+            self.applied_theme = Some(self.theme);
+        }
+        let theme = &THEMES[self.theme];
+        let mode = self.doc().mode;
+
+        // Präsentation: nur die Folien, keine Leisten
+        if mode == Mode::Present {
+            self.tab_pressed = false;
+            let mut event = None;
+            egui::CentralPanel::default()
+                .frame(egui::Frame::default().fill(theme.background))
+                .show(ctx, |ui| event = present::show(ui, &mut self.docs[self.active], theme));
+            match event {
+                Some(present::Event::Exit) => self.set_mode(ctx, Mode::Mindmap),
+                Some(present::Event::ToggleFullscreen) => {
+                    self.fullscreen = !self.fullscreen;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+                }
+                None => {}
+            }
+            self.update_title(ctx);
+            return;
+        }
+
+        let mut commands = self.shortcuts(ctx);
+        if self.tab_switch != 0 {
+            commands.push(Command::NextTab(std::mem::take(&mut self.tab_switch)));
+        }
+
+        let bar = egui::Frame::default()
+            .fill(theme.card)
+            .inner_margin(egui::Margin::symmetric(12, 6));
+        egui::TopBottomPanel::top("menu").frame(bar).show(ctx, |ui| {
+            commands.extend(self.menu_bar(ui));
+        });
+        egui::TopBottomPanel::top("tabs").frame(bar).show(ctx, |ui| {
+            commands.extend(self.tab_bar(ui, theme));
+        });
+        egui::TopBottomPanel::bottom("status")
+            .frame(bar)
+            .show(ctx, |ui| self.status_bar(ui));
+
+        let mut action = None;
+        if mode == Mode::Mindmap {
+            action = self.node_keys(ctx);
+        } else {
+            self.tab_pressed = false;
+        }
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().fill(theme.background))
+            .show(ctx, |ui| match mode {
+                Mode::Markdown => markdown_view::show(ui, &mut self.docs[self.active], theme, self.md_preview),
+                _ => {
+                    if let Some(a) = self.canvas(ui) {
+                        action = Some(a);
+                    }
+                }
+            });
+
+        self.help_window(ctx);
+        self.note_window(ctx);
+
+        if let Some(a) = action {
+            self.apply(ctx, a);
+        }
+        for cmd in commands {
+            self.run(ctx, cmd);
+        }
+        self.update_title(ctx);
+    }
+
+    /// Alle Tabs samt ungespeicherter Änderungen sichern; beim nächsten Start
+    /// ist alles wieder da.
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        let state = SavedStateRef {
+            theme_name: THEMES[self.theme].name,
+            docs: &self.docs,
+            active: self.active,
+            show_welcome: self.show_welcome,
+        };
+        eframe::set_value(storage, eframe::APP_KEY, &state);
+    }
+}

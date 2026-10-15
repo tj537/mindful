@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#363a4f"/>
+      <stop offset="1" stop-color="#11111b"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- Fläche nach Apples Icon-Raster: 824 px mit 100 px Rand -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#shine)"/>
+
+  <!-- Zweige -->
+  <g fill="none" stroke-width="20" stroke-linecap="round" stroke-opacity="0.9">
+    <path d="M512 512 C 615 512, 600 330, 715 330" stroke="#89b4fa"/>
+    <path d="M512 512 C 615 512, 600 694, 715 694" stroke="#a6e3a1"/>
+    <path d="M512 512 C 409 512, 424 330, 309 330" stroke="#f38ba8"/>
+    <path d="M512 512 C 409 512, 424 694, 309 694" stroke="#fab387"/>
+  </g>
+
+  <!-- Knoten -->
+  <rect x="640" y="294" width="150" height="72" rx="36" fill="#89b4fa"/>
+  <rect x="640" y="658" width="150" height="72" rx="36" fill="#a6e3a1"/>
+  <rect x="234" y="294" width="150" height="72" rx="36" fill="#f38ba8"/>
+  <rect x="234" y="658" width="150" height="72" rx="36" fill="#fab387"/>
+  <rect x="382" y="452" width="260" height="120" rx="60" fill="#cba6f7"/>
+  <rect x="412" y="464" width="200" height="44" rx="22" fill="#ffffff" fill-opacity="0.14"/>
+</svg>

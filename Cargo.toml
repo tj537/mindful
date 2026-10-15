@@ -1,0 +1,17 @@
+[package]
+name = "mindful"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = { version = "0.31", features = ["persistence"] }
+rfd = "0.15"
+resvg = "0.45"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+egui-phosphor = "0.9"
+
+# Kleinere, schnellere Programmdatei für die fertige App
+[profile.release]
+lto = "thin"
+strip = true

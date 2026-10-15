@@ -1,0 +1,5 @@
+/target
+/dist
+.DS_Store
+# Datei aus der ersten Version (lokale Daten)
+/mindmap.json
