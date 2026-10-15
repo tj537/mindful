@@ -215,35 +215,3 @@ pub fn paint_label(
         );
     }
 }
-
-/// Fortschrittsring: Anteil erledigter Checkboxen unterhalb eines Knotens
-pub fn paint_progress(
-    painter: &egui::Painter,
-    center: Pos2,
-    radius: f32,
-    (done, total): (usize, usize),
-    color: Color32,
-    track: Color32,
-    zoom: f32,
-) {
-    let width = 2.5 * zoom;
-    let frac = done as f32 / total.max(1) as f32;
-    if frac >= 1.0 {
-        painter.circle_filled(center, radius + width / 2.0, color);
-        let r = Rect::from_center_size(center, Vec2::splat(radius * 1.3));
-        check_mark(painter, r, Color32::WHITE, 1.8 * zoom);
-        return;
-    }
-    painter.circle_stroke(center, radius, Stroke::new(width, track));
-    if frac > 0.0 {
-        let steps = (48.0 * frac).ceil() as usize + 1;
-        let points: Vec<Pos2> = (0..steps)
-            .map(|i| {
-                let a = -std::f32::consts::FRAC_PI_2
-                    + std::f32::consts::TAU * frac * i as f32 / (steps - 1) as f32;
-                center + Vec2::new(a.cos(), a.sin()) * radius
-            })
-            .collect();
-        painter.add(egui::Shape::line(points, Stroke::new(width, color)));
-    }
-}

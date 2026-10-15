@@ -27,8 +27,8 @@ pub enum Event {
 /// Übergang zwischen zwei Folien
 #[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum Transition {
-    #[default]
     Slide,
+    #[default]
     Fade,
     Zoom,
     Rise,
@@ -61,7 +61,12 @@ pub struct Effects {
     pub background: Backdrop,
     /// Langsames Schweben der Kamera in der Tour
     pub drift: bool,
+    /// Stand der Einstellungen; fehlt bei älteren gespeicherten Daten (= 0)
+    #[serde(default)]
+    pub version: u32,
 }
+
+const EFFECTS_VERSION: u32 = 1;
 
 impl Default for Effects {
     fn default() -> Self {
@@ -70,7 +75,19 @@ impl Default for Effects {
             bullets: BulletFx::default(),
             background: Backdrop::default(),
             drift: true,
+            version: EFFECTS_VERSION,
         }
+    }
+}
+
+impl Effects {
+    /// Ältere gespeicherte Einstellungen auf neue Standards bringen
+    pub fn migrate(&mut self) {
+        if self.version < 1 {
+            // Seit Version 1 ist Überblenden der Standard-Übergang
+            self.transition = Transition::Fade;
+        }
+        self.version = EFFECTS_VERSION;
     }
 }
 
@@ -111,8 +128,35 @@ pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: boo
         ui.separator();
         ui.checkbox(&mut fx.drift, "Slow camera drift");
     }
-    ui.separator();
-    ui.weak("L  laser pointer");
+}
+
+/// Tastenkürzel beim Präsentieren (im Einstellungsmenü)
+fn shortcuts_list(ui: &mut egui::Ui, tour: bool) {
+    ui.strong("Keyboard");
+    let next = if tour {
+        "Next stop"
+    } else {
+        "Next bullet point / slide"
+    };
+    egui::Grid::new("present_keys")
+        .num_columns(2)
+        .spacing([16.0, 4.0])
+        .show(ui, |ui| {
+            for (keys, what) in [
+                ("Space  →", next),
+                ("←", "Back"),
+                ("Home  End", "First / last"),
+                ("G", "Quick jump (← → Enter)"),
+                ("L", "Laser pointer"),
+                ("F", "Full screen"),
+                ("Esc", "End"),
+            ] {
+                ui.label(RichText::new(keys).monospace());
+                ui.label(what);
+                ui.end_row();
+            }
+        });
+    ui.weak("Click a checkbox to tick it off.");
 }
 
 // ---------------------------------------------------------------------------
@@ -152,8 +196,12 @@ pub fn color_of(map: &MindMap, theme: &Theme, id: u64) -> Color32 {
 /// Tasten beim Präsentieren
 #[derive(Default)]
 pub struct Nav {
-    pub next: bool,
-    pub prev: bool,
+    /// Pfeil rechts/unten, Bild ab
+    pub right: bool,
+    /// Pfeil links/oben, Bild auf, Rücktaste
+    pub left: bool,
+    pub space: bool,
+    pub enter: bool,
     pub home: bool,
     pub end: bool,
     pub escape: bool,
@@ -166,14 +214,10 @@ pub fn read_nav(ui: &mut egui::Ui) -> Nav {
     ui.input_mut(|i| {
         let mut any = |keys: &[Key]| keys.iter().any(|k| i.consume_key(Modifiers::NONE, *k));
         Nav {
-            next: any(&[
-                Key::ArrowRight,
-                Key::ArrowDown,
-                Key::Space,
-                Key::PageDown,
-                Key::Enter,
-            ]),
-            prev: any(&[Key::ArrowLeft, Key::ArrowUp, Key::PageUp, Key::Backspace]),
+            right: any(&[Key::ArrowRight, Key::ArrowDown, Key::PageDown]),
+            left: any(&[Key::ArrowLeft, Key::ArrowUp, Key::PageUp, Key::Backspace]),
+            space: any(&[Key::Space]),
+            enter: any(&[Key::Enter]),
             home: any(&[Key::Home]),
             end: any(&[Key::End]),
             escape: any(&[Key::Escape]),
@@ -182,6 +226,42 @@ pub fn read_nav(ui: &mut egui::Ui) -> Nav {
             laser: any(&[Key::L]),
         }
     })
+}
+
+impl Nav {
+    pub fn next(&self) -> bool {
+        self.right || self.space || self.enter
+    }
+}
+
+/// Was im geöffneten Schnellwahl-Streifen passieren soll
+pub enum StripKey {
+    Stay,
+    Jump(usize),
+    Close,
+}
+
+/// Tasten bei geöffneter Schnellwahl: ← → wählen, Enter/Leertaste springt, Esc/G schließt
+pub fn strip_keys(nav: &Nav, cursor: &mut usize, last: usize) -> StripKey {
+    if nav.right {
+        *cursor = (*cursor + 1).min(last);
+    }
+    if nav.left {
+        *cursor = cursor.saturating_sub(1);
+    }
+    if nav.home {
+        *cursor = 0;
+    }
+    if nav.end {
+        *cursor = last;
+    }
+    if nav.enter || nav.space {
+        StripKey::Jump(*cursor)
+    } else if nav.escape || nav.strip {
+        StripKey::Close
+    } else {
+        StripKey::Stay
+    }
 }
 
 /// Buttons oben rechts: Beenden, Vollbild, Folienstreifen, Effekte.
@@ -219,23 +299,17 @@ pub fn corner_buttons(
     }
     let strip = corner
         .button(big(icon::FILM_STRIP))
-        .on_hover_text("Slide strip (G)")
+        .on_hover_text("Quick jump (G)")
         .clicked();
     corner
-        .menu_button(big(icon::SPARKLE), |ui| effects_menu(ui, fx, !tour, tour))
+        .menu_button(big(icon::GEAR), |ui| {
+            effects_menu(ui, fx, !tour, tour);
+            ui.separator();
+            shortcuts_list(ui, tour);
+        })
         .response
-        .on_hover_text("Effects");
+        .on_hover_text("Settings and shortcuts");
     (event, strip)
-}
-
-pub fn hint(painter: &egui::Painter, pos: Pos2, theme: &Theme, text: &str) {
-    painter.text(
-        pos,
-        Align2::CENTER_CENTER,
-        text,
-        FontId::proportional(13.0),
-        theme.text.gamma_multiply(0.45),
-    );
 }
 
 /// Animierter Hintergrund hinter Folie bzw. Mindmap.
@@ -348,26 +422,21 @@ pub struct StripItem {
     pub color: Color32,
 }
 
-/// Folienstreifen am unteren Rand. Fährt herein, wenn die Maus an den unteren
-/// Rand kommt oder er per Taste G festgehalten ist. Gibt die angeklickte Folie zurück.
+/// Schnellwahl-Streifen am unteren Rand (Taste G). `cursor` ist die per
+/// Tastatur markierte Folie, `current` die gezeigte. Gibt die angeklickte Folie zurück.
 pub fn filmstrip(
     ui: &mut egui::Ui,
     area: Rect,
     theme: &Theme,
     items: &[StripItem],
     current: usize,
-    pinned: bool,
+    cursor: usize,
+    open: bool,
 ) -> Option<usize> {
     let ctx = ui.ctx().clone();
     let id = ui.id().with("filmstrip");
     let height = 136.0;
-    let pointer = ctx.input(|i| i.pointer.hover_pos());
-    let near_edge = pointer.is_some_and(|p| p.y > area.bottom() - 60.0);
-    let over_strip = pointer.is_some_and(|p| p.y > area.bottom() - height - 10.0);
-    let was_open: bool = ctx.data(|d| d.get_temp(id)).unwrap_or(false);
-    let open = pinned || near_edge || (was_open && over_strip);
-    ctx.data_mut(|d| d.insert_temp(id, open));
-    let t = ctx.animate_bool_with_time(id.with("anim"), open, 0.22);
+    let t = ctx.animate_bool_with_time(id.with("anim"), open, 0.18);
     if t <= 0.0 {
         return None;
     }
@@ -377,7 +446,7 @@ pub fn filmstrip(
         Pos2::new(area.left(), top),
         Pos2::new(area.right(), top + height),
     );
-    // Klicks auf den Streifen sollen nicht weiterblättern
+    // Klicks auf den Streifen sollen nicht auf darunterliegende Checkboxen gehen
     ui.interact(bar, id.with("bar"), Sense::click());
     let mut painter = ui.painter().clone();
     painter.set_opacity(t);
@@ -393,8 +462,8 @@ pub fn filmstrip(
     let start = if total < area.width() - 48.0 {
         area.center().x - total / 2.0
     } else {
-        // Aktuelle Folie in die Mitte, ohne über die Ränder hinauszuschieben
-        (area.center().x - current as f32 * (size.x + gap) - size.x / 2.0)
+        // Markierte Folie in die Mitte, ohne über die Ränder hinauszuschieben
+        (area.center().x - cursor as f32 * (size.x + gap) - size.x / 2.0)
             .clamp(area.right() - 24.0 - total, area.left() + 24.0)
     };
 
@@ -408,8 +477,12 @@ pub fn filmstrip(
             continue;
         }
         let resp = ui.interact(rect, id.with(i), Sense::click());
-        if i == current {
+        if i == cursor {
             painter.rect_filled(rect.expand(3.0), 10.0, theme.selection);
+        }
+        if i == current {
+            // Kleiner Punkt: diese Folie wird gerade gezeigt
+            painter.circle_filled(rect.center_bottom() + Vec2::new(0.0, 9.0), 3.0, theme.text);
         }
         let fill = if resp.hovered() {
             theme.background.lerp_to_gamma(item.color, 0.15)
@@ -451,13 +524,17 @@ pub fn filmstrip(
 // Folien
 // ---------------------------------------------------------------------------
 
+/// Ein Stichpunkt: Ebene, Text, Farbe, Checkbox, Knoten-ID
+type Bullet = (usize, String, Color32, Option<bool>, u64);
+
 struct Slide {
     title: String,
     note: String,
-    /// (Ebene, Text, Farbe, Checkbox)
-    bullets: Vec<(usize, String, Color32, Option<bool>)>,
+    bullets: Vec<Bullet>,
     color: Color32,
     is_title: bool,
+    /// Hauptzweig der Folie (für den Fortschritt der Checkboxen)
+    branch: Option<u64>,
 }
 
 impl Slide {
@@ -472,15 +549,9 @@ impl Slide {
     }
 }
 
-fn collect(
-    map: &MindMap,
-    id: u64,
-    depth: usize,
-    color: Color32,
-    out: &mut Vec<(usize, String, Color32, Option<bool>)>,
-) {
+fn collect(map: &MindMap, id: u64, depth: usize, color: Color32, out: &mut Vec<Bullet>) {
     for child in map.children(id) {
-        out.push((depth, child.text.clone(), color, child.task));
+        out.push((depth, child.text.clone(), color, child.task, child.id));
         if depth < 2 {
             collect(map, child.id, depth + 1, color, out);
         }
@@ -496,10 +567,11 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
         note: root.note.clone(),
         bullets: map
             .children(root.id)
-            .map(|c| (0, c.text.clone(), color_of(map, theme, c.id), c.task))
+            .map(|c| (0, c.text.clone(), color_of(map, theme, c.id), c.task, c.id))
             .collect(),
         color: theme.root,
         is_title: true,
+        branch: None,
     }];
     for branch in map.children(root.id) {
         let color = color_of(map, theme, branch.id);
@@ -511,6 +583,7 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
             bullets,
             color,
             is_title: false,
+            branch: Some(branch.id),
         });
     }
     out
@@ -559,37 +632,49 @@ pub fn show(
         ctx.request_repaint();
     }
 
-    let background = ui.allocate_rect(area, Sense::click());
-    if nav.next || background.clicked() {
-        if doc.build < groups_of(doc.slide) {
-            doc.build += 1;
-            doc.build_time = now;
-        } else if doc.slide < last {
-            go_to(doc, doc.slide + 1, 0);
+    // Geblättert wird nur per Tastatur – Klicks sind fürs Abhaken da
+    if doc.strip {
+        match strip_keys(&nav, &mut doc.strip_cursor, last) {
+            StripKey::Jump(i) => {
+                go_to(doc, i, 0);
+                doc.strip = false;
+            }
+            StripKey::Close => doc.strip = false,
+            StripKey::Stay => {}
         }
-    }
-    if nav.prev || background.secondary_clicked() {
-        if doc.build > 0 {
-            doc.build -= 1;
-        } else if doc.slide > 0 {
-            let prev = doc.slide - 1;
-            go_to(doc, prev, groups_of(prev));
+    } else {
+        if nav.next() {
+            if doc.build < groups_of(doc.slide) {
+                doc.build += 1;
+                doc.build_time = now;
+            } else if doc.slide < last {
+                go_to(doc, doc.slide + 1, 0);
+            }
         }
-    }
-    if nav.home {
-        go_to(doc, 0, 0);
-    }
-    if nav.end {
-        go_to(doc, last, groups_of(last));
-    }
-    if nav.escape {
-        event = Some(Event::Exit);
+        if nav.left {
+            if doc.build > 0 {
+                doc.build -= 1;
+            } else if doc.slide > 0 {
+                let prev = doc.slide - 1;
+                go_to(doc, prev, groups_of(prev));
+            }
+        }
+        if nav.home {
+            go_to(doc, 0, 0);
+        }
+        if nav.end {
+            go_to(doc, last, groups_of(last));
+        }
+        if nav.escape {
+            event = Some(Event::Exit);
+        }
+        if nav.strip {
+            doc.strip = true;
+            doc.strip_cursor = doc.slide;
+        }
     }
     if nav.fullscreen {
         event = Some(Event::ToggleFullscreen);
-    }
-    if nav.strip {
-        doc.strip = !doc.strip;
     }
     let slide = &slides[doc.slide];
 
@@ -629,7 +714,13 @@ pub fn show(
     }
     if strip_clicked {
         doc.strip = !doc.strip;
+        doc.strip_cursor = doc.slide;
     }
+
+    // Wie viele Checkboxen dieses Zweigs schon erledigt sind
+    let tasks = slide.branch.and_then(|b| doc.map.task_progress(b));
+    // Angeklickte Checkbox, wird nach dem Zeichnen umgeschaltet
+    let mut ticked: Option<u64> = None;
 
     // Titel steigt auf und blendet ein, die Linie darunter zieht sich auf
     let title_in = ease_out_cubic(progress(now, doc.slide_time, 0.55));
@@ -679,7 +770,7 @@ pub fn show(
             // Kapitel-Marken ploppen nacheinander auf
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0) * s;
-                for (i, (_, text, color, _)) in slide.bullets.iter().enumerate() {
+                for (i, (_, text, color, _, _)) in slide.bullets.iter().enumerate() {
                     let pop = progress(now, doc.slide_time + 0.35 + i as f64 * 0.09, 0.4);
                     animating |= pop < 1.0;
                     // Feste Größe vorab, damit eine Marke als Ganzes in die nächste Zeile rutscht
@@ -705,11 +796,11 @@ pub fn show(
         } else {
             ui.scope(|ui| {
                 ui.multiply_opacity(title_in);
-                ui.label(
-                    RichText::new(format!("{} / {}", doc.slide, last))
-                        .size(18.0 * s)
-                        .color(slide.color),
-                );
+                let mut counter = format!("{} / {}", doc.slide, last);
+                if let Some((done, total)) = tasks {
+                    counter.push_str(&format!("   ·   {done} of {total} done"));
+                }
+                ui.label(RichText::new(counter).size(18.0 * s).color(slide.color));
             });
             title(&mut ui, &slide.title, 54.0 * s);
             let (line, _) = ui.allocate_exact_size(Vec2::new(90.0, 6.0) * s, Sense::hover());
@@ -738,7 +829,7 @@ pub fn show(
             let building = build_bullets && slide.groups() > 0;
             let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
             let mut group = 0;
-            for (i, (depth, text, color, task)) in slide.bullets.iter().enumerate() {
+            for (i, (depth, text, color, task, node)) in slide.bullets.iter().enumerate() {
                 if *depth == 0 && i > 0 {
                     group += 1;
                 }
@@ -791,7 +882,8 @@ pub fn show(
                         );
                         let mut label = RichText::new(shown).size(size).color(theme.text);
                         if let Some(done) = *task {
-                            // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen
+                            // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen.
+                            // Sichtbare Checkboxen lassen sich anklicken.
                             let r = Rect::from_center_size(dot.center(), Vec2::splat(size * 0.62));
                             paint_checkbox(
                                 ui.painter(),
@@ -800,6 +892,18 @@ pub fn show(
                                 *color,
                                 theme.text.gamma_multiply(0.7),
                             );
+                            if alpha > 0.0 {
+                                let click = ui
+                                    .interact(
+                                        r.expand(6.0 * s),
+                                        ui.id().with(("slide_task", node)),
+                                        Sense::click(),
+                                    )
+                                    .on_hover_cursor(CursorIcon::PointingHand);
+                                if click.clicked() {
+                                    ticked = Some(*node);
+                                }
+                            }
                             if done {
                                 label = label.strikethrough().color(theme.text.gamma_multiply(0.5));
                             }
@@ -816,6 +920,12 @@ pub fn show(
     if animating {
         ctx.request_repaint();
     }
+    if let Some(id) = ticked {
+        doc.checkpoint();
+        if let Some(n) = doc.map.get_mut(id) {
+            n.task = n.task.map(|done| !done);
+        }
+    }
 
     // Fortschritt unten auf der Folie
     let track = Rect::from_min_size(
@@ -830,14 +940,7 @@ pub fn show(
         slide.color,
     );
 
-    hint(
-        &painter,
-        egui::pos2(area.center().x, base.bottom() + 24.0),
-        theme,
-        "←  →  navigate   ·   G  slide strip   ·   L  laser   ·   F  full screen   ·   Esc  exit",
-    );
-
-    // Folienstreifen und Laserpointer liegen über allem
+    // Schnellwahl und Laserpointer liegen über allem
     let items: Vec<StripItem> = slides
         .iter()
         .enumerate()
@@ -851,10 +954,68 @@ pub fn show(
             color: s.color,
         })
         .collect();
-    if let Some(i) = filmstrip(ui, area, theme, &items, doc.slide, doc.strip) {
+    if let Some(i) = filmstrip(
+        ui,
+        area,
+        theme,
+        &items,
+        doc.slide,
+        doc.strip_cursor,
+        doc.strip,
+    ) {
         go_to(doc, i, 0);
+        doc.strip = false;
     }
     laser(ui, nav.laser, now);
 
     event
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_switch_to_fade_once() {
+        // Gespeichert vor Version 1: Feld `version` fehlt → 0
+        let mut old: Effects = serde_json::from_str(r#"{"transition":"Slide"}"#).unwrap();
+        assert_eq!(old.version, 0);
+        old.migrate();
+        assert!(old.transition == Transition::Fade);
+        // Danach bleibt eine bewusste Wahl erhalten
+        old.transition = Transition::Zoom;
+        old.migrate();
+        assert!(old.transition == Transition::Zoom);
+        assert!(Effects::default().transition == Transition::Fade);
+    }
+
+    #[test]
+    fn quick_jump_keys() {
+        let mut cursor = 2;
+        let right = Nav {
+            right: true,
+            ..Nav::default()
+        };
+        assert!(matches!(strip_keys(&right, &mut cursor, 3), StripKey::Stay));
+        assert_eq!(cursor, 3);
+        // Nicht über das Ende hinaus
+        strip_keys(&right, &mut cursor, 3);
+        assert_eq!(cursor, 3);
+        let enter = Nav {
+            enter: true,
+            ..Nav::default()
+        };
+        assert!(matches!(
+            strip_keys(&enter, &mut cursor, 3),
+            StripKey::Jump(3)
+        ));
+        let escape = Nav {
+            escape: true,
+            ..Nav::default()
+        };
+        assert!(matches!(
+            strip_keys(&escape, &mut cursor, 3),
+            StripKey::Close
+        ));
+    }
 }

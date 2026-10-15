@@ -35,12 +35,12 @@ Also:
 - Several mind maps in tabs. Everything is restored on the next start, including unsaved changes.
 - Save and open as `.mindmap` files, import Markdown and plain-text outlines
 - Export as PNG image, SVG graphic or Markdown
-- **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; parent nodes show a progress ring, slides and exports show the boxes too
+- **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; they appear on slides, in the tour and in exports, and can be ticked off right during a presentation
 - **AI prompt**: describe topic, language, details and scope, copy a ready-made prompt for ChatGPT, Claude & co., and paste the AI's Markdown answer into a new tab – it becomes a mind map instantly
 - **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
 - Auto layout with animation: nodes glide to their new places and the view follows smoothly
 - Undo/redo, search, zoom, copy/paste, notes on every node
-- Presentation effects: slide transitions (slide, fade, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (aurora, starfield), title animations, slow camera drift in the tour, a laser pointer and a slide strip for jumping around
+- Presentation effects: slide transitions (fade by default, slide, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (aurora, starfield), title animations, slow camera drift in the tour, a laser pointer and a quick-jump strip
 - 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
 - Ready-made examples to try: **File → Open example → The Universe** (also available in German)
 
@@ -273,11 +273,14 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | Ctrl+Tab · ⌘1…9 | Switch tab |
 | ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
 | **Presentation and tour** | |
-| → · Space · click | Next bullet point / slide / stop |
-| ← · right-click | Back |
-| G | Slide strip (also appears at the bottom edge) |
+| Space · → | Next bullet point / slide / stop |
+| ← | Back |
+| G | Quick jump: ← → to pick, Enter to jump |
 | L | Laser pointer |
 | F · Esc | Full screen · end |
+| Click on a checkbox | Tick it off |
+
+Navigation is keyboard-only, so clicks never interfere with ticking checkboxes. While presenting, the ⚙︎ button in the top right holds the effect settings and this list of shortcuts.
 
 ### Markdown format
 

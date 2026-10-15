@@ -10,7 +10,7 @@ use crate::model::MindMap;
 use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task};
 use crate::present::{
     backdrop, color_of, corner_buttons, ease_in_out_cubic, ease_out_back, ease_out_cubic,
-    filmstrip, hint, laser, read_nav, Backdrop, Effects, Event, StripItem,
+    filmstrip, laser, read_nav, strip_keys, Backdrop, Effects, Event, StripItem, StripKey,
 };
 use crate::theme::Theme;
 use eframe::egui::{
@@ -239,28 +239,40 @@ pub fn show(
     let nav = read_nav(ui);
     let mut event = None;
 
-    let background = ui.allocate_rect(area, Sense::click());
+    // Geflogen wird nur per Tastatur – Klicks sind fürs Abhaken da
     let current = doc.tour.stop;
-    if (nav.next || background.clicked()) && current < last {
-        go_to(&mut doc.tour, current + 1);
-    }
-    if (nav.prev || background.secondary_clicked()) && current > 0 {
-        go_to(&mut doc.tour, current - 1);
-    }
-    if nav.home {
-        go_to(&mut doc.tour, 0);
-    }
-    if nav.end {
-        go_to(&mut doc.tour, last);
-    }
-    if nav.escape {
-        event = Some(Event::Exit);
+    if doc.strip {
+        match strip_keys(&nav, &mut doc.strip_cursor, last) {
+            StripKey::Jump(i) => {
+                go_to(&mut doc.tour, i);
+                doc.strip = false;
+            }
+            StripKey::Close => doc.strip = false,
+            StripKey::Stay => {}
+        }
+    } else {
+        if nav.next() && current < last {
+            go_to(&mut doc.tour, current + 1);
+        }
+        if nav.left && current > 0 {
+            go_to(&mut doc.tour, current - 1);
+        }
+        if nav.home {
+            go_to(&mut doc.tour, 0);
+        }
+        if nav.end {
+            go_to(&mut doc.tour, last);
+        }
+        if nav.escape {
+            event = Some(Event::Exit);
+        }
+        if nav.strip {
+            doc.strip = true;
+            doc.strip_cursor = doc.tour.stop;
+        }
     }
     if nav.fullscreen {
         event = Some(Event::ToggleFullscreen);
-    }
-    if nav.strip {
-        doc.strip = !doc.strip;
     }
 
     // Läuft noch eine Animation? Dann weiter neu zeichnen.
@@ -355,7 +367,8 @@ pub fn show(
         ));
     }
 
-    // Knoten
+    // Knoten; angeklickte Checkbox wird nach dem Zeichnen umgeschaltet
+    let mut ticked: Option<u64> = None;
     for d in &drawn {
         let style = node_style(map, theme, d.id);
         let pop = if d.grow < 1.0 {
@@ -371,7 +384,19 @@ pub fn show(
         paint_node(&p, theme, rect, &style, scale, false, false);
         let task = map.get(d.id).and_then(|n| n.task);
         if let Some(done) = task {
-            paint_task(&p, rect, &style, done, scale);
+            let r = paint_task(&p, rect, &style, done, scale);
+            if d.alpha > 0.5 {
+                let click = ui
+                    .interact(
+                        r.expand(4.0 * scale),
+                        ui.id().with(("tour_task", d.id)),
+                        Sense::click(),
+                    )
+                    .on_hover_cursor(egui::CursorIcon::PointingHand);
+                if click.clicked() {
+                    ticked = Some(d.id);
+                }
+            }
         }
         let font = style.font_size * scale;
         if font >= 3.0 {
@@ -431,14 +456,6 @@ pub fn show(
         FontId::proportional(15.0),
         theme.text.gamma_multiply(0.7),
     );
-    if !has_note {
-        hint(
-            &painter,
-            Pos2::new(area.center().x, area.bottom() - 24.0),
-            theme,
-            "←  →  navigate   ·   G  stops   ·   L  laser   ·   F  full screen   ·   Esc  exit",
-        );
-    }
 
     let (corner_event, strip_clicked) = corner_buttons(ui, area, "End tour (Esc)", fx, true);
     if corner_event.is_some() {
@@ -446,9 +463,10 @@ pub fn show(
     }
     if strip_clicked {
         doc.strip = !doc.strip;
+        doc.strip_cursor = doc.tour.stop;
     }
 
-    // Stationen als Folienstreifen, Laserpointer obenauf
+    // Stationen als Schnellwahl, Laserpointer obenauf
     let items: Vec<StripItem> = all
         .iter()
         .enumerate()
@@ -465,7 +483,16 @@ pub fn show(
             },
         })
         .collect();
-    if let Some(i) = filmstrip(ui, area, theme, &items, doc.tour.stop, doc.strip) {
+    let picked = filmstrip(
+        ui,
+        area,
+        theme,
+        &items,
+        doc.tour.stop,
+        doc.strip_cursor,
+        doc.strip,
+    );
+    if let Some(i) = picked {
         let cam = camera(&doc.tour, to, now, area, fx.drift);
         let tour = &mut doc.tour;
         if i != tour.stop {
@@ -475,8 +502,16 @@ pub fn show(
             tour.stop = i;
             tour.started = now;
         }
+        doc.strip = false;
     }
     laser(ui, nav.laser, now);
+
+    if let Some(id) = ticked {
+        doc.checkpoint();
+        if let Some(n) = doc.map.get_mut(id) {
+            n.task = n.task.map(|done| !done);
+        }
+    }
 
     event
 }

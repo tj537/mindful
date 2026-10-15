@@ -131,9 +131,12 @@ pub struct Document {
     /// Zeitpunkt, zu dem die aktuelle Folie erschienen ist (für den Titel-Effekt)
     #[serde(skip)]
     pub slide_time: f64,
-    /// Folienstreifen unten per Taste G festgehalten
+    /// Schnellwahl (Taste G) geöffnet
     #[serde(skip)]
     pub strip: bool,
+    /// In der Schnellwahl markierte Folie bzw. Station
+    #[serde(skip)]
+    pub strip_cursor: usize,
     #[serde(skip)]
     pub tour: TourState,
 }
@@ -166,6 +169,7 @@ impl Document {
             build_time: 0.0,
             slide_time: 0.0,
             strip: false,
+            strip_cursor: 0,
             tour: TourState::default(),
         }
     }

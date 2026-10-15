@@ -243,7 +243,7 @@ After auto layout the nodes **glide** from their old to their new positions: `ca
 
 ### Checkboxes
 
-`nodes.rs` draws them (`paint_task`, `paint_label` for the struck-through text, `paint_progress` for the ring) and reserves `TASK_SPACE` on the left of the node. Clicking the box sends `Action::ToggleDone`, ⌘Enter `Action::CycleTask` (none → open → done → open), the context menu `Action::SetTask`. Parents with checkboxes below them get a progress ring on their outer side (above the central topic, around the counter when collapsed).
+`nodes.rs` draws them (`paint_task`, `paint_label` for the struck-through text, `paint_checkbox` for free-standing boxes on slides and in the preview) and reserves `TASK_SPACE` on the left of the node. Clicking the box sends `Action::ToggleDone`, ⌘Enter `Action::CycleTask` (none → open → done → open), the context menu `Action::SetTask`.
 
 ---
 
@@ -308,11 +308,15 @@ All measurements are relative to a slide 1280 px wide (`s = width / 1280`) and s
 
 The title rises and fades in, the accent line draws itself and the chips on the title slide pop in one after another – all timed from `doc.slide_time`.
 
-**Slide strip (G):** `filmstrip()` slides in from the bottom when the mouse reaches the bottom edge or when pinned with G; a click jumps to that slide or stop.
+**Quick jump (G):** `filmstrip()` slides in from the bottom. While it is open, `strip_keys()` turns ← → into moving a cursor (`doc.strip_cursor`) and Enter/Space into jumping there; afterwards – or on Esc/G or a click on a tile – it closes immediately.
+
+**Keyboard only:** slides and stops are changed with the keyboard only (`Nav::next()` = Space, →, Enter; `Nav::left` = ←). Mouse clicks are reserved for ticking checkboxes: visible checkboxes on slides and in the tour are clickable and toggle the node's `task` (with an undo checkpoint). The slide counter shows “x of y done” from `MindMap::task_progress`.
+
+**Settings menu:** the ⚙︎ button in the top right holds the effects and a list of shortcuts, so no hints have to stay on screen.
 
 **Laser pointer (L):** `laser()` hides the cursor and draws a glowing dot with a short trail on the foreground layer.
 
-`present.rs` also holds the parts shared with the tour: `Effects`, `read_nav()` (keys), `corner_buttons()`, `hint()`, `backdrop()`, `filmstrip()`, `laser()` and the easing curves.
+`present.rs` also holds the parts shared with the tour: `Effects` (with `migrate()` for older saved settings – since version 1, *Fade* is the default transition), `read_nav()` and `strip_keys()` (keys), `corner_buttons()`, `backdrop()`, `filmstrip()`, `laser()` and the easing curves.
 
 ## Camera tour (`tour.rs`)
 
@@ -477,6 +481,8 @@ cargo test
 | `collapse_hides_descendants` | collapsing and expanding |
 | `checkboxes_round_trip_and_progress` | checkboxes survive Markdown and progress is counted |
 | `templates_parse_and_round_trip` | every template parses and comes back unchanged |
+| `old_settings_switch_to_fade_once` | older saved effect settings switch to *Fade* once |
+| `quick_jump_keys` | ← → Enter Esc in the quick-jump strip |
 | `prompt_contains_the_inputs` | the AI prompt contains topic, language, description, scope |
 | `example_in_the_prompt_is_valid_mindful_markdown` | the format example in the prompt parses and round-trips |
 | `universe_example_is_complete` | the English example is complete |

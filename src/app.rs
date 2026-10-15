@@ -3,8 +3,7 @@ use crate::document::{Document, Mode};
 use crate::export::{self, ExportNode};
 use crate::model::{parse_outline, Clip, MindMap, DEFAULT_TEXT};
 use crate::nodes::{
-    node_size, node_style, paint_label, paint_node, paint_progress, paint_task, NodeStyle,
-    MIN_NODE, TASK_SPACE,
+    node_size, node_style, paint_label, paint_node, paint_task, NodeStyle, MIN_NODE, TASK_SPACE,
 };
 use crate::present::ease_in_out_cubic;
 use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
@@ -463,8 +462,6 @@ struct Laid {
     side: f32,
     hit: bool,
     task: Option<bool>,
-    /// Erledigte / alle Checkboxen darunter
-    progress: Option<(usize, usize)>,
 }
 
 // ---------------------------------------------------------------------------
@@ -590,6 +587,7 @@ impl MindMapApp {
             app.show_welcome = state.show_welcome;
             app.build_bullets = state.build_bullets;
             app.effects = state.effects;
+            app.effects.migrate();
             app.prompt = state.prompt;
         } else if Path::new("mindmap.json").exists() {
             // Datei aus der ersten Version übernehmen
@@ -2112,11 +2110,6 @@ impl MindMapApp {
                     side,
                     hit: !query.is_empty() && n.text.to_lowercase().contains(&query),
                     task: n.task,
-                    progress: if doc.map.has_children(n.id) {
-                        doc.map.task_progress(n.id)
-                    } else {
-                        None
-                    },
                 }
             })
             .collect();
@@ -2201,34 +2194,6 @@ impl MindMapApp {
                 };
                 if check.on_hover_text(tip).clicked() {
                     action = Some(Action::ToggleDone(id));
-                }
-            }
-
-            // Fortschrittsring: außen neben dem Knoten, bei der Mitte darüber.
-            // Ist der Zweig eingeklappt, liegt der Ring um den Zähler.
-            if let Some(progress) = l.progress {
-                let c = if doc.map.parent_of(id).is_none() {
-                    rect.center_top() - Vec2::new(0.0, 16.0 * zoom)
-                } else {
-                    rect.center() + Vec2::new(l.side * (rect.width() / 2.0 + 16.0 * zoom), 0.0)
-                };
-                let radius = if l.collapsed { 15.0 } else { 8.0 } * zoom;
-                paint_progress(
-                    &painter,
-                    c,
-                    radius,
-                    progress,
-                    l.style.accent,
-                    theme.grid,
-                    zoom,
-                );
-                if !l.collapsed {
-                    ui.interact(
-                        Rect::from_center_size(c, Vec2::splat(radius * 2.4)),
-                        ui.id().with(("progress", id)),
-                        Sense::hover(),
-                    )
-                    .on_hover_text(format!("{} of {} done", progress.0, progress.1));
                 }
             }
 
