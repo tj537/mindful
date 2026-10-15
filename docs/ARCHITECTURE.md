@@ -304,8 +304,8 @@ All measurements are relative to a slide 1280 px wide (`s = width / 1280`) and s
 | `transition` | Slide, Fade, Zoom, Rise | the slide card is shifted or scaled; all sizes depend on `s`, so scaling the card scales the content |
 | `bullets` | Slide in, Fade, Pop, Typewriter | each bullet group gets a start time – the reveal moment, or staggered after the slide appears when bullets aren't revealed one by one |
 | `background` | Starfield (default), Bokeh, Aurora, Plain | `backdrop()`: see below |
-| `marker`, `shine`, `ken_burns` | on/off | slides: highlighter swept over the newest bullet, light band over the title, slow zoom of the slide card |
-| `vignette`, `mouse_parallax` | on/off | darker edges (`vignette()`), sky offset by the mouse position (`mouse_parallax()`) |
+| `shine`, `ken_burns`, `accent_bar` | on/off | slides: light band over the title, slow zoom of the slide card, colored bar on the left (on by default) |
+| `vignette` | on/off | darker edges (`vignette()`) |
 | `drift`, `bounce` | on/off | tour camera, see below |
 | `glow`, `ripple`, `pulses`, `orbit`, `depth_of_field`, `warp` | on/off | tour effects, see below (only `ripple` is on by default) |
 | `step_levels` | on/off | tour: reveal levels one by one |

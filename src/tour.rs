@@ -12,8 +12,8 @@ use crate::model::MindMap;
 use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task};
 use crate::present::{
     backdrop, color_of, confetti_burst, confetti_draw, corner_buttons, ease_in_out_cubic,
-    ease_out_back, ease_out_cubic, filmstrip, laser, mouse_parallax, read_nav, strip_keys,
-    vignette, Backdrop, Effects, Event, StripItem, StripKey,
+    ease_out_back, ease_out_cubic, filmstrip, laser, read_nav, strip_keys, vignette, Backdrop,
+    Effects, Event, StripItem, StripKey,
 };
 use crate::theme::Theme;
 use eframe::egui::{
@@ -412,11 +412,15 @@ pub fn show(
     }
     doc.tour.last_cam = Some((cam, now));
     if !plain {
-        let mut parallax = -cam.center * 0.6;
-        if fx.mouse_parallax {
-            parallax += mouse_parallax(&ctx, area);
-        }
-        backdrop(&painter, area, theme, fx.background, now, parallax, warp);
+        backdrop(
+            &painter,
+            area,
+            theme,
+            fx.background,
+            now,
+            -cam.center * 0.6,
+            warp,
+        );
     }
     let origin = to_screen(Vec2::ZERO);
     let mut spacing = 28.0 * cam.zoom;

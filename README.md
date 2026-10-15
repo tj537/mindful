@@ -41,7 +41,7 @@ Also:
 - Auto layout with animation: nodes glide to their new places and the view follows smoothly
 - Undo/redo, search, zoom, copy/paste, notes on every node
 - Presentation effects: slide transitions (fade by default, slide, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (a starfield with parallax, nebula and shooting stars by default, bokeh or aurora), title animations, confetti when ticking a checkbox, a laser pointer and a quick-jump strip
-- Optional extras (⚙︎ while presenting): highlighter on the newest bullet, a light sweep over titles, slow zoom on slides, vignette, sky following the mouse
+- Optional extras (⚙︎ while presenting): a light sweep over titles, slow zoom on slides, the colored bar on the left of slides, vignette
 - Tour effects: a ripple on arrival and optionally glow, light pulses, orbiting sparks, depth of field, warp streaks while flying, camera bounce and drift – and revealing the levels below a branch one by one
 - 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
 - Ready-made examples to try: **File → Open example → The Universe** (also available in German)

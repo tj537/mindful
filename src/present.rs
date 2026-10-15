@@ -77,10 +77,8 @@ pub struct Effects {
     pub confetti: bool,
     /// Dunklere Bildränder
     pub vignette: bool,
-    /// Himmel verschiebt sich leicht mit der Maus
-    pub mouse_parallax: bool,
-    /// Folien: Textmarker über dem neuesten Stichpunkt
-    pub marker: bool,
+    /// Folien: farbiger Balken am linken Rand der Folie
+    pub accent_bar: bool,
     /// Folien: Lichtschimmer, der über den Titel zieht
     pub shine: bool,
     /// Folien: langsamer Zoom, solange eine Folie zu sehen ist
@@ -112,8 +110,7 @@ impl Default for Effects {
             step_levels: false,
             confetti: true,
             vignette: false,
-            mouse_parallax: false,
-            marker: false,
+            accent_bar: true,
             shine: false,
             ken_burns: false,
             warp: false,
@@ -174,7 +171,7 @@ pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: boo
                         ui.selectable_value(&mut fx.bullets, value, label);
                     }
                 });
-                ui.checkbox(&mut fx.marker, "Highlighter on the newest point");
+                ui.checkbox(&mut fx.accent_bar, "Colored bar on the left");
                 ui.checkbox(&mut fx.shine, "Light sweep over titles");
                 ui.checkbox(&mut fx.ken_burns, "Slow zoom on each slide");
                 ui.separator();
@@ -190,7 +187,6 @@ pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: boo
                     ui.selectable_value(&mut fx.background, value, label);
                 }
             });
-            ui.checkbox(&mut fx.mouse_parallax, "Sky follows the mouse");
             ui.checkbox(&mut fx.vignette, "Vignette (darker edges)");
             if tour {
                 ui.separator();
@@ -630,18 +626,6 @@ pub fn vignette(painter: &egui::Painter, area: Rect) {
     }
 }
 
-/// Verschiebung für „Himmel folgt der Maus“, sanft nachgezogen
-pub fn mouse_parallax(ctx: &egui::Context, area: Rect) -> Vec2 {
-    let target = ctx
-        .input(|i| i.pointer.hover_pos())
-        .map(|p| (area.center() - p) * 0.08)
-        .unwrap_or_default();
-    Vec2::new(
-        ctx.animate_value_with_time(Id::new("mouse_parallax_x"), target.x, 0.5),
-        ctx.animate_value_with_time(Id::new("mouse_parallax_y"), target.y, 0.5),
-    )
-}
-
 #[derive(Clone)]
 struct Particle {
     pos: Pos2,
@@ -912,10 +896,7 @@ pub fn show(
     painter.rect_filled(area, 0.0, theme.background);
     // Beim Weiterblättern ziehen die Sterne ein Stück mit
     let drift = ctx.animate_value_with_time(ui.id().with("star_drift"), doc.slide as f32, 0.9);
-    let mut parallax = Vec2::new(-drift * 120.0, 0.0);
-    if fx.mouse_parallax {
-        parallax += mouse_parallax(&ctx, area);
-    }
+    let parallax = Vec2::new(-drift * 120.0, 0.0);
     if backdrop(
         &painter,
         area,
@@ -1006,11 +987,13 @@ pub fn show(
         Color32::from_black_alpha(if theme.dark { 110 } else { 35 }),
     );
     painter.rect_filled(card, 24.0 * s, theme.card);
-    let accent_bar = Rect::from_min_max(
-        card.left_top() + Vec2::new(44.0, 80.0) * s,
-        card.left_bottom() + Vec2::new(52.0, -80.0) * s,
-    );
-    painter.rect_filled(accent_bar, 4.0 * s, slide.color.gamma_multiply(appear));
+    if fx.accent_bar {
+        let accent_bar = Rect::from_min_max(
+            card.left_top() + Vec2::new(44.0, 80.0) * s,
+            card.left_bottom() + Vec2::new(52.0, -80.0) * s,
+        );
+        painter.rect_filled(accent_bar, 4.0 * s, slide.color.gamma_multiply(appear));
+    }
 
     let (corner_event, strip_clicked) =
         corner_buttons(ui, area, "End presentation (Esc)", fx, false);
@@ -1239,24 +1222,7 @@ pub fn show(
                             let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
                             ui.painter().circle_filled(dot.center(), radius, *color);
                         }
-                        let text_rect = ui.add(egui::Label::new(label).wrap()).rect;
-                        // Textmarker über dem neuesten Stichpunkt
-                        if fx.marker && building && group + 1 == doc.build {
-                            let sweep = ease_out_cubic(progress(now, doc.build_time + 0.2, 0.5));
-                            let mark = Rect::from_min_max(
-                                Pos2::new(
-                                    text_rect.left() - 4.0 * s,
-                                    text_rect.center().y - 2.0 * s,
-                                ),
-                                Pos2::new(
-                                    text_rect.left() - 4.0 * s
-                                        + (text_rect.width() + 8.0 * s) * sweep,
-                                    text_rect.bottom() + 2.0 * s,
-                                ),
-                            );
-                            ui.painter()
-                                .rect_filled(mark, 3.0 * s, color.gamma_multiply(0.3));
-                        }
+                        ui.add(egui::Label::new(label).wrap());
                     });
                 });
             }
