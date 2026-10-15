@@ -303,8 +303,15 @@ All measurements are relative to a slide 1280 px wide (`s = width / 1280`) and s
 |---|---|---|
 | `transition` | Slide, Fade, Zoom, Rise | the slide card is shifted or scaled; all sizes depend on `s`, so scaling the card scales the content |
 | `bullets` | Slide in, Fade, Pop, Typewriter | each bullet group gets a start time – the reveal moment, or staggered after the slide appears when bullets aren't revealed one by one |
-| `background` | Aurora, Starfield, Plain | `backdrop()`: soft blobs in the branch colors drawn as stacked translucent circles / pseudo-random twinkling dots |
-| `drift` | on/off | tour only, see below |
+| `background` | Starfield (default), Aurora, Plain | `backdrop()`: see below |
+| `drift`, `bounce` | on/off | tour camera, see below |
+| `glow`, `ripple`, `pulses` | on/off | tour effects, see below |
+| `step_levels` | on/off | tour: reveal levels one by one |
+| `confetti` | on/off | burst of confetti when a checkbox is ticked (slides and tour) |
+
+`Effects::migrate()` brings older saved settings up to date via `version`: version 1 made *Fade* the default transition, version 2 the starfield the default background.
+
+**Starfield:** three layers of pseudo-random stars (`hash()`) – many small faint ones far away, fewer bright ones close by with a soft glow and a sparkle cross. A `parallax` offset moves near stars more than far ones: the tour passes the camera position, slides an animated value that follows the slide number, so the sky shifts a little with every step. Behind the stars two very faint nebula clouds drift in branch colors, and every seven seconds a shooting star crosses the sky.
 
 The title rises and fades in, the accent line draws itself and the chips on the title slide pop in one after another – all timed from `doc.slide_time`.
 
@@ -329,6 +336,12 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 **Growing children:** children of a main branch are hidden until the tour reaches that branch. There they appear level by level (`GROW_STEP` apart), moving out of their parent's position with a slight overshoot (`ease_out_back`). Going backwards shows them instantly.
 
 **Spotlight:** at a branch stop, everything outside that branch is dimmed to 22 %. The brightness blends from the previous stop to the current one during the flight.
+
+**Reveal levels one by one** (`step_levels`): `tour.level` counts how many levels below the current main branch are visible. Space/→ first increases the level – the new level grows out and the camera re-frames the visible levels plus the next one – and only moves on to the next stop once everything is visible. ← hides the last level again; going back to a previous branch shows it fully.
+
+**Glow, ripple, pulses:** nodes in the spotlight get a softly breathing halo; on arrival two rings spread out from the focused node; small lights travel along the connections in the spotlight (`bezier()` gives the point on the curve).
+
+**Camera bounce** (`bounce`): `fly()` adds a small zoom push in the last 30 % of the flight that settles back exactly on the target.
 
 **Camera drift:** with `drift` on, `camera()` slowly zooms in by a few percent and wanders slightly after arriving at a stop (Ken Burns effect), so the picture never stands completely still.
 
@@ -481,7 +494,7 @@ cargo test
 | `collapse_hides_descendants` | collapsing and expanding |
 | `checkboxes_round_trip_and_progress` | checkboxes survive Markdown and progress is counted |
 | `templates_parse_and_round_trip` | every template parses and comes back unchanged |
-| `old_settings_switch_to_fade_once` | older saved effect settings switch to *Fade* once |
+| `old_settings_switch_to_fade_once` | older saved effect settings switch to *Fade* and the starfield once |
 | `quick_jump_keys` | ← → Enter Esc in the quick-jump strip |
 | `prompt_contains_the_inputs` | the AI prompt contains topic, language, description, scope |
 | `example_in_the_prompt_is_valid_mindful_markdown` | the format example in the prompt parses and round-trips |
@@ -490,6 +503,7 @@ cargo test
 | `svg_and_png_export` | SVG is escaped correctly, PNG is created |
 | `stops_are_overview_branches_finale` | tour stops are in the right order |
 | `children_appear_only_from_their_branch_on` | children grow at their branch, show instantly when going back |
-| `flight_starts_and_ends_on_target_and_arcs_out` | the camera flight hits its targets and zooms out in between |
+| `levels_are_revealed_one_by_one` | level-by-level reveal shows the right nodes and frames the next level |
+| `flight_starts_and_ends_on_target_and_arcs_out` | the camera flight hits its targets, zooms out in between and bounces back exactly |
 
 The UI itself has no automated tests. Please try changes there by hand – on macOS **and** Windows if possible.

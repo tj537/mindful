@@ -57,6 +57,8 @@ pub struct TourState {
     pub backwards: bool,
     /// Erster Frame steht noch aus: Kamera ohne Flug setzen
     pub needs_init: bool,
+    /// Beim Aufdecken Ebene für Ebene: wie viele Ebenen unter dem Zweig sichtbar sind
+    pub level: usize,
 }
 
 fn one() -> f32 {

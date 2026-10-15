@@ -40,7 +40,8 @@ Also:
 - **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
 - Auto layout with animation: nodes glide to their new places and the view follows smoothly
 - Undo/redo, search, zoom, copy/paste, notes on every node
-- Presentation effects: slide transitions (fade by default, slide, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (aurora, starfield), title animations, slow camera drift in the tour, a laser pointer and a quick-jump strip
+- Presentation effects: slide transitions (fade by default, slide, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (a starfield with parallax, nebula and shooting stars by default, or aurora), title animations, confetti when ticking a checkbox, a laser pointer and a quick-jump strip
+- Tour effects: glow around the current branch, a ripple on arrival, light pulses along the connections, camera bounce and drift – and optionally reveal the levels below a branch one by one
 - 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
 - Ready-made examples to try: **File → Open example → The Universe** (also available in German)
 
@@ -273,7 +274,7 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | Ctrl+Tab · ⌘1…9 | Switch tab |
 | ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
 | **Presentation and tour** | |
-| Space · → | Next bullet point / slide / stop |
+| Space · → | Next bullet point / slide / stop (or next level in the tour) |
 | ← | Back |
 | G | Quick jump: ← → to pick, Enter to jump |
 | L | Laser pointer |

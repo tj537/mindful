@@ -48,8 +48,8 @@ pub enum BulletFx {
 #[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum Backdrop {
     Plain,
-    #[default]
     Aurora,
+    #[default]
     Stars,
 }
 
@@ -61,12 +61,24 @@ pub struct Effects {
     pub background: Backdrop,
     /// Langsames Schweben der Kamera in der Tour
     pub drift: bool,
+    /// Tour: Kamera federt beim Ankommen leicht nach
+    pub bounce: bool,
+    /// Tour: Glühen um den aktuellen Zweig
+    pub glow: bool,
+    /// Tour: Welle, die sich beim Ankommen ausbreitet
+    pub ripple: bool,
+    /// Tour: Lichtpulse, die an den Verbindungen entlanglaufen
+    pub pulses: bool,
+    /// Tour: Unterpunkte Ebene für Ebene per Tastendruck aufdecken
+    pub step_levels: bool,
+    /// Konfetti beim Abhaken einer Checkbox
+    pub confetti: bool,
     /// Stand der Einstellungen; fehlt bei älteren gespeicherten Daten (= 0)
     #[serde(default)]
     pub version: u32,
 }
 
-const EFFECTS_VERSION: u32 = 1;
+const EFFECTS_VERSION: u32 = 2;
 
 impl Default for Effects {
     fn default() -> Self {
@@ -75,6 +87,12 @@ impl Default for Effects {
             bullets: BulletFx::default(),
             background: Backdrop::default(),
             drift: true,
+            bounce: false,
+            glow: true,
+            ripple: true,
+            pulses: true,
+            step_levels: false,
+            confetti: true,
             version: EFFECTS_VERSION,
         }
     }
@@ -86,6 +104,10 @@ impl Effects {
         if self.version < 1 {
             // Seit Version 1 ist Überblenden der Standard-Übergang
             self.transition = Transition::Fade;
+        }
+        if self.version < 2 {
+            // Seit Version 2 ist der Sternenhimmel der Standard-Hintergrund
+            self.background = Backdrop::Stars;
         }
         self.version = EFFECTS_VERSION;
     }
@@ -118,16 +140,24 @@ pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: boo
     }
     ui.strong("Background");
     for (value, label) in [
-        (Backdrop::Aurora, "Aurora"),
         (Backdrop::Stars, "Starfield"),
+        (Backdrop::Aurora, "Aurora"),
         (Backdrop::Plain, "Plain"),
     ] {
         ui.radio_value(&mut fx.background, value, label);
     }
     if tour {
         ui.separator();
+        ui.strong("Tour");
+        ui.checkbox(&mut fx.step_levels, "Reveal levels one by one (Space / →)");
+        ui.checkbox(&mut fx.glow, "Glow around the current branch");
+        ui.checkbox(&mut fx.ripple, "Ripple on arrival");
+        ui.checkbox(&mut fx.pulses, "Light pulses along connections");
+        ui.checkbox(&mut fx.bounce, "Camera bounce on arrival");
         ui.checkbox(&mut fx.drift, "Slow camera drift");
     }
+    ui.separator();
+    ui.checkbox(&mut fx.confetti, "Confetti when ticking a checkbox");
 }
 
 /// Tastenkürzel beim Präsentieren (im Einstellungsmenü)
@@ -314,12 +344,21 @@ pub fn corner_buttons(
 
 /// Animierter Hintergrund hinter Folie bzw. Mindmap.
 /// Gibt `true` zurück, wenn weiter neu gezeichnet werden muss.
+/// Pseudo-Zufallszahl 0…1, immer gleich für dieselben Eingaben
+fn hash(i: f32, salt: f32) -> f32 {
+    ((i * 12.9898 + salt * 78.233).sin() * 43758.547)
+        .fract()
+        .abs()
+}
+
+/// `parallax`: Verschiebung (z. B. Kamera), nahe Sterne bewegen sich stärker als ferne
 pub fn backdrop(
     painter: &egui::Painter,
     area: Rect,
     theme: &Theme,
     kind: Backdrop,
     now: f64,
+    parallax: Vec2,
 ) -> bool {
     let t = now as f32;
     match kind {
@@ -345,28 +384,102 @@ pub fn backdrop(
             true
         }
         Backdrop::Stars => {
-            // Feste Pseudo-Zufallspositionen, funkeln und ziehen langsam vorbei
-            for i in 0..180 {
-                let h = |salt: f32| {
-                    ((i as f32 * 12.9898 + salt * 78.233).sin() * 43758.547)
-                        .fract()
-                        .abs()
-                };
-                let depth = 0.3 + 0.7 * h(3.0);
-                let x = area.left()
-                    + (h(1.0) * area.width() + t * 5.0 * depth).rem_euclid(area.width());
-                let y = area.top() + h(2.0) * area.height();
-                let twinkle = 0.35
-                    + 0.65
-                        * (0.5
-                            + 0.5
-                                * (t * (0.6 + 1.4 * h(4.0)) + h(5.0) * std::f32::consts::TAU)
-                                    .sin());
-                painter.circle_filled(
-                    Pos2::new(x, y),
-                    0.6 + 1.3 * depth,
-                    theme.text.gamma_multiply(0.55 * twinkle * depth),
+            let (w, h) = (area.width(), area.height());
+            let star = if theme.dark {
+                theme.text.lerp_to_gamma(Color32::WHITE, 0.6)
+            } else {
+                theme.text
+            };
+
+            // Zarter Nebel in zwei Zweigfarben, kaum sichtbar
+            let radius = w.max(h) * 0.45;
+            for (k, color) in [theme.branches[0], theme.branches[4]]
+                .into_iter()
+                .enumerate()
+            {
+                let phase = k as f32 * 2.4;
+                let center = area.center()
+                    + Vec2::new(
+                        w * 0.3 * (t * 0.02 + phase).sin(),
+                        h * 0.25 * (t * 0.015 + phase).cos(),
+                    )
+                    + parallax * 0.02;
+                let color = color.gamma_multiply(if theme.dark { 0.012 } else { 0.02 });
+                for ring in 0..12 {
+                    painter.circle_filled(center, radius * (1.0 - ring as f32 / 12.0), color);
+                }
+            }
+
+            // Drei Ebenen: ferne (viele, klein), mittlere, nahe (wenige, hell, mit Schein)
+            let layers = [
+                (220, 0.04, 0.45, 0.9, 0.35),
+                (90, 0.12, 0.8, 1.5, 0.6),
+                (26, 0.3, 1.3, 2.3, 0.95),
+            ];
+            for (layer, (count, depth, small, big, bright)) in layers.into_iter().enumerate() {
+                for i in 0..count {
+                    let n = (i * 7 + layer * 1013) as f32;
+                    let x = area.left()
+                        + (hash(n, 1.0) * w + parallax.x * depth + t * 3.0 * depth).rem_euclid(w);
+                    let y = area.top() + (hash(n, 2.0) * h + parallax.y * depth).rem_euclid(h);
+                    let pos = Pos2::new(x, y);
+                    let twinkle = 0.45
+                        + 0.55
+                            * (0.5
+                                + 0.5
+                                    * (t * (0.5 + 1.8 * hash(n, 4.0))
+                                        + hash(n, 5.0) * std::f32::consts::TAU)
+                                        .sin());
+                    // Einzelne Sterne leicht in den Zweigfarben
+                    let color = if hash(n, 6.0) < 0.15 {
+                        star.lerp_to_gamma(theme.branches[(hash(n, 7.0) * 6.0) as usize % 6], 0.55)
+                    } else {
+                        star
+                    };
+                    let r = small + (big - small) * hash(n, 3.0);
+                    let a = bright * twinkle;
+                    if layer == 2 {
+                        painter.circle_filled(pos, r * 4.5, color.gamma_multiply(0.05 * a));
+                        painter.circle_filled(pos, r * 2.2, color.gamma_multiply(0.12 * a));
+                        // Die hellsten funkeln mit einem kleinen Kreuz
+                        if hash(n, 8.0) > 0.6 {
+                            let len = r * 6.0 * twinkle;
+                            let stroke = Stroke::new(0.8_f32, color.gamma_multiply(0.35 * a));
+                            painter
+                                .line_segment([pos - Vec2::X * len, pos + Vec2::X * len], stroke);
+                            painter
+                                .line_segment([pos - Vec2::Y * len, pos + Vec2::Y * len], stroke);
+                        }
+                    }
+                    painter.circle_filled(pos, r, color.gamma_multiply(a));
+                }
+            }
+
+            // Ab und zu eine Sternschnuppe
+            let period = 7.0;
+            let cycle = (now / period).floor();
+            let phase = (now - cycle * period) as f32;
+            if phase < 1.1 {
+                let seed = cycle as f32;
+                let start = Pos2::new(
+                    area.left() + w * (0.35 + 0.6 * hash(seed, 11.0)),
+                    area.top() + h * 0.3 * hash(seed, 12.0),
                 );
+                let dir = Vec2::new(-0.86, 0.5);
+                let travel = w * 0.35;
+                let head = start + dir * travel * ease_out_cubic(phase / 1.1);
+                let fade = (1.0 - phase / 1.1) * (phase * 6.0).min(1.0);
+                for k in 0..18 {
+                    let a = head - dir * (k as f32 * 7.0);
+                    let b = head - dir * ((k + 1) as f32 * 7.0);
+                    let falloff = 1.0 - k as f32 / 18.0;
+                    painter.line_segment(
+                        [a, b],
+                        Stroke::new(2.2 * falloff, star.gamma_multiply(0.8 * fade * falloff)),
+                    );
+                }
+                painter.circle_filled(head, 5.0, star.gamma_multiply(0.15 * fade));
+                painter.circle_filled(head, 1.8, star.gamma_multiply(fade));
             }
             true
         }
@@ -413,6 +526,61 @@ pub fn laser(ui: &mut egui::Ui, toggle: bool, now: f64) {
         ctx.request_repaint();
     }
     ctx.data_mut(|d| d.insert_temp(id, state));
+}
+
+#[derive(Clone)]
+struct Particle {
+    pos: Pos2,
+    vel: Vec2,
+    color: Color32,
+    born: f64,
+    spin: f32,
+}
+
+const CONFETTI_LIFE: f64 = 1.4;
+
+/// Konfetti-Explosion an `at` (z. B. beim Abhaken einer Checkbox)
+pub fn confetti_burst(ctx: &egui::Context, at: Pos2, colors: &[Color32], now: f64) {
+    let id = Id::new("confetti");
+    let mut parts: Vec<Particle> = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
+    let seed = (now * 1000.0) as f32 % 1000.0;
+    for i in 0..40 {
+        let n = seed + i as f32;
+        let angle = -std::f32::consts::FRAC_PI_2 + (hash(n, 1.0) - 0.5) * 2.6;
+        let speed = 220.0 + 320.0 * hash(n, 2.0);
+        parts.push(Particle {
+            pos: at,
+            vel: Vec2::new(angle.cos(), angle.sin()) * speed,
+            color: colors[i % colors.len().max(1)],
+            born: now,
+            spin: hash(n, 3.0) * std::f32::consts::TAU,
+        });
+    }
+    ctx.data_mut(|d| d.insert_temp(id, parts));
+}
+
+/// Fliegendes Konfetti zeichnen (jeden Frame aufrufen)
+pub fn confetti_draw(ctx: &egui::Context, now: f64) {
+    let id = Id::new("confetti");
+    let mut parts: Vec<Particle> = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
+    parts.retain(|p| now - p.born < CONFETTI_LIFE);
+    if parts.is_empty() {
+        return;
+    }
+    let painter = ctx.layer_painter(LayerId::new(Order::Foreground, id));
+    for p in &parts {
+        let t = (now - p.born) as f32;
+        let pos = p.pos + p.vel * t + Vec2::new(0.0, 520.0) * t * t * 0.5;
+        let fade = 1.0 - t / CONFETTI_LIFE as f32;
+        let angle = p.spin + t * 9.0;
+        let half = Vec2::new(angle.cos(), angle.sin()) * 4.0;
+        painter.line_segment(
+            [pos - half, pos + half],
+            Stroke::new(3.5_f32, p.color.gamma_multiply(fade)),
+        );
+    }
+    ctx.data_mut(|d| d.insert_temp(id, parts));
+    ctx.request_repaint();
 }
 
 /// Ein Eintrag im Folienstreifen
@@ -628,7 +796,16 @@ pub fn show(
 
     let painter = ui.painter().clone();
     painter.rect_filled(area, 0.0, theme.background);
-    if backdrop(&painter, area, theme, fx.background, now) {
+    // Beim Weiterblättern ziehen die Sterne ein Stück mit
+    let drift = ctx.animate_value_with_time(ui.id().with("star_drift"), doc.slide as f32, 0.9);
+    if backdrop(
+        &painter,
+        area,
+        theme,
+        fx.background,
+        now,
+        Vec2::new(-drift * 120.0, 0.0),
+    ) {
         ctx.request_repaint();
     }
 
@@ -720,7 +897,7 @@ pub fn show(
     // Wie viele Checkboxen dieses Zweigs schon erledigt sind
     let tasks = slide.branch.and_then(|b| doc.map.task_progress(b));
     // Angeklickte Checkbox, wird nach dem Zeichnen umgeschaltet
-    let mut ticked: Option<u64> = None;
+    let mut ticked: Option<(u64, Pos2)> = None;
 
     // Titel steigt auf und blendet ein, die Linie darunter zieht sich auf
     let title_in = ease_out_cubic(progress(now, doc.slide_time, 0.55));
@@ -901,7 +1078,7 @@ pub fn show(
                                     )
                                     .on_hover_cursor(CursorIcon::PointingHand);
                                 if click.clicked() {
-                                    ticked = Some(*node);
+                                    ticked = Some((*node, r.center()));
                                 }
                             }
                             if done {
@@ -920,10 +1097,13 @@ pub fn show(
     if animating {
         ctx.request_repaint();
     }
-    if let Some(id) = ticked {
+    if let Some((id, pos)) = ticked {
         doc.checkpoint();
         if let Some(n) = doc.map.get_mut(id) {
             n.task = n.task.map(|done| !done);
+            if n.task == Some(true) && fx.confetti {
+                confetti_burst(&ctx, pos, &theme.branches, now);
+            }
         }
     }
 
@@ -966,6 +1146,7 @@ pub fn show(
         go_to(doc, i, 0);
         doc.strip = false;
     }
+    confetti_draw(&ctx, now);
     laser(ui, nav.laser, now);
 
     event
@@ -987,6 +1168,15 @@ mod tests {
         old.migrate();
         assert!(old.transition == Transition::Zoom);
         assert!(Effects::default().transition == Transition::Fade);
+        // Version 0 und 1 bekommen einmalig den Sternenhimmel
+        assert!(old.background == Backdrop::Stars);
+        let mut v1: Effects =
+            serde_json::from_str(r#"{"background":"Aurora","version":1}"#).unwrap();
+        v1.migrate();
+        assert!(v1.background == Backdrop::Stars);
+        v1.background = Backdrop::Plain;
+        v1.migrate();
+        assert!(v1.background == Backdrop::Plain);
     }
 
     #[test]

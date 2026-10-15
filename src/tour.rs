@@ -2,15 +2,18 @@
 //!
 //! Stationen: Übersicht → jeder Hauptzweig → ganze Mindmap. Zwischen den
 //! Stationen fliegt die Kamera im Bogen (erst etwas raus, dann rein), der
-//! aktuelle Zweig steht im Scheinwerfer und seine Unterpunkte wachsen
-//! nacheinander aus ihm heraus. Die Notiz der Station erscheint als Untertitel.
+//! aktuelle Zweig steht im Scheinwerfer und seine Unterpunkte wachsen aus ihm
+//! heraus – auf Wunsch Ebene für Ebene per Tastendruck. Die Notiz der Station
+//! erscheint als Untertitel. Dazu optional: Glühen, Welle beim Ankommen,
+//! Lichtpulse auf den Verbindungen und ein leichtes Nachfedern der Kamera.
 
 use crate::document::{Camera, Document, TourState};
 use crate::model::MindMap;
 use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task};
 use crate::present::{
-    backdrop, color_of, corner_buttons, ease_in_out_cubic, ease_out_back, ease_out_cubic,
-    filmstrip, laser, read_nav, strip_keys, Backdrop, Effects, Event, StripItem, StripKey,
+    backdrop, color_of, confetti_burst, confetti_draw, corner_buttons, ease_in_out_cubic,
+    ease_out_back, ease_out_cubic, filmstrip, laser, read_nav, strip_keys, Backdrop, Effects,
+    Event, StripItem, StripKey,
 };
 use crate::theme::Theme;
 use eframe::egui::{
@@ -22,6 +25,8 @@ use std::collections::{HashMap, HashSet};
 const FLIGHT: f64 = 1.1;
 /// Ab wann (nach Flugbeginn) die Unterpunkte zu wachsen beginnen
 const GROW_DELAY: f64 = 0.7;
+/// Beim Aufdecken Ebene für Ebene geht es schneller los
+const LEVEL_DELAY: f64 = 0.3;
 /// Abstand zwischen zwei aufwachsenden Unterpunkten
 const GROW_STEP: f64 = 0.1;
 /// Wie lange ein Unterpunkt zum Aufwachsen braucht
@@ -30,8 +35,10 @@ const GROW_TIME: f64 = 0.4;
 const DIM: f32 = 0.22;
 /// Platz unten für den Untertitel
 const BOTTOM_SPACE: f32 = 150.0;
+/// Dauer der Welle beim Ankommen
+const RIPPLE: f32 = 1.4;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Stop {
     Overview,
     Branch(u64),
@@ -52,8 +59,24 @@ fn stops(map: &MindMap) -> Vec<Stop> {
     out
 }
 
-/// Wie weit ein Knoten an Station `stop` sichtbar ist (0 = gar nicht, 1 = ganz)
-fn growth(map: &MindMap, all: &[Stop], tour: &TourState, id: u64, now: f64) -> f32 {
+/// Ebene eines Knotens unterhalb seines Hauptzweigs (Kinder des Zweigs = 1)
+fn level_in_branch(map: &MindMap, id: u64) -> usize {
+    map.depth(id).saturating_sub(1)
+}
+
+/// Tiefste sichtbare Ebene unterhalb eines Hauptzweigs
+fn max_level(map: &MindMap, branch: u64) -> usize {
+    map.subtree(branch)
+        .into_iter()
+        .filter(|id| !map.is_hidden(*id))
+        .map(|id| level_in_branch(map, id))
+        .max()
+        .unwrap_or(0)
+}
+
+/// Wie weit ein Knoten an der aktuellen Station sichtbar ist (0 = gar nicht, 1 = ganz).
+/// `stepwise`: Unterpunkte werden Ebene für Ebene aufgedeckt (`tour.level`).
+fn growth(map: &MindMap, all: &[Stop], tour: &TourState, id: u64, now: f64, stepwise: bool) -> f32 {
     if map.depth(id) <= 1 {
         return 1.0;
     }
@@ -70,12 +93,31 @@ fn growth(map: &MindMap, all: &[Stop], tour: &TourState, id: u64, now: f64) -> f
     if current < branch_stop {
         return 0.0;
     }
+
+    let subtree = map.subtree(branch);
+    if stepwise {
+        let level = level_in_branch(map, id);
+        if level > tour.level {
+            return 0.0;
+        }
+        if level < tour.level || tour.backwards {
+            return 1.0;
+        }
+        // Die neue Ebene wächst nacheinander heraus
+        let order = subtree
+            .iter()
+            .filter(|n| level_in_branch(map, **n) == level)
+            .position(|n| *n == id)
+            .unwrap_or(0);
+        let start = tour.started + LEVEL_DELAY + order as f64 * GROW_STEP;
+        return ((now - start) / GROW_TIME).clamp(0.0, 1.0) as f32;
+    }
+
     if tour.backwards {
         return 1.0;
     }
     // Reihenfolge innerhalb des Zweigs: Ebene für Ebene
-    let order = map
-        .subtree(branch)
+    let order = subtree
         .iter()
         .position(|n| *n == id)
         .unwrap_or(1)
@@ -84,8 +126,9 @@ fn growth(map: &MindMap, all: &[Stop], tour: &TourState, id: u64, now: f64) -> f
     ((now - start) / GROW_TIME).clamp(0.0, 1.0) as f32
 }
 
-/// Knoten, die an einer Station ins Bild sollen
-fn framed(map: &MindMap, stop: Stop) -> Vec<u64> {
+/// Knoten, die an einer Station ins Bild sollen. Beim schrittweisen Aufdecken
+/// nur die sichtbaren Ebenen plus die nächste, damit Platz für sie bleibt.
+fn framed(map: &MindMap, stop: Stop, level: Option<usize>) -> Vec<u64> {
     let visible = |id: &u64| !map.is_hidden(*id);
     match stop {
         Stop::Overview => map
@@ -94,15 +137,26 @@ fn framed(map: &MindMap, stop: Stop) -> Vec<u64> {
             .filter(|n| map.depth(n.id) <= 1)
             .map(|n| n.id)
             .collect(),
-        Stop::Branch(b) => map.subtree(b).into_iter().filter(visible).collect(),
+        Stop::Branch(b) => map
+            .subtree(b)
+            .into_iter()
+            .filter(visible)
+            .filter(|id| level.is_none_or(|l| level_in_branch(map, *id) <= l + 1))
+            .collect(),
         Stop::Finale => map.nodes.iter().map(|n| n.id).filter(visible).collect(),
     }
 }
 
 /// Kamera, die die Knoten einer Station formatfüllend zeigt
-fn target(map: &MindMap, stop: Stop, sizes: &HashMap<u64, Vec2>, area: Rect) -> Camera {
+fn target(
+    map: &MindMap,
+    stop: Stop,
+    level: Option<usize>,
+    sizes: &HashMap<u64, Vec2>,
+    area: Rect,
+) -> Camera {
     let mut bounds = Rect::NOTHING;
-    for id in framed(map, stop) {
+    for id in framed(map, stop, level) {
         let size = sizes.get(&id).copied().unwrap_or(Vec2::splat(60.0));
         bounds = bounds.union(Rect::from_center_size(map.pos(id).to_pos2(), size));
     }
@@ -128,17 +182,48 @@ fn target(map: &MindMap, stop: Stop, sizes: &HashMap<u64, Vec2>, area: Rect) -> 
 }
 
 /// Kamera unterwegs: Mitte gleitet, Zoom ändert sich gleichmäßig, und bei
-/// weiten Wegen geht es im Bogen erst etwas heraus.
-fn fly(from: Camera, to: Camera, t: f32, area: Rect) -> Camera {
+/// weiten Wegen geht es im Bogen erst etwas heraus. `bounce`: kurz vor dem
+/// Ziel ein kleiner Zoom-Schubs, der sanft zurückfedert.
+fn fly(from: Camera, to: Camera, t: f32, area: Rect, bounce: bool) -> Camera {
     let e = ease_in_out_cubic(t);
     let center = from.center + (to.center - from.center) * e;
     let zoom = (from.zoom.ln() + (to.zoom.ln() - from.zoom.ln()) * e).exp();
     let distance = (to.center - from.center).length() * from.zoom.min(to.zoom) / area.width();
     let dip = 1.0 + distance.min(2.0) * 0.35 * (std::f32::consts::PI * e).sin();
+    let punch = if bounce {
+        let b = ((t - 0.7) / 0.3).clamp(0.0, 1.0);
+        1.0 + 0.07 * (std::f32::consts::PI * b).sin()
+    } else {
+        1.0
+    };
     Camera {
         center,
-        zoom: zoom / dip,
+        zoom: zoom / dip * punch,
     }
+}
+
+/// Aktuelle Kamera: Flug zur Station, danach optional langsames Schweben
+fn camera(tour: &TourState, to: Camera, now: f64, area: Rect, fx: &Effects) -> Camera {
+    let t = ((now - tour.started) / FLIGHT).clamp(0.0, 1.0) as f32;
+    let mut cam = fly(tour.from, to, t, area, fx.bounce);
+    if fx.drift {
+        // Nach der Ankunft über ~30 s ganz leicht hineinzoomen und etwas wandern
+        let d = ease_in_out_cubic(((now - tour.started - FLIGHT) / 30.0).clamp(0.0, 1.0) as f32);
+        cam.zoom *= 1.0 + 0.06 * d;
+        let wobble = Vec2::new((now * 0.11).sin() as f32, (now * 0.07).cos() as f32);
+        cam.center += wobble * (10.0 / cam.zoom) * d;
+    }
+    cam
+}
+
+/// Neuer Flug: zu einer anderen Station oder (beim Aufdecken) zu einer anderen Ebene
+fn fly_to(tour: &mut TourState, stop: usize, level: usize, backwards: bool, cam: Camera, now: f64) {
+    tour.from = cam;
+    tour.backwards = backwards;
+    tour.prev_stop = tour.stop;
+    tour.stop = stop;
+    tour.level = level;
+    tour.started = now;
 }
 
 fn brightness(map: &MindMap, stop: Stop, id: u64, cache: &mut HashMap<u64, HashSet<u64>>) -> f32 {
@@ -180,18 +265,14 @@ fn note_of(map: &MindMap, stop: Stop) -> String {
         .unwrap_or_default()
 }
 
-/// Aktuelle Kamera: Flug zur Station, danach optional langsames Schweben
-fn camera(tour: &TourState, to: Camera, now: f64, area: Rect, drift: bool) -> Camera {
-    let t = ((now - tour.started) / FLIGHT).clamp(0.0, 1.0) as f32;
-    let mut cam = fly(tour.from, to, t, area);
-    if drift {
-        // Nach der Ankunft über ~30 s ganz leicht hineinzoomen und etwas wandern
-        let d = ease_in_out_cubic(((now - tour.started - FLIGHT) / 30.0).clamp(0.0, 1.0) as f32);
-        cam.zoom *= 1.0 + 0.06 * d;
-        let wobble = Vec2::new((now * 0.11).sin() as f32, (now * 0.07).cos() as f32);
-        cam.center += wobble * (10.0 / cam.zoom) * d;
-    }
-    cam
+/// Punkt auf einer kubischen Bezier-Kurve (u = 0…1)
+fn bezier(p: [Pos2; 4], u: f32) -> Pos2 {
+    let v = 1.0 - u;
+    let w = [v * v * v, 3.0 * v * v * u, 3.0 * v * u * u, u * u * u];
+    Pos2::new(
+        p.iter().zip(w).map(|(p, w)| p.x * w).sum(),
+        p.iter().zip(w).map(|(p, w)| p.y * w).sum(),
+    )
 }
 
 pub fn show(
@@ -203,11 +284,13 @@ pub fn show(
     let ctx = ui.ctx().clone();
     let area = ui.max_rect();
     let now = ui.input(|i| i.time);
+    let stepwise = fx.step_levels;
     let map = &doc.map;
     let all = stops(map);
     let last = all.len() - 1;
     doc.tour.stop = doc.tour.stop.min(last);
     doc.tour.prev_stop = doc.tour.prev_stop.min(last);
+    let level_opt = |tour: &TourState| stepwise.then_some(tour.level);
 
     let sizes: HashMap<u64, Vec2> = map
         .nodes
@@ -216,24 +299,18 @@ pub fn show(
         .collect();
 
     if doc.tour.needs_init {
-        doc.tour.from = target(map, all[doc.tour.stop], &sizes, area);
+        doc.tour.from = target(map, all[doc.tour.stop], level_opt(&doc.tour), &sizes, area);
         doc.tour.prev_stop = doc.tour.stop;
         doc.tour.started = now - FLIGHT;
         doc.tour.needs_init = false;
     }
 
-    let to = target(map, all[doc.tour.stop], &sizes, area);
-    let cam = camera(&doc.tour, to, now, area, fx.drift);
-
-    // Zu einer anderen Station: Flug beginnt dort, wo die Kamera gerade ist
-    let go_to = |tour: &mut TourState, stop: usize| {
-        if stop != tour.stop {
-            tour.from = cam;
-            tour.backwards = stop < tour.stop;
-            tour.prev_stop = tour.stop;
-            tour.stop = stop;
-            tour.started = now;
-        }
+    let to = target(map, all[doc.tour.stop], level_opt(&doc.tour), &sizes, area);
+    let cam = camera(&doc.tour, to, now, area, fx);
+    // Ebene, mit der eine Station beim Ankommen startet
+    let entry_level = |stop: usize, backwards: bool| match all[stop] {
+        Stop::Branch(b) if stepwise && backwards => max_level(map, b),
+        _ => 0,
     };
 
     let nav = read_nav(ui);
@@ -241,27 +318,62 @@ pub fn show(
 
     // Geflogen wird nur per Tastatur – Klicks sind fürs Abhaken da
     let current = doc.tour.stop;
+    let branch_here = match all[current] {
+        Stop::Branch(b) => Some(b),
+        _ => None,
+    };
     if doc.strip {
         match strip_keys(&nav, &mut doc.strip_cursor, last) {
             StripKey::Jump(i) => {
-                go_to(&mut doc.tour, i);
+                if i != current {
+                    fly_to(&mut doc.tour, i, 0, i < current, cam, now);
+                }
                 doc.strip = false;
             }
             StripKey::Close => doc.strip = false,
             StripKey::Stay => {}
         }
     } else {
-        if nav.next() && current < last {
-            go_to(&mut doc.tour, current + 1);
+        if nav.next() {
+            match branch_here {
+                // Erst die nächste Ebene aufdecken, dann weiterfliegen
+                Some(b) if stepwise && doc.tour.level < max_level(map, b) => {
+                    let level = doc.tour.level + 1;
+                    fly_to(&mut doc.tour, current, level, false, cam, now);
+                }
+                _ if current < last => {
+                    fly_to(
+                        &mut doc.tour,
+                        current + 1,
+                        entry_level(current + 1, false),
+                        false,
+                        cam,
+                        now,
+                    );
+                }
+                _ => {}
+            }
         }
-        if nav.left && current > 0 {
-            go_to(&mut doc.tour, current - 1);
+        if nav.left {
+            if stepwise && branch_here.is_some() && doc.tour.level > 0 {
+                let level = doc.tour.level - 1;
+                fly_to(&mut doc.tour, current, level, true, cam, now);
+            } else if current > 0 {
+                fly_to(
+                    &mut doc.tour,
+                    current - 1,
+                    entry_level(current - 1, true),
+                    true,
+                    cam,
+                    now,
+                );
+            }
         }
-        if nav.home {
-            go_to(&mut doc.tour, 0);
+        if nav.home && current != 0 {
+            fly_to(&mut doc.tour, 0, 0, true, cam, now);
         }
-        if nav.end {
-            go_to(&mut doc.tour, last);
+        if nav.end && current != last {
+            fly_to(&mut doc.tour, last, 0, false, cam, now);
         }
         if nav.escape {
             event = Some(Event::Exit);
@@ -275,24 +387,20 @@ pub fn show(
         event = Some(Event::ToggleFullscreen);
     }
 
-    // Läuft noch eine Animation? Dann weiter neu zeichnen.
-    let busy_until = doc.tour.started + FLIGHT + GROW_DELAY + map.nodes.len() as f64 * GROW_STEP;
-    if now < busy_until + GROW_TIME || fx.drift {
-        ctx.request_repaint();
-    }
-
     // Kamera kann sich durch einen Tastendruck gerade geändert haben
     let t = ((now - doc.tour.started) / FLIGHT).clamp(0.0, 1.0) as f32;
-    let to = target(map, all[doc.tour.stop], &sizes, area);
-    let cam = camera(&doc.tour, to, now, area, fx.drift);
+    let to = target(map, all[doc.tour.stop], level_opt(&doc.tour), &sizes, area);
+    let cam = camera(&doc.tour, to, now, area, fx);
     let to_screen = |p: Vec2| area.center() + (p - cam.center) * cam.zoom;
+    let arrived = (now - doc.tour.started - FLIGHT) as f32;
+    ctx.request_repaint();
 
-    // Hintergrund: animiert oder Punktraster, das mit der Kamera mitzieht
+    // Hintergrund: animiert (mit Parallaxe zur Kamera) oder Punktraster
     let painter = ui.painter().clone();
     painter.rect_filled(area, 0.0, theme.background);
     let plain = fx.background == Backdrop::Plain;
-    if !plain && backdrop(&painter, area, theme, fx.background, now) {
-        ctx.request_repaint();
+    if !plain {
+        backdrop(&painter, area, theme, fx.background, now, -cam.center * 0.6);
     }
     let origin = to_screen(Vec2::ZERO);
     let mut spacing = 28.0 * cam.zoom;
@@ -312,6 +420,14 @@ pub fn show(
     // Für jeden Knoten: wie weit gewachsen, wie hell, wo gerade
     let spot = ease_out_cubic(t);
     let mut lit_cache = HashMap::new();
+    let focus = match all[doc.tour.stop] {
+        Stop::Branch(b) => Some(b),
+        _ => map.root(),
+    };
+    let in_spotlight: HashSet<u64> = match all[doc.tour.stop] {
+        Stop::Branch(b) => map.subtree(b).into_iter().collect(),
+        _ => HashSet::new(),
+    };
     struct Drawn {
         id: u64,
         parent: Option<u64>,
@@ -324,7 +440,7 @@ pub fn show(
         if map.is_hidden(n.id) {
             continue;
         }
-        let grow = growth(map, &all, &doc.tour, n.id, now);
+        let grow = growth(map, &all, &doc.tour, n.id, now, stepwise);
         if grow <= 0.0 {
             continue;
         }
@@ -348,7 +464,7 @@ pub fn show(
     }
     let centers: HashMap<u64, Pos2> = drawn.iter().map(|d| (d.id, d.center)).collect();
 
-    // Verbindungen
+    // Verbindungen, darauf optional Lichtpulse
     for d in &drawn {
         let Some(a) = d.parent.and_then(|p| centers.get(&p)) else {
             continue;
@@ -356,8 +472,9 @@ pub fn show(
         let style = node_style(map, theme, d.id);
         let b = d.center;
         let dx = (b.x - a.x) * 0.5;
+        let points = [*a, *a + Vec2::new(dx, 0.0), b - Vec2::new(dx, 0.0), b];
         painter.add(CubicBezierShape::from_points_stroke(
-            [*a, *a + Vec2::new(dx, 0.0), b - Vec2::new(dx, 0.0), b],
+            points,
             false,
             Color32::TRANSPARENT,
             Stroke::new(
@@ -365,10 +482,40 @@ pub fn show(
                 style.accent.gamma_multiply(0.8 * d.alpha),
             ),
         ));
+        let pulsing =
+            in_spotlight.contains(&d.id) || (in_spotlight.is_empty() && map.depth(d.id) == 1);
+        if fx.pulses && pulsing && d.grow >= 1.0 {
+            let u = ((now * 0.45 + (d.id as f64 * 0.37).fract()) % 1.0) as f32;
+            let p = bezier(points, u);
+            let fade = (std::f32::consts::PI * u).sin() * d.alpha;
+            let z = cam.zoom.clamp(0.5, 1.5);
+            let glow = style.accent.lerp_to_gamma(Color32::WHITE, 0.5);
+            painter.circle_filled(p, 9.0 * z, glow.gamma_multiply(0.18 * fade));
+            painter.circle_filled(p, 3.5 * z, glow.gamma_multiply(0.95 * fade));
+        }
+    }
+
+    // Welle, die sich beim Ankommen um den Fokus ausbreitet
+    if fx.ripple && (0.0..RIPPLE).contains(&arrived) {
+        if let Some(c) = focus.and_then(|f| centers.get(&f)) {
+            let accent = focus.map(|f| color_of(map, theme, f)).unwrap_or(theme.root);
+            for (delay, width) in [(0.0, 3.0_f32), (0.25, 2.0)] {
+                let a = ((arrived - delay) / (RIPPLE - delay)).clamp(0.0, 1.0);
+                if a > 0.0 {
+                    let radius = (40.0 + 380.0 * ease_out_cubic(a)) * cam.zoom.clamp(0.5, 1.5);
+                    painter.circle_stroke(
+                        *c,
+                        radius,
+                        Stroke::new(width, accent.gamma_multiply(0.55 * (1.0 - a))),
+                    );
+                }
+            }
+        }
     }
 
     // Knoten; angeklickte Checkbox wird nach dem Zeichnen umgeschaltet
-    let mut ticked: Option<u64> = None;
+    let mut ticked: Option<(u64, Pos2)> = None;
+    let breathe = 0.75 + 0.25 * (now * 2.2).sin() as f32;
     for d in &drawn {
         let style = node_style(map, theme, d.id);
         let pop = if d.grow < 1.0 {
@@ -379,6 +526,22 @@ pub fn show(
         let scale = cam.zoom * pop;
         let size = sizes.get(&d.id).copied().unwrap_or(Vec2::splat(60.0)) * scale;
         let rect = Rect::from_center_size(d.center, size);
+
+        // Glühen um den Zweig im Scheinwerfer
+        if fx.glow && in_spotlight.contains(&d.id) {
+            let radius = rect.height() / 2.0;
+            for k in 1..=4 {
+                let grow = k as f32 * 5.0 * scale;
+                painter.rect_filled(
+                    rect.expand(grow),
+                    radius + grow,
+                    style
+                        .accent
+                        .gamma_multiply(0.055 * breathe * spot * d.alpha),
+                );
+            }
+        }
+
         let mut p = painter.clone();
         p.set_opacity(d.alpha);
         paint_node(&p, theme, rect, &style, scale, false, false);
@@ -394,7 +557,7 @@ pub fn show(
                     )
                     .on_hover_cursor(egui::CursorIcon::PointingHand);
                 if click.clicked() {
-                    ticked = Some(d.id);
+                    ticked = Some((d.id, r.center()));
                 }
             }
         }
@@ -408,9 +571,8 @@ pub fn show(
 
     // Untertitel mit der Notiz, blendet nach der Ankunft ein
     let note = note_of(map, all[doc.tour.stop]);
-    let has_note = !note.is_empty();
     let fade = (((now - doc.tour.started) - FLIGHT * 0.6) / 0.4).clamp(0.0, 1.0) as f32;
-    if has_note && fade > 0.0 {
+    if !note.is_empty() && fade > 0.0 {
         let width = (area.width() - 160.0).min(900.0);
         let mut p = painter.clone();
         p.set_opacity(fade);
@@ -443,12 +605,18 @@ pub fn show(
         p.galley(card.min + Vec2::new(24.0, 14.0), galley, theme.text);
     }
 
-    // Station oben links, Hinweise unten
-    let label = match all[doc.tour.stop] {
+    // Station oben links (beim Aufdecken mit Ebene)
+    let mut label = match all[doc.tour.stop] {
         Stop::Overview => "Start".to_string(),
         Stop::Finale => "End".to_string(),
         Stop::Branch(_) => format!("{} / {}", doc.tour.stop, last - 1),
     };
+    if let (true, Stop::Branch(b)) = (stepwise, all[doc.tour.stop]) {
+        let max = max_level(map, b);
+        if max > 0 {
+            label.push_str(&format!("   ·   level {} of {max}", doc.tour.level));
+        }
+    }
     painter.text(
         area.left_top() + Vec2::new(24.0, 22.0),
         Align2::LEFT_TOP,
@@ -466,7 +634,7 @@ pub fn show(
         doc.strip_cursor = doc.tour.stop;
     }
 
-    // Stationen als Schnellwahl, Laserpointer obenauf
+    // Stationen als Schnellwahl, Konfetti und Laserpointer obenauf
     let items: Vec<StripItem> = all
         .iter()
         .enumerate()
@@ -493,23 +661,22 @@ pub fn show(
         doc.strip,
     );
     if let Some(i) = picked {
-        let cam = camera(&doc.tour, to, now, area, fx.drift);
-        let tour = &mut doc.tour;
-        if i != tour.stop {
-            tour.from = cam;
-            tour.backwards = i < tour.stop;
-            tour.prev_stop = tour.stop;
-            tour.stop = i;
-            tour.started = now;
+        if i != doc.tour.stop {
+            let backwards = i < doc.tour.stop;
+            fly_to(&mut doc.tour, i, 0, backwards, cam, now);
         }
         doc.strip = false;
     }
+    confetti_draw(&ctx, now);
     laser(ui, nav.laser, now);
 
-    if let Some(id) = ticked {
+    if let Some((id, pos)) = ticked {
         doc.checkpoint();
         if let Some(n) = doc.map.get_mut(id) {
             n.task = n.task.map(|done| !done);
+            if n.task == Some(true) && fx.confetti {
+                confetti_burst(&ctx, pos, &theme.branches, now);
+            }
         }
     }
 
@@ -528,40 +695,63 @@ mod tests {
         (map, a, b, a1)
     }
 
+    fn at(stop: usize, level: usize, backwards: bool) -> TourState {
+        TourState {
+            stop,
+            level,
+            backwards,
+            started: 0.0,
+            ..TourState::default()
+        }
+    }
+
     #[test]
     fn stops_are_overview_branches_finale() {
         let (map, a, b, _) = sample();
         let all = stops(&map);
-        assert!(
-            all == vec![
+        assert_eq!(
+            all,
+            vec![
                 Stop::Overview,
                 Stop::Branch(a),
                 Stop::Branch(b),
                 Stop::Finale
             ]
         );
-        assert!(stops(&MindMap::new("Alone")) == vec![Stop::Overview]);
+        assert_eq!(stops(&MindMap::new("Alone")), vec![Stop::Overview]);
     }
 
     #[test]
     fn children_appear_only_from_their_branch_on() {
         let (map, _, _, a1) = sample();
         let all = stops(&map);
-        let at = |stop: usize, backwards: bool| TourState {
-            stop,
-            backwards,
-            started: 0.0,
-            ..TourState::default()
-        };
         // Übersicht: Unterpunkt von A noch verborgen
-        assert_eq!(growth(&map, &all, &at(0, false), a1, 100.0), 0.0);
+        assert_eq!(growth(&map, &all, &at(0, 0, false), a1, 100.0, false), 0.0);
         // An A: wächst nach der Verzögerung heraus
-        assert_eq!(growth(&map, &all, &at(1, false), a1, 0.0), 0.0);
-        assert_eq!(growth(&map, &all, &at(1, false), a1, 100.0), 1.0);
+        assert_eq!(growth(&map, &all, &at(1, 0, false), a1, 0.0, false), 0.0);
+        assert_eq!(growth(&map, &all, &at(1, 0, false), a1, 100.0, false), 1.0);
         // Rückwärts zu A geblättert: sofort ganz da
-        assert_eq!(growth(&map, &all, &at(1, true), a1, 0.0), 1.0);
+        assert_eq!(growth(&map, &all, &at(1, 0, true), a1, 0.0, false), 1.0);
         // Hauptzweige und Mitte sind immer sichtbar
-        assert_eq!(growth(&map, &all, &at(0, false), 0, 0.0), 1.0);
+        assert_eq!(growth(&map, &all, &at(0, 0, false), 0, 0.0, false), 1.0);
+    }
+
+    #[test]
+    fn levels_are_revealed_one_by_one() {
+        let (mut map, a, _, a1) = sample();
+        let a1x = map.add_child_text(a1, "A1x");
+        let all = stops(&map);
+        assert_eq!(max_level(&map, a), 2);
+        // Ebene 0: nur der Zweig selbst
+        assert_eq!(growth(&map, &all, &at(1, 0, false), a1, 100.0, true), 0.0);
+        // Ebene 1: Kinder ja, Enkel nein
+        assert_eq!(growth(&map, &all, &at(1, 1, false), a1, 100.0, true), 1.0);
+        assert_eq!(growth(&map, &all, &at(1, 1, false), a1x, 100.0, true), 0.0);
+        // Ebene 2: alles
+        assert_eq!(growth(&map, &all, &at(1, 2, false), a1x, 100.0, true), 1.0);
+        // Kamera rahmt die sichtbaren Ebenen plus die nächste
+        assert_eq!(framed(&map, Stop::Branch(a), Some(0)).len(), 2);
+        assert_eq!(framed(&map, Stop::Branch(a), Some(1)).len(), 3);
     }
 
     #[test]
@@ -575,10 +765,13 @@ mod tests {
             center: Vec2::new(3000.0, 0.0),
             zoom: 1.0,
         };
-        assert_eq!(fly(from, to, 0.0, area).center, from.center);
-        assert_eq!(fly(from, to, 1.0, area).center, to.center);
-        assert!((fly(from, to, 1.0, area).zoom - 1.0).abs() < 1e-4);
+        assert_eq!(fly(from, to, 0.0, area, false).center, from.center);
+        assert_eq!(fly(from, to, 1.0, area, false).center, to.center);
+        assert!((fly(from, to, 1.0, area, false).zoom - 1.0).abs() < 1e-4);
         // In der Mitte des Flugs ist die Kamera herausgezoomt (Bogen)
-        assert!(fly(from, to, 0.5, area).zoom < 0.8);
+        assert!(fly(from, to, 0.5, area, false).zoom < 0.8);
+        // Mit Federn: kurz vor dem Ziel etwas näher, am Ziel wieder genau
+        assert!(fly(from, from, 0.85, area, true).zoom > 1.0);
+        assert!((fly(from, from, 1.0, area, true).zoom - 1.0).abs() < 1e-4);
     }
 }
