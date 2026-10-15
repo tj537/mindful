@@ -31,7 +31,7 @@ Huge balls of hot gas whose cores fuse hydrogen into helium.
   A teaspoon of their matter weighs about a billion tonnes.
 - The nearest star: Proxima Centauri, 4.24 light-years away
 
-## Galaxies
+## Galaxies <!-- matrix -->
 
 Stars don't live alone – they gather in vast star systems.
 
@@ -57,7 +57,7 @@ Regions where gravity is so strong that not even light can escape.
   - 2019: M87*
   - 2022: Sagittarius A*
 
-## The Big Bang and Beyond
+## The Big Bang and Beyond <!-- number -->
 
 The universe had a beginning – and it is still expanding today.
 
@@ -70,7 +70,7 @@ The universe had a beginning – and it is still expanding today.
   - 27 % dark matter
   - 68 % dark energy
 
-## Spaceflight
+## Spaceflight <!-- timeline -->
 
 Within a few decades, from the first satellite to a view of the early universe.
 

@@ -9,6 +9,56 @@ const ROW: f32 = 54.0;
 /// Waagerechter Abstand zwischen Eltern- und Kindknoten beim Anordnen
 const GAP_X: f32 = 60.0;
 
+/// Darstellung einer Folie (für Hauptzweige). Ohne Layout: Aufzählung.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum SlideLayout {
+    Timeline,
+    Cycle,
+    Pyramid,
+    Funnel,
+    Compare,
+    Matrix,
+    Venn,
+    Number,
+    Quote,
+}
+
+impl SlideLayout {
+    pub const ALL: [SlideLayout; 9] = [
+        SlideLayout::Timeline,
+        SlideLayout::Cycle,
+        SlideLayout::Pyramid,
+        SlideLayout::Funnel,
+        SlideLayout::Compare,
+        SlideLayout::Matrix,
+        SlideLayout::Venn,
+        SlideLayout::Number,
+        SlideLayout::Quote,
+    ];
+
+    /// Name im Markdown-Kommentar, z. B. `<!-- timeline -->`
+    pub fn name(self) -> &'static str {
+        match self {
+            SlideLayout::Timeline => "timeline",
+            SlideLayout::Cycle => "cycle",
+            SlideLayout::Pyramid => "pyramid",
+            SlideLayout::Funnel => "funnel",
+            SlideLayout::Compare => "compare",
+            SlideLayout::Matrix => "matrix",
+            SlideLayout::Venn => "venn",
+            SlideLayout::Number => "number",
+            SlideLayout::Quote => "quote",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|l| l.name().eq_ignore_ascii_case(name.trim()))
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Node {
     pub id: u64,
@@ -27,6 +77,9 @@ pub struct Node {
     /// Checkbox: `None` = keine, `Some(false)` = offen, `Some(true)` = erledigt
     #[serde(default)]
     pub task: Option<bool>,
+    /// Folien-Layout (nur bei Hauptzweigen wirksam)
+    #[serde(default)]
+    pub layout: Option<SlideLayout>,
 }
 
 impl Node {
@@ -40,6 +93,7 @@ impl Node {
             collapsed: false,
             color: None,
             task: None,
+            layout: None,
         }
     }
 }
@@ -63,6 +117,7 @@ pub struct OutlineItem {
     pub text: String,
     pub note: String,
     pub task: Option<bool>,
+    pub layout: Option<SlideLayout>,
 }
 
 impl MindMap {
@@ -405,7 +460,12 @@ impl MindMap {
         out.push_str(&format!("# {}{}\n", task_box(root.task), root.text));
         push_note(&root.note, None, &mut out);
         for branch in self.children(root.id) {
-            out.push_str(&format!("\n## {}{}\n", task_box(branch.task), branch.text));
+            out.push_str(&format!(
+                "\n## {}{}{}\n",
+                task_box(branch.task),
+                branch.text,
+                layout_comment(branch.layout)
+            ));
             push_note(&branch.note, None, &mut out);
             if self.has_children(branch.id) {
                 out.push('\n');
@@ -444,6 +504,7 @@ impl MindMap {
             if let Some(n) = self.get_mut(id) {
                 n.note = item.note.clone();
                 n.task = item.task;
+                n.layout = item.layout;
             }
             if stack.is_empty() {
                 top.push(id);
@@ -534,6 +595,7 @@ impl MindMap {
                         text: item.text.clone(),
                         note: item.note.clone(),
                         task: item.task,
+                        layout: item.layout,
                         parent: Some(parent),
                         ..n
                     });
@@ -544,6 +606,7 @@ impl MindMap {
                     if let Some(n) = self.get_mut(id) {
                         n.note = item.note.clone();
                         n.task = item.task;
+                        n.layout = item.layout;
                     }
                     id
                 }
@@ -582,6 +645,25 @@ fn task_box(task: Option<bool>) -> &'static str {
     }
 }
 
+/// Markdown-Kommentar für ein Folien-Layout
+fn layout_comment(layout: Option<SlideLayout>) -> String {
+    layout
+        .map(|l| format!(" <!-- {} -->", l.name()))
+        .unwrap_or_default()
+}
+
+/// Trennt einen Layout-Kommentar am Zeilenende (`<!-- timeline -->`) vom Text
+fn split_layout(text: &str) -> (Option<SlideLayout>, String) {
+    let t = text.trim_end();
+    if let (Some(start), true) = (t.rfind("<!--"), t.ends_with("-->")) {
+        let name = &t[start + 4..t.len() - 3];
+        if let Some(layout) = SlideLayout::from_name(name) {
+            return (Some(layout), t[..start].trim_end().to_string());
+        }
+    }
+    (None, t.to_string())
+}
+
 /// Trennt eine Checkbox (`[ ]`, `[x]`) vom Text
 fn split_task(text: &str) -> (Option<bool>, String) {
     let t = text.trim();
@@ -596,7 +678,7 @@ fn split_task(text: &str) -> (Option<bool>, String) {
 }
 
 enum Line {
-    Heading(usize, String, Option<bool>),
+    Heading(usize, String, Option<bool>, Option<SlideLayout>),
     Bullet(usize, String, Option<bool>),
     Plain(usize, String),
     Blank,
@@ -609,8 +691,9 @@ fn classify(line: &str) -> Line {
     }
     let hashes = trimmed.chars().take_while(|&c| c == '#').count();
     if hashes > 0 && trimmed[hashes..].starts_with(' ') {
-        let (task, text) = split_task(&trimmed[hashes..]);
-        return Line::Heading(hashes, text, task);
+        let (layout, rest) = split_layout(&trimmed[hashes..]);
+        let (task, text) = split_task(&rest);
+        return Line::Heading(hashes, text, task, layout);
     }
     let indent: usize = line
         .chars()
@@ -663,6 +746,7 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
         text,
         note: String::new(),
         task,
+        layout: None,
     };
     let mut items: Vec<OutlineItem> = Vec::new();
     let mut heading_level = 0;
@@ -670,9 +754,12 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
     for line in lines {
         let blank = matches!(line, Line::Blank);
         match line {
-            Line::Heading(h, t, task) => {
+            Line::Heading(h, t, task, layout) => {
                 heading_level = h;
-                items.push(item(h - 1, t, task));
+                items.push(OutlineItem {
+                    layout,
+                    ..item(h - 1, t, task)
+                });
             }
             Line::Bullet(indent, t, task) => {
                 items.push(item(heading_level + indent / unit, t, task))
@@ -732,6 +819,19 @@ mod tests {
         assert_eq!(map.task_progress(find("Charger").id), None);
         // [X] wird beim Schreiben zu [x]
         assert_eq!(map.to_markdown(), md.replace("[X]", "[x]"));
+    }
+
+    #[test]
+    fn slide_layouts_in_markdown() {
+        let md = "# Space\n\n## Spaceflight <!-- timeline -->\n\n- 1957\n- 1969\n\n## Galaxies\n";
+        let map = MindMap::from_outline(md).unwrap();
+        let find = |t: &str| map.nodes.iter().find(|n| n.text == t).unwrap();
+        assert_eq!(find("Spaceflight").layout, Some(SlideLayout::Timeline));
+        assert_eq!(find("Galaxies").layout, None);
+        assert_eq!(map.to_markdown(), md);
+        // Unbekannte Kommentare bleiben Teil des Textes
+        let map = MindMap::from_outline("# A\n\n## B <!-- hello -->\n").unwrap();
+        assert!(map.nodes.iter().any(|n| n.text == "B <!-- hello -->"));
     }
 
     #[test]
@@ -826,6 +926,10 @@ mod example_tests {
         let map = MindMap::from_outline(md).unwrap();
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "The Universe");
+        // Einige Folien zeigen Diagramme
+        let layout = |t: &str| map.nodes.iter().find(|n| n.text == t).unwrap().layout;
+        assert_eq!(layout("Spaceflight"), Some(SlideLayout::Timeline));
+        assert_eq!(layout("Galaxies"), Some(SlideLayout::Matrix));
         // Die Checkliste: 2 von 6 erledigt
         let checklist = map.children(root).last().unwrap();
         assert_eq!(map.task_progress(checklist.id), Some((2, 6)));

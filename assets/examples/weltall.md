@@ -31,7 +31,7 @@ Riesige Kugeln aus heißem Gas, in deren Kern Wasserstoff zu Helium verschmilzt.
   Ein Teelöffel ihrer Materie wiegt rund eine Milliarde Tonnen.
 - Der nächste Stern: Proxima Centauri, 4,24 Lichtjahre entfernt
 
-## Galaxien
+## Galaxien <!-- matrix -->
 
 Sterne leben nicht allein, sondern in riesigen Sternsystemen.
 
@@ -57,7 +57,7 @@ Regionen, in denen die Schwerkraft so stark ist, dass nicht einmal Licht entkomm
   - 2019: M87*
   - 2022: Sagittarius A*
 
-## Urknall und Entwicklung
+## Urknall und Entwicklung <!-- number -->
 
 Das Universum hat einen Anfang – und es dehnt sich bis heute aus.
 
@@ -70,7 +70,7 @@ Das Universum hat einen Anfang – und es dehnt sich bis heute aus.
   - 27 % Dunkle Materie
   - 68 % Dunkle Energie
 
-## Raumfahrt
+## Raumfahrt <!-- timeline -->
 
 In wenigen Jahrzehnten vom ersten Satelliten bis zum Blick in die Frühzeit des Alls.
 

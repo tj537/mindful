@@ -4,8 +4,9 @@
 //! Effekt-Einstellungen, Tastatur, Buttons, Folienstreifen, animierte
 //! Hintergründe, Laserpointer und Animationskurven.
 
+use crate::diagrams::{draw as draw_diagram, layout_menu, Item};
 use crate::document::Document;
-use crate::model::MindMap;
+use crate::model::{MindMap, SlideLayout};
 use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
@@ -799,8 +800,10 @@ struct Slide {
     bullets: Vec<Bullet>,
     color: Color32,
     is_title: bool,
-    /// Hauptzweig der Folie (für den Fortschritt der Checkboxen)
+    /// Hauptzweig der Folie (für Checkbox-Fortschritt und Layout-Wahl)
     branch: Option<u64>,
+    /// Diagramm statt Aufzählung
+    layout: Option<SlideLayout>,
 }
 
 impl Slide {
@@ -808,10 +811,33 @@ impl Slide {
     /// Die Titelfolie wird nicht schrittweise aufgebaut.
     fn groups(&self) -> usize {
         if self.is_title {
-            0
-        } else {
-            self.bullets.iter().filter(|b| b.0 == 0).count()
+            return 0;
         }
+        let top = self.bullets.iter().filter(|b| b.0 == 0).count();
+        match self.layout {
+            Some(layout) => layout.steps(top),
+            None => top,
+        }
+    }
+
+    /// Punkte der obersten Ebene mit ihren direkten Unterpunkten (für Diagramme)
+    fn items(&self) -> Vec<Item> {
+        let mut out: Vec<Item> = Vec::new();
+        for (depth, text, ..) in &self.bullets {
+            match depth {
+                0 => out.push(Item {
+                    text: text.clone(),
+                    children: Vec::new(),
+                }),
+                1 => {
+                    if let Some(last) = out.last_mut() {
+                        last.children.push(text.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
     }
 }
 
@@ -838,6 +864,7 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
         color: theme.root,
         is_title: true,
         branch: None,
+        layout: None,
     }];
     for branch in map.children(root.id) {
         let color = color_of(map, theme, branch.id);
@@ -850,6 +877,7 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
             color,
             is_title: false,
             branch: Some(branch.id),
+            layout: branch.layout,
         });
     }
     out
@@ -995,6 +1023,16 @@ pub fn show(
         painter.rect_filled(accent_bar, 4.0 * s, slide.color.gamma_multiply(appear));
     }
 
+    // Rechtsklick auf die Folie: Layout wählen (vor dem Inhalt, damit Checkboxen Vorrang haben)
+    let mut new_layout: Option<Option<SlideLayout>> = None;
+    if slide.branch.is_some() {
+        ui.interact(card, ui.id().with("slide_card"), Sense::click())
+            .context_menu(|ui| {
+                ui.label(RichText::new("Slide layout").strong());
+                new_layout = layout_menu(ui, slide.layout);
+            });
+    }
+
     let (corner_event, strip_clicked) =
         corner_buttons(ui, area, "End presentation (Esc)", fx, false);
     if corner_event.is_some() {
@@ -1134,102 +1172,148 @@ pub fn show(
                 ui.add_space(10.0 * s);
             }
 
-            // Stichpunkte: noch verdeckte nehmen schon ihren Platz ein, damit nichts
-            // verrutscht. Jede Gruppe erscheint mit dem gewählten Effekt; beim
-            // schrittweisen Aufbau werden ältere Gruppen blasser.
-            let building = build_bullets && slide.groups() > 0;
-            let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
-            let mut group = 0;
-            for (i, (depth, text, color, task, node)) in slide.bullets.iter().enumerate() {
-                if *depth == 0 && i > 0 {
-                    group += 1;
-                }
-                let start = if building {
-                    if group >= doc.build {
-                        f64::INFINITY
-                    } else if group + 1 == doc.build {
-                        doc.build_time
-                    } else {
-                        f64::NEG_INFINITY
-                    }
-                } else {
-                    doc.slide_time + 0.35 + group as f64 * 0.12
-                };
-                let duration = match fx.bullets {
-                    BulletFx::Typewriter => (text.chars().count() as f64 * 0.025).max(0.35),
-                    _ => 0.35,
-                };
-                let raw = progress(now, start, duration);
-                animating |= raw < 1.0 && start.is_finite();
-                let e = ease_out_cubic(raw);
-                let dim = if building && group + 1 < doc.build {
-                    0.4
-                } else {
-                    1.0
-                };
-                let base_size = (30.0 - *depth as f32 * 4.0) * s * shrink;
-                let (alpha, shift, size, shown) = match fx.bullets {
-                    BulletFx::SlideIn => (e, (1.0 - e) * 36.0 * s, base_size, text.clone()),
-                    BulletFx::Fade => (e, 0.0, base_size, text.clone()),
-                    BulletFx::Pop => (
-                        e,
-                        0.0,
-                        base_size * (0.55 + 0.45 * ease_out_back(raw)),
-                        text.clone(),
-                    ),
-                    BulletFx::Typewriter => {
-                        let n = (text.chars().count() as f32 * raw).ceil() as usize;
-                        let alpha = if raw > 0.0 { 1.0 } else { 0.0 };
-                        (alpha, 0.0, base_size, text.chars().take(n).collect())
-                    }
-                };
-                ui.scope(|ui| {
-                    ui.multiply_opacity(alpha * dim);
-                    ui.horizontal_top(|ui| {
-                        ui.add_space(*depth as f32 * 40.0 * s + shift);
-                        let (dot, _) = ui.allocate_exact_size(
-                            Vec2::new(base_size * 0.8, base_size * 1.2),
-                            Sense::hover(),
-                        );
-                        let mut label = RichText::new(shown).size(size).color(theme.text);
-                        if let Some(done) = *task {
-                            // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen.
-                            // Sichtbare Checkboxen lassen sich anklicken.
-                            let r = Rect::from_center_size(dot.center(), Vec2::splat(size * 0.62));
-                            paint_checkbox(
-                                ui.painter(),
-                                r,
-                                done,
-                                *color,
-                                theme.text.gamma_multiply(0.7),
-                            );
-                            if alpha > 0.0 {
-                                let click = ui
-                                    .interact(
-                                        r.expand(6.0 * s),
-                                        ui.id().with(("slide_task", node)),
-                                        Sense::click(),
-                                    )
-                                    .on_hover_cursor(CursorIcon::PointingHand);
-                                if click.clicked() {
-                                    ticked = Some((*node, r.center()));
-                                }
-                            }
-                            if done {
-                                label = label.strikethrough().color(theme.text.gamma_multiply(0.5));
-                            }
+            if let Some(layout) = slide.layout {
+                // Diagramm statt Aufzählung, baut sich genauso schrittweise auf
+                let building = build_bullets && slide.groups() > 0;
+                let reveal = |g: usize| {
+                    let start = if building {
+                        if g >= doc.build {
+                            f64::INFINITY
+                        } else if g + 1 == doc.build {
+                            doc.build_time
                         } else {
-                            let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
-                            ui.painter().circle_filled(dot.center(), radius, *color);
+                            f64::NEG_INFINITY
                         }
-                        ui.add(egui::Label::new(label).wrap());
+                    } else {
+                        doc.slide_time + 0.4 + g as f64 * 0.18
+                    };
+                    progress(now, start, 0.55)
+                };
+                let count_up = progress(now, doc.slide_time + 0.3, 1.4);
+                animating |= now - doc.slide_time.max(doc.build_time) < 3.0;
+                let rect = ui.available_rect_before_wrap();
+                ui.allocate_rect(rect, Sense::hover());
+                draw_diagram(
+                    ui.painter(),
+                    rect.shrink2(Vec2::new(0.0, 6.0 * s)),
+                    layout,
+                    &slide.items(),
+                    &slide.note,
+                    theme,
+                    slide.color,
+                    s,
+                    &reveal,
+                    count_up,
+                );
+            } else {
+                // Stichpunkte: noch verdeckte nehmen schon ihren Platz ein, damit nichts
+                // verrutscht. Jede Gruppe erscheint mit dem gewählten Effekt; beim
+                // schrittweisen Aufbau werden ältere Gruppen blasser.
+                let building = build_bullets && slide.groups() > 0;
+                let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
+                let mut group = 0;
+                for (i, (depth, text, color, task, node)) in slide.bullets.iter().enumerate() {
+                    if *depth == 0 && i > 0 {
+                        group += 1;
+                    }
+                    let start = if building {
+                        if group >= doc.build {
+                            f64::INFINITY
+                        } else if group + 1 == doc.build {
+                            doc.build_time
+                        } else {
+                            f64::NEG_INFINITY
+                        }
+                    } else {
+                        doc.slide_time + 0.35 + group as f64 * 0.12
+                    };
+                    let duration = match fx.bullets {
+                        BulletFx::Typewriter => (text.chars().count() as f64 * 0.025).max(0.35),
+                        _ => 0.35,
+                    };
+                    let raw = progress(now, start, duration);
+                    animating |= raw < 1.0 && start.is_finite();
+                    let e = ease_out_cubic(raw);
+                    let dim = if building && group + 1 < doc.build {
+                        0.4
+                    } else {
+                        1.0
+                    };
+                    let base_size = (30.0 - *depth as f32 * 4.0) * s * shrink;
+                    let (alpha, shift, size, shown) = match fx.bullets {
+                        BulletFx::SlideIn => (e, (1.0 - e) * 36.0 * s, base_size, text.clone()),
+                        BulletFx::Fade => (e, 0.0, base_size, text.clone()),
+                        BulletFx::Pop => (
+                            e,
+                            0.0,
+                            base_size * (0.55 + 0.45 * ease_out_back(raw)),
+                            text.clone(),
+                        ),
+                        BulletFx::Typewriter => {
+                            let n = (text.chars().count() as f32 * raw).ceil() as usize;
+                            let alpha = if raw > 0.0 { 1.0 } else { 0.0 };
+                            (alpha, 0.0, base_size, text.chars().take(n).collect())
+                        }
+                    };
+                    ui.scope(|ui| {
+                        ui.multiply_opacity(alpha * dim);
+                        ui.horizontal_top(|ui| {
+                            ui.add_space(*depth as f32 * 40.0 * s + shift);
+                            let (dot, _) = ui.allocate_exact_size(
+                                Vec2::new(base_size * 0.8, base_size * 1.2),
+                                Sense::hover(),
+                            );
+                            let mut label = RichText::new(shown).size(size).color(theme.text);
+                            if let Some(done) = *task {
+                                // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen.
+                                // Sichtbare Checkboxen lassen sich anklicken.
+                                let r =
+                                    Rect::from_center_size(dot.center(), Vec2::splat(size * 0.62));
+                                paint_checkbox(
+                                    ui.painter(),
+                                    r,
+                                    done,
+                                    *color,
+                                    theme.text.gamma_multiply(0.7),
+                                );
+                                if alpha > 0.0 {
+                                    let click = ui
+                                        .interact(
+                                            r.expand(6.0 * s),
+                                            ui.id().with(("slide_task", node)),
+                                            Sense::click(),
+                                        )
+                                        .on_hover_cursor(CursorIcon::PointingHand);
+                                    if click.clicked() {
+                                        ticked = Some((*node, r.center()));
+                                    }
+                                }
+                                if done {
+                                    label =
+                                        label.strikethrough().color(theme.text.gamma_multiply(0.5));
+                                }
+                            } else {
+                                let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
+                                ui.painter().circle_filled(dot.center(), radius, *color);
+                            }
+                            ui.add(egui::Label::new(label).wrap());
+                        });
                     });
-                });
+                }
             }
         }
     }
     if animating {
         ctx.request_repaint();
+    }
+    if let (Some(layout), Some(branch)) = (new_layout, slide.branch) {
+        doc.checkpoint();
+        if let Some(n) = doc.map.get_mut(branch) {
+            n.layout = layout;
+        }
+        // Neues Layout gleich animiert zeigen
+        doc.build = 0;
+        doc.slide_time = now;
     }
     if let Some((id, pos)) = ticked {
         doc.checkpoint();

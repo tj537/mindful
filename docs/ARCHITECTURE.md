@@ -327,6 +327,25 @@ The title rises and fades in, the accent line draws itself and the chips on the 
 
 `present.rs` also holds the parts shared with the tour: `Effects` (with `migrate()` for older saved settings – since version 1, *Fade* is the default transition), `read_nav()` and `strip_keys()` (keys), `corner_buttons()`, `backdrop()`, `filmstrip()`, `laser()` and the easing curves.
 
+## Slide layouts (`diagrams.rs`)
+
+A main branch can have a `layout` (`SlideLayout`). Its slide then shows a diagram instead of a bullet list, built from the same data: every top-level bullet becomes an item, its direct children become sub-text.
+
+| Layout | Drawing |
+|---|---|
+| `timeline` | numbered circles on a line that fills up step by step, text below |
+| `cycle` | rounded boxes on an ellipse; arrows follow the ellipse from where it leaves one box to where it enters the next |
+| `pyramid` / `funnel` | stacked trapezoids, narrow at the top or the bottom; children beside each level |
+| `compare` | up to four columns with a colored header and a list below |
+| `matrix` | 2×2 grid of tinted cards |
+| `venn` | two or three overlapping circles; a further item becomes a caption below (what they share) |
+| `number` | the first number in the first item, very large, counting up (`split_number`, `format_like` keep decimals and thousands separators of the original), further items as small fact cards |
+| `quote` | the first item in italics with a large quotation mark, its first child or the second item as author |
+
+`Slide::groups()` asks `SlideLayout::steps()` how many reveal steps a layout has, so diagrams build up exactly like bullet points (`reveal(i)` is the appear progress of item *i*). Choosing a layout: right-click the slide while presenting, right-click a main branch in the mind map (`Action::SetLayout`), or write `<!-- name -->` after the `##` heading – `split_layout()` reads it, `to_markdown()` writes it back.
+
+**Checking how slides look:** `snapshot.rs` (tests only) runs egui without a window and rasterizes its triangles in software into PNG files. `cargo test --release render_slides -- --ignored` renders every slide of the example, each with a different layout, into `target/snapshots/`.
+
 ## Camera tour (`tour.rs`)
 
 The tour presents directly on the mind map with its own camera (`Camera { center, zoom }` in world coordinates), independent of the editing view.
@@ -498,6 +517,9 @@ cargo test
 | `paste_subtree_gets_new_ids` | pasting assigns new IDs |
 | `auto_layout_puts_branches_left_and_right` | auto layout distributes the branches |
 | `collapse_hides_descendants` | collapsing and expanding |
+| `slide_layouts_in_markdown` | layout comments are read and written back |
+| `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
+| `render_slides` (ignored, run on demand) | renders every slide to PNG for a visual check |
 | `checkboxes_round_trip_and_progress` | checkboxes survive Markdown and progress is counted |
 | `templates_parse_and_round_trip` | every template parses and comes back unchanged |
 | `old_settings_switch_to_fade_once` | older saved effect settings switch to *Fade* and the starfield once |

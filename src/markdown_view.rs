@@ -58,7 +58,15 @@ fn highlight(text: &str, theme: &Theme) -> LayoutJob {
             };
             let split = indent + hashes + 1;
             job.append(&line[..split], 0.0, fmt(size, marker.gamma_multiply(0.75)));
-            job.append(&line[split..], 0.0, fmt(size, theme.text));
+            // Layout-Kommentar (`<!-- timeline -->`) gedimmt
+            let rest = &line[split..];
+            match rest.find("<!--") {
+                Some(c) => {
+                    job.append(&rest[..c], 0.0, fmt(size, theme.text));
+                    job.append(&rest[c..], 0.0, fmt(BODY, theme.grid.gamma_multiply(1.6)));
+                }
+                None => job.append(rest, 0.0, fmt(size, theme.text)),
+            }
         } else if let Some(len) = bullet_len(trimmed) {
             let split = indent + len;
             // Erledigte Aufgaben blasser
@@ -165,6 +173,13 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
             ui.add(
                 egui::Label::new(RichText::new(branch.text.as_str()).size(19.0).strong()).wrap(),
             );
+            if let Some(layout) = branch.layout {
+                ui.label(
+                    RichText::new(format!("{} {}", layout.icon(), layout.label()))
+                        .small()
+                        .color(color),
+                );
+            }
         });
         note(ui, &branch.note, 12.0);
         bullets(ui, map, branch.id, 0, color);

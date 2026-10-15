@@ -35,6 +35,7 @@ Also:
 - Several mind maps in tabs. Everything is restored on the next start, including unsaved changes.
 - Save and open as `.mindmap` files, import Markdown and plain-text outlines
 - Export as PNG image, SVG graphic or Markdown
+- **Slide layouts** like SmartArt, made from the same bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (counts up) and quote – chosen by right-clicking a slide or main branch, or as `<!-- timeline -->` after a heading in Markdown
 - **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; they appear on slides, in the tour and in exports, and can be ticked off right during a presentation
 - **AI prompt**: describe topic, language, details and scope, copy a ready-made prompt for ChatGPT, Claude & co., and paste the AI's Markdown answer into a new tab – it becomes a mind map instantly
 - **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
@@ -159,6 +160,7 @@ The first build downloads all libraries and takes a few minutes. After that it t
 | `cargo test` | run all tests |
 | `cargo clippy` | check the code for common mistakes and style issues |
 | `cargo fmt` | format the code consistently |
+| `cargo test --release render_slides -- --ignored` | render every slide of the example to `target/snapshots/*.png` to check how they look |
 | `cargo build --release` | build the optimized version → `target/release/mindful` (Windows: `mindful.exe`) |
 
 ---
@@ -291,9 +293,9 @@ Navigation is keyboard-only, so clicks never interfere with ticking checkboxes. 
 
 Note on the central topic (becomes the subtitle of the title slide).
 
-## Main branch
+## Main branch <!-- timeline -->
 
-Note on the branch (shown on the slide below the heading).
+Note on the branch (shown on the slide below the heading). The optional comment after the heading picks a slide layout: `timeline`, `cycle`, `pyramid`, `funnel`, `compare`, `matrix`, `venn`, `number` or `quote`.
 
 - Child
   Note on the child
@@ -315,6 +317,7 @@ mindful/
 │   ├── model.rs           mind map data, auto layout, reading and writing Markdown
 │   ├── markdown_view.rs   Markdown editor with highlighting and preview
 │   ├── present.rs         presentation mode (slides)
+│   ├── diagrams.rs        slide layouts: timeline, cycle, pyramid, matrix …
 │   ├── tour.rs            camera tour through the mind map
 │   ├── ai_prompt.rs       "AI prompt" form and the generated prompt
 │   ├── nodes.rs           how nodes look and are drawn (shared)

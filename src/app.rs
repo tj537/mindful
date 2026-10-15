@@ -1,7 +1,7 @@
 use crate::document::ViewAnim;
 use crate::document::{Document, Mode};
 use crate::export::{self, ExportNode};
-use crate::model::{parse_outline, Clip, MindMap, DEFAULT_TEXT};
+use crate::model::{parse_outline, Clip, MindMap, SlideLayout, DEFAULT_TEXT};
 use crate::nodes::{
     node_size, node_style, paint_label, paint_node, paint_task, NodeStyle, MIN_NODE, TASK_SPACE,
 };
@@ -167,6 +167,8 @@ enum Action {
     /// ⌘Enter: keine → offen → erledigt → offen
     CycleTask(u64),
     SetTask(u64, Option<bool>),
+    /// Folien-Layout eines Hauptzweigs
+    SetLayout(u64, Option<SlideLayout>),
     SetColor(u64, Option<usize>),
     Copy(u64),
     Cut(u64),
@@ -398,6 +400,19 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
         Action::EditNote(id),
         out,
     );
+    // Folien-Layout nur für Hauptzweige (jeder ist eine Folie)
+    if map.depth(id) == 1 {
+        let current = map.get(id).and_then(|n| n.layout);
+        let label = match current {
+            Some(layout) => l(layout.icon(), &format!("Slide layout: {}", layout.label())),
+            None => l(icon::PRESENTATION, "Slide layout"),
+        };
+        ui.menu_button(label, |ui| {
+            if let Some(choice) = crate::diagrams::layout_menu(ui, current) {
+                *out = Some(Action::SetLayout(id, choice));
+            }
+        });
+    }
     ui.menu_button(l(icon::PALETTE, "Color"), |ui| {
         ui.horizontal(|ui| {
             for (i, color) in theme.branches.iter().enumerate() {
@@ -1081,6 +1096,14 @@ impl MindMapApp {
             Action::Fit => {
                 doc.fit_pending = true;
                 doc.fit_smooth = true;
+            }
+            Action::SetLayout(id, layout) => {
+                if doc.map.get(id).is_some_and(|n| n.layout != layout) {
+                    doc.checkpoint();
+                    if let Some(n) = doc.map.get_mut(id) {
+                        n.layout = layout;
+                    }
+                }
             }
             Action::ToggleDone(id) | Action::CycleTask(id) | Action::SetTask(id, _) => {
                 let current = doc.map.get(id).and_then(|n| n.task);

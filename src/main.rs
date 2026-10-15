@@ -3,12 +3,15 @@
 
 mod ai_prompt;
 mod app;
+mod diagrams;
 mod document;
 mod export;
 mod markdown_view;
 mod model;
 mod nodes;
 mod present;
+#[cfg(test)]
+mod snapshot;
 mod theme;
 mod tour;
 
