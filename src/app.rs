@@ -1623,7 +1623,8 @@ impl MindMapApp {
                     .corner_radius(9.0)
                     .inner_margin(egui::Margin::same(3))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
+                        // Innen links nach rechts, sonst dreht das rechtsbündige Layout die Reihenfolge um
+                        ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             let modes = [
                                 (Mode::Markdown, icon::TEXT_ALIGN_LEFT, "Markdown"),
