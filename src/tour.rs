@@ -12,8 +12,8 @@ use crate::model::MindMap;
 use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task};
 use crate::present::{
     backdrop, color_of, confetti_burst, confetti_draw, corner_buttons, ease_in_out_cubic,
-    ease_out_back, ease_out_cubic, filmstrip, laser, read_nav, strip_keys, Backdrop, Effects,
-    Event, StripItem, StripKey,
+    ease_out_back, ease_out_cubic, filmstrip, laser, mouse_parallax, read_nav, strip_keys,
+    vignette, Backdrop, Effects, Event, StripItem, StripKey,
 };
 use crate::theme::Theme;
 use eframe::egui::{
@@ -399,8 +399,24 @@ pub fn show(
     let painter = ui.painter().clone();
     painter.rect_filled(area, 0.0, theme.background);
     let plain = fx.background == Backdrop::Plain;
+    // Kamerabewegung seit dem letzten Frame → Warp-Streifen beim schnellen Flug
+    let mut warp = Vec2::ZERO;
+    if let Some((prev, then)) = doc.tour.last_cam {
+        let dt = (now - then) as f32;
+        if fx.warp && dt > 0.0 && dt < 0.2 {
+            let velocity = (cam.center - prev.center) * cam.zoom / dt;
+            let zooming = (cam.zoom / prev.zoom).ln() / dt;
+            warp = (-velocity * 0.03 + Vec2::splat(zooming * 25.0))
+                .clamp(Vec2::splat(-90.0), Vec2::splat(90.0));
+        }
+    }
+    doc.tour.last_cam = Some((cam, now));
     if !plain {
-        backdrop(&painter, area, theme, fx.background, now, -cam.center * 0.6);
+        let mut parallax = -cam.center * 0.6;
+        if fx.mouse_parallax {
+            parallax += mouse_parallax(&ctx, area);
+        }
+        backdrop(&painter, area, theme, fx.background, now, parallax, warp);
     }
     let origin = to_screen(Vec2::ZERO);
     let mut spacing = 28.0 * cam.zoom;
@@ -523,21 +539,29 @@ pub fn show(
         } else {
             1.0
         };
-        let scale = cam.zoom * pop;
+        // Tiefenschärfe: was nicht im Scheinwerfer steht, rückt etwas zurück
+        let out_of_focus = !in_spotlight.is_empty() && !in_spotlight.contains(&d.id);
+        let depth = if fx.depth_of_field && out_of_focus {
+            1.0 - 0.12 * spot
+        } else {
+            1.0
+        };
+        let scale = cam.zoom * pop * depth;
         let size = sizes.get(&d.id).copied().unwrap_or(Vec2::splat(60.0)) * scale;
         let rect = Rect::from_center_size(d.center, size);
 
         // Glühen um den Zweig im Scheinwerfer
         if fx.glow && in_spotlight.contains(&d.id) {
+            // Viele feine Schichten statt weniger dicker: weicher Verlauf ohne Stufen
             let radius = rect.height() / 2.0;
-            for k in 1..=4 {
-                let grow = k as f32 * 5.0 * scale;
+            for k in 1..=12 {
+                let grow = k as f32 * 2.2 * scale;
                 painter.rect_filled(
                     rect.expand(grow),
                     radius + grow,
                     style
                         .accent
-                        .gamma_multiply(0.055 * breathe * spot * d.alpha),
+                        .gamma_multiply(0.022 * breathe * spot * d.alpha),
                 );
             }
         }
@@ -566,6 +590,25 @@ pub fn show(
             let text = map.get(d.id).map(|n| n.text.clone()).unwrap_or_default();
             let galley = p.layout_no_wrap(text, FontId::proportional(font), style.text);
             paint_label(&p, rect, galley, &style, task, scale);
+        }
+    }
+
+    // Funken, die um den aktuellen Zweig kreisen
+    if fx.orbit {
+        if let Some((f, c)) = focus.and_then(|f| centers.get(&f).map(|c| (f, *c))) {
+            let size = sizes.get(&f).copied().unwrap_or(Vec2::splat(60.0)) * cam.zoom;
+            let appear = (arrived / 0.6).clamp(0.0, 1.0);
+            let color = color_of(map, theme, f).lerp_to_gamma(Color32::WHITE, 0.5);
+            let margin = cam.zoom.clamp(0.6, 1.5);
+            for k in 0..3 {
+                let angle = now as f32 * 1.3 + k as f32 * std::f32::consts::TAU / 3.0;
+                let p = c + Vec2::new(
+                    angle.cos() * (size.x / 2.0 + 18.0 * margin),
+                    angle.sin() * (size.y / 2.0 + 14.0 * margin),
+                );
+                painter.circle_filled(p, 8.0, color.gamma_multiply(0.15 * appear));
+                painter.circle_filled(p, 3.0, color.gamma_multiply(0.9 * appear));
+            }
         }
     }
 
@@ -624,6 +667,10 @@ pub fn show(
         FontId::proportional(15.0),
         theme.text.gamma_multiply(0.7),
     );
+
+    if fx.vignette {
+        vignette(&painter, area);
+    }
 
     let (corner_event, strip_clicked) = corner_buttons(ui, area, "End tour (Esc)", fx, true);
     if corner_event.is_some() {

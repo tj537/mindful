@@ -51,6 +51,8 @@ pub enum Backdrop {
     Aurora,
     #[default]
     Stars,
+    /// Weiche, schwebende Lichtkreise
+    Bokeh,
 }
 
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -73,12 +75,28 @@ pub struct Effects {
     pub step_levels: bool,
     /// Konfetti beim Abhaken einer Checkbox
     pub confetti: bool,
+    /// Dunklere Bildränder
+    pub vignette: bool,
+    /// Himmel verschiebt sich leicht mit der Maus
+    pub mouse_parallax: bool,
+    /// Folien: Textmarker über dem neuesten Stichpunkt
+    pub marker: bool,
+    /// Folien: Lichtschimmer, der über den Titel zieht
+    pub shine: bool,
+    /// Folien: langsamer Zoom, solange eine Folie zu sehen ist
+    pub ken_burns: bool,
+    /// Tour: Sterne ziehen beim Flug zu Streifen
+    pub warp: bool,
+    /// Tour: Knoten außerhalb des Scheinwerfers rücken zurück
+    pub depth_of_field: bool,
+    /// Tour: Funken kreisen um den aktuellen Zweig
+    pub orbit: bool,
     /// Stand der Einstellungen; fehlt bei älteren gespeicherten Daten (= 0)
     #[serde(default)]
     pub version: u32,
 }
 
-const EFFECTS_VERSION: u32 = 2;
+const EFFECTS_VERSION: u32 = 3;
 
 impl Default for Effects {
     fn default() -> Self {
@@ -88,11 +106,19 @@ impl Default for Effects {
             background: Backdrop::default(),
             drift: true,
             bounce: false,
-            glow: true,
+            glow: false,
             ripple: true,
-            pulses: true,
+            pulses: false,
             step_levels: false,
             confetti: true,
+            vignette: false,
+            mouse_parallax: false,
+            marker: false,
+            shine: false,
+            ken_burns: false,
+            warp: false,
+            depth_of_field: false,
+            orbit: false,
             version: EFFECTS_VERSION,
         }
     }
@@ -109,55 +135,79 @@ impl Effects {
             // Seit Version 2 ist der Sternenhimmel der Standard-Hintergrund
             self.background = Backdrop::Stars;
         }
+        if self.version < 3 {
+            // Seit Version 3 sind Glühen und Lichtpulse nur noch auf Wunsch an
+            self.glow = false;
+            self.pulses = false;
+        }
         self.version = EFFECTS_VERSION;
     }
 }
 
 /// Auswahl der Effekte – in der Präsentation (Button oben rechts) und im Ansicht-Menü
 pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: bool) {
-    ui.set_min_width(210.0);
-    if slides {
-        ui.strong("Slide transition");
-        for (value, label) in [
-            (Transition::Slide, "Slide"),
-            (Transition::Fade, "Fade"),
-            (Transition::Zoom, "Zoom"),
-            (Transition::Rise, "Rise"),
-        ] {
-            ui.radio_value(&mut fx.transition, value, label);
-        }
-        ui.separator();
-        ui.strong("Bullet points");
-        for (value, label) in [
-            (BulletFx::SlideIn, "Slide in"),
-            (BulletFx::Fade, "Fade in"),
-            (BulletFx::Pop, "Pop"),
-            (BulletFx::Typewriter, "Typewriter"),
-        ] {
-            ui.radio_value(&mut fx.bullets, value, label);
-        }
-        ui.separator();
-    }
-    ui.strong("Background");
-    for (value, label) in [
-        (Backdrop::Stars, "Starfield"),
-        (Backdrop::Aurora, "Aurora"),
-        (Backdrop::Plain, "Plain"),
-    ] {
-        ui.radio_value(&mut fx.background, value, label);
-    }
-    if tour {
-        ui.separator();
-        ui.strong("Tour");
-        ui.checkbox(&mut fx.step_levels, "Reveal levels one by one (Space / →)");
-        ui.checkbox(&mut fx.glow, "Glow around the current branch");
-        ui.checkbox(&mut fx.ripple, "Ripple on arrival");
-        ui.checkbox(&mut fx.pulses, "Light pulses along connections");
-        ui.checkbox(&mut fx.bounce, "Camera bounce on arrival");
-        ui.checkbox(&mut fx.drift, "Slow camera drift");
-    }
-    ui.separator();
-    ui.checkbox(&mut fx.confetti, "Confetti when ticking a checkbox");
+    ui.set_min_width(260.0);
+    egui::ScrollArea::vertical()
+        .id_salt("effects_menu")
+        .max_height(560.0)
+        .show(ui, |ui| {
+            if slides {
+                ui.strong("Slide transition");
+                ui.horizontal_wrapped(|ui| {
+                    for (value, label) in [
+                        (Transition::Fade, "Fade"),
+                        (Transition::Slide, "Slide"),
+                        (Transition::Zoom, "Zoom"),
+                        (Transition::Rise, "Rise"),
+                    ] {
+                        ui.selectable_value(&mut fx.transition, value, label);
+                    }
+                });
+                ui.strong("Bullet points");
+                ui.horizontal_wrapped(|ui| {
+                    for (value, label) in [
+                        (BulletFx::SlideIn, "Slide in"),
+                        (BulletFx::Fade, "Fade in"),
+                        (BulletFx::Pop, "Pop"),
+                        (BulletFx::Typewriter, "Typewriter"),
+                    ] {
+                        ui.selectable_value(&mut fx.bullets, value, label);
+                    }
+                });
+                ui.checkbox(&mut fx.marker, "Highlighter on the newest point");
+                ui.checkbox(&mut fx.shine, "Light sweep over titles");
+                ui.checkbox(&mut fx.ken_burns, "Slow zoom on each slide");
+                ui.separator();
+            }
+            ui.strong("Background");
+            ui.horizontal_wrapped(|ui| {
+                for (value, label) in [
+                    (Backdrop::Stars, "Starfield"),
+                    (Backdrop::Bokeh, "Bokeh"),
+                    (Backdrop::Aurora, "Aurora"),
+                    (Backdrop::Plain, "Plain"),
+                ] {
+                    ui.selectable_value(&mut fx.background, value, label);
+                }
+            });
+            ui.checkbox(&mut fx.mouse_parallax, "Sky follows the mouse");
+            ui.checkbox(&mut fx.vignette, "Vignette (darker edges)");
+            if tour {
+                ui.separator();
+                ui.strong("Tour");
+                ui.checkbox(&mut fx.step_levels, "Reveal levels one by one (Space / →)");
+                ui.checkbox(&mut fx.ripple, "Ripple on arrival");
+                ui.checkbox(&mut fx.glow, "Glow around the current branch");
+                ui.checkbox(&mut fx.pulses, "Light pulses along connections");
+                ui.checkbox(&mut fx.orbit, "Sparks orbiting the current branch");
+                ui.checkbox(&mut fx.depth_of_field, "Depth of field");
+                ui.checkbox(&mut fx.warp, "Warp streaks while flying");
+                ui.checkbox(&mut fx.bounce, "Camera bounce on arrival");
+                ui.checkbox(&mut fx.drift, "Slow camera drift");
+            }
+            ui.separator();
+            ui.checkbox(&mut fx.confetti, "Confetti when ticking a checkbox");
+        });
 }
 
 /// Tastenkürzel beim Präsentieren (im Einstellungsmenü)
@@ -351,7 +401,8 @@ fn hash(i: f32, salt: f32) -> f32 {
         .abs()
 }
 
-/// `parallax`: Verschiebung (z. B. Kamera), nahe Sterne bewegen sich stärker als ferne
+/// `parallax`: Verschiebung (z. B. Kamera), nahe Sterne bewegen sich stärker als ferne.
+/// `warp`: Bewegung der Kamera; ist sie groß genug, werden Sterne zu Streifen.
 pub fn backdrop(
     painter: &egui::Painter,
     area: Rect,
@@ -359,10 +410,38 @@ pub fn backdrop(
     kind: Backdrop,
     now: f64,
     parallax: Vec2,
+    warp: Vec2,
 ) -> bool {
     let t = now as f32;
     match kind {
         Backdrop::Plain => false,
+        Backdrop::Bokeh => {
+            // Weiche Lichtkreise in den Zweigfarben, die langsam nach oben treiben
+            let (w, h) = (area.width(), area.height());
+            for i in 0..22 {
+                let n = i as f32 * 3.7;
+                let depth = 0.3 + 0.7 * hash(n, 3.0);
+                let radius = (25.0 + 70.0 * hash(n, 4.0)) * depth;
+                let x = area.left()
+                    + (hash(n, 1.0) * w + parallax.x * depth * 0.2 + (t * 0.3 + n).sin() * 20.0)
+                        .rem_euclid(w);
+                let y = area.top()
+                    + (hash(n, 2.0) * h - t * 8.0 * depth + parallax.y * depth * 0.2)
+                        .rem_euclid(h + 2.0 * radius)
+                    - radius;
+                let flicker = 0.7 + 0.3 * (t * (0.4 + hash(n, 5.0)) + n).sin();
+                let color = theme.branches[i % 6]
+                    .gamma_multiply((if theme.dark { 0.035 } else { 0.05 }) * flicker);
+                for ring in 0..6 {
+                    painter.circle_filled(
+                        Pos2::new(x, y),
+                        radius * (1.0 - ring as f32 * 0.12),
+                        color,
+                    );
+                }
+            }
+            true
+        }
         Backdrop::Aurora => {
             // Weiche Farbwolken in den Zweigfarben, die langsam wandern
             let radius = area.width().max(area.height()) * 0.38;
@@ -438,6 +517,14 @@ pub fn backdrop(
                     };
                     let r = small + (big - small) * hash(n, 3.0);
                     let a = bright * twinkle;
+                    // Beim schnellen Flug: Lichtstreifen, nahe Sterne länger als ferne
+                    let streak = warp * (depth * 4.0);
+                    if streak.length() > 2.0 {
+                        painter.line_segment(
+                            [pos, pos - streak],
+                            Stroke::new(r * 1.4, color.gamma_multiply(a * 0.8)),
+                        );
+                    }
                     if layer == 2 {
                         painter.circle_filled(pos, r * 4.5, color.gamma_multiply(0.05 * a));
                         painter.circle_filled(pos, r * 2.2, color.gamma_multiply(0.12 * a));
@@ -526,6 +613,33 @@ pub fn laser(ui: &mut egui::Ui, toggle: bool, now: f64) {
         ctx.request_repaint();
     }
     ctx.data_mut(|d| d.insert_temp(id, state));
+}
+
+/// Dunklere Bildränder („Vignette“)
+pub fn vignette(painter: &egui::Painter, area: Rect) {
+    let steps = 24;
+    let band = area.width().min(area.height()) * 0.22 / steps as f32;
+    for i in 0..steps {
+        let f = 1.0 - i as f32 / steps as f32;
+        painter.rect_stroke(
+            area.shrink(i as f32 * band),
+            0.0,
+            Stroke::new(band + 0.5, Color32::from_black_alpha((f * f * 22.0) as u8)),
+            egui::StrokeKind::Inside,
+        );
+    }
+}
+
+/// Verschiebung für „Himmel folgt der Maus“, sanft nachgezogen
+pub fn mouse_parallax(ctx: &egui::Context, area: Rect) -> Vec2 {
+    let target = ctx
+        .input(|i| i.pointer.hover_pos())
+        .map(|p| (area.center() - p) * 0.08)
+        .unwrap_or_default();
+    Vec2::new(
+        ctx.animate_value_with_time(Id::new("mouse_parallax_x"), target.x, 0.5),
+        ctx.animate_value_with_time(Id::new("mouse_parallax_y"), target.y, 0.5),
+    )
 }
 
 #[derive(Clone)]
@@ -798,13 +912,18 @@ pub fn show(
     painter.rect_filled(area, 0.0, theme.background);
     // Beim Weiterblättern ziehen die Sterne ein Stück mit
     let drift = ctx.animate_value_with_time(ui.id().with("star_drift"), doc.slide as f32, 0.9);
+    let mut parallax = Vec2::new(-drift * 120.0, 0.0);
+    if fx.mouse_parallax {
+        parallax += mouse_parallax(&ctx, area);
+    }
     if backdrop(
         &painter,
         area,
         theme,
         fx.background,
         now,
-        Vec2::new(-drift * 120.0, 0.0),
+        parallax,
+        Vec2::ZERO,
     ) {
         ctx.request_repaint();
     }
@@ -868,7 +987,16 @@ pub fn show(
         Transition::Zoom => (Vec2::ZERO, 0.88 + 0.12 * ease_out_cubic(appear)),
         Transition::Rise => (Vec2::new(0.0, offset.abs() * 70.0), 1.0),
     };
-    let card = Rect::from_center_size(base.center() + shift * (w / 1280.0), base.size() * scale);
+    // Langsamer Zoom, solange die Folie zu sehen ist
+    let slow_zoom = if fx.ken_burns {
+        1.0 + 0.03 * ease_in_out_cubic(progress(now, doc.slide_time, 14.0))
+    } else {
+        1.0
+    };
+    let card = Rect::from_center_size(
+        base.center() + shift * (w / 1280.0),
+        base.size() * scale * slow_zoom,
+    );
     // Alle Maße relativ zu einer 1280 px breiten Folie
     let s = card.width() / 1280.0;
 
@@ -918,13 +1046,36 @@ pub fn show(
 
         let title = |ui: &mut egui::Ui, text: &str, size: f32| {
             ui.add_space((1.0 - title_in) * 26.0 * s);
-            ui.scope(|ui| {
-                ui.multiply_opacity(title_in);
-                ui.add(
-                    egui::Label::new(RichText::new(text).size(size).strong().color(theme.text))
-                        .wrap(),
-                );
-            });
+            let rect = ui
+                .scope(|ui| {
+                    ui.multiply_opacity(title_in);
+                    ui.add(
+                        egui::Label::new(RichText::new(text).size(size).strong().color(theme.text))
+                            .wrap(),
+                    )
+                    .rect
+                })
+                .inner;
+            // Lichtschimmer: ein heller, schräger Streifen zieht einmal über den Titel
+            let sweep = progress(now, doc.slide_time + 0.45, 0.9);
+            if fx.shine && sweep > 0.0 && sweep < 1.0 {
+                let clip = ui.painter().with_clip_rect(rect.expand(4.0));
+                let band = rect.height() * 0.9;
+                let x = rect.left() - band + (rect.width() + 2.0 * band) * sweep;
+                let tilt = rect.height() * 0.4;
+                let glow =
+                    Color32::WHITE.gamma_multiply(0.35 * (std::f32::consts::PI * sweep).sin());
+                clip.add(egui::Shape::convex_polygon(
+                    vec![
+                        Pos2::new(x + tilt, rect.top()),
+                        Pos2::new(x + tilt + band * 0.5, rect.top()),
+                        Pos2::new(x + band * 0.5, rect.bottom()),
+                        Pos2::new(x, rect.bottom()),
+                    ],
+                    glow,
+                    Stroke::NONE,
+                ));
+            }
         };
 
         if slide.is_title {
@@ -1088,7 +1239,24 @@ pub fn show(
                             let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
                             ui.painter().circle_filled(dot.center(), radius, *color);
                         }
-                        ui.add(egui::Label::new(label).wrap());
+                        let text_rect = ui.add(egui::Label::new(label).wrap()).rect;
+                        // Textmarker über dem neuesten Stichpunkt
+                        if fx.marker && building && group + 1 == doc.build {
+                            let sweep = ease_out_cubic(progress(now, doc.build_time + 0.2, 0.5));
+                            let mark = Rect::from_min_max(
+                                Pos2::new(
+                                    text_rect.left() - 4.0 * s,
+                                    text_rect.center().y - 2.0 * s,
+                                ),
+                                Pos2::new(
+                                    text_rect.left() - 4.0 * s
+                                        + (text_rect.width() + 8.0 * s) * sweep,
+                                    text_rect.bottom() + 2.0 * s,
+                                ),
+                            );
+                            ui.painter()
+                                .rect_filled(mark, 3.0 * s, color.gamma_multiply(0.3));
+                        }
                     });
                 });
             }
@@ -1119,6 +1287,10 @@ pub fn show(
         2.0 * s,
         slide.color,
     );
+
+    if fx.vignette {
+        vignette(&painter, area);
+    }
 
     // Schnellwahl und Laserpointer liegen über allem
     let items: Vec<StripItem> = slides
@@ -1177,6 +1349,16 @@ mod tests {
         v1.background = Backdrop::Plain;
         v1.migrate();
         assert!(v1.background == Backdrop::Plain);
+        // Version 3: Glühen und Lichtpulse nur noch auf Wunsch
+        let mut v2: Effects =
+            serde_json::from_str(r#"{"glow":true,"pulses":true,"version":2}"#).unwrap();
+        v2.migrate();
+        assert!(!v2.glow && !v2.pulses);
+        v2.glow = true;
+        v2.migrate();
+        assert!(v2.glow);
+        let fresh = Effects::default();
+        assert!(!fresh.glow && !fresh.pulses && !fresh.warp && !fresh.vignette);
     }
 
     #[test]

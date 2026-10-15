@@ -59,6 +59,8 @@ pub struct TourState {
     pub needs_init: bool,
     /// Beim Aufdecken Ebene für Ebene: wie viele Ebenen unter dem Zweig sichtbar sind
     pub level: usize,
+    /// Kamera im letzten Frame (für Warp-Streifen)
+    pub last_cam: Option<(Camera, f64)>,
 }
 
 fn one() -> f32 {

@@ -303,13 +303,15 @@ All measurements are relative to a slide 1280 px wide (`s = width / 1280`) and s
 |---|---|---|
 | `transition` | Slide, Fade, Zoom, Rise | the slide card is shifted or scaled; all sizes depend on `s`, so scaling the card scales the content |
 | `bullets` | Slide in, Fade, Pop, Typewriter | each bullet group gets a start time – the reveal moment, or staggered after the slide appears when bullets aren't revealed one by one |
-| `background` | Starfield (default), Aurora, Plain | `backdrop()`: see below |
+| `background` | Starfield (default), Bokeh, Aurora, Plain | `backdrop()`: see below |
+| `marker`, `shine`, `ken_burns` | on/off | slides: highlighter swept over the newest bullet, light band over the title, slow zoom of the slide card |
+| `vignette`, `mouse_parallax` | on/off | darker edges (`vignette()`), sky offset by the mouse position (`mouse_parallax()`) |
 | `drift`, `bounce` | on/off | tour camera, see below |
-| `glow`, `ripple`, `pulses` | on/off | tour effects, see below |
+| `glow`, `ripple`, `pulses`, `orbit`, `depth_of_field`, `warp` | on/off | tour effects, see below (only `ripple` is on by default) |
 | `step_levels` | on/off | tour: reveal levels one by one |
 | `confetti` | on/off | burst of confetti when a checkbox is ticked (slides and tour) |
 
-`Effects::migrate()` brings older saved settings up to date via `version`: version 1 made *Fade* the default transition, version 2 the starfield the default background.
+`Effects::migrate()` brings older saved settings up to date via `version`: version 1 made *Fade* the default transition, version 2 the starfield the default background, version 3 switched glow and light pulses to opt-in.
 
 **Starfield:** three layers of pseudo-random stars (`hash()`) – many small faint ones far away, fewer bright ones close by with a soft glow and a sparkle cross. A `parallax` offset moves near stars more than far ones: the tour passes the camera position, slides an animated value that follows the slide number, so the sky shifts a little with every step. Behind the stars two very faint nebula clouds drift in branch colors, and every seven seconds a shooting star crosses the sky.
 
@@ -339,7 +341,11 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 
 **Reveal levels one by one** (`step_levels`): `tour.level` counts how many levels below the current main branch are visible. Space/→ first increases the level – the new level grows out and the camera re-frames the visible levels plus the next one – and only moves on to the next stop once everything is visible. ← hides the last level again; going back to a previous branch shows it fully.
 
-**Glow, ripple, pulses:** nodes in the spotlight get a softly breathing halo; on arrival two rings spread out from the focused node; small lights travel along the connections in the spotlight (`bezier()` gives the point on the curve).
+**Glow, ripple, pulses, sparks:** nodes in the spotlight get a softly breathing halo of many thin layers; on arrival two rings spread out from the focused node; small lights travel along the connections in the spotlight (`bezier()` gives the point on the curve); three sparks orbit the focused node.
+
+**Depth of field:** nodes outside the spotlight shrink by up to 12 % on top of being dimmed.
+
+**Warp streaks:** `TourState::last_cam` keeps the camera of the previous frame. The difference gives the camera's speed and zoom rate, which `backdrop()` turns into streaks – near stars streak more than far ones.
 
 **Camera bounce** (`bounce`): `fly()` adds a small zoom push in the last 30 % of the flight that settles back exactly on the target.
 
