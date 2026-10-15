@@ -13,6 +13,39 @@ pub enum Mode {
     Mindmap,
     Markdown,
     Present,
+    /// Kamerafahrt durch die Mindmap
+    Tour,
+}
+
+impl Mode {
+    /// Folien oder Kamerafahrt: Vollbild, keine Leisten
+    pub fn is_presenting(self) -> bool {
+        matches!(self, Mode::Present | Mode::Tour)
+    }
+}
+
+/// Kamera der Tour: welcher Punkt der Mindmap in der Mitte ist und wie groß
+#[derive(Clone, Copy, Default)]
+pub struct Camera {
+    pub center: Vec2,
+    pub zoom: f32,
+}
+
+/// Zustand der Kamerafahrt (nicht gespeichert)
+#[derive(Default)]
+pub struct TourState {
+    /// Aktuelle Station (0 = Übersicht)
+    pub stop: usize,
+    /// Vorherige Station, für den Scheinwerfer-Übergang
+    pub prev_stop: usize,
+    /// Kamera beim Start des aktuellen Flugs
+    pub from: Camera,
+    /// Startzeit des aktuellen Flugs (egui-Zeit in Sekunden)
+    pub started: f64,
+    /// Rückwärts geblättert: Unterpunkte sofort zeigen statt aufwachsen lassen
+    pub backwards: bool,
+    /// Erster Frame steht noch aus: Kamera ohne Flug setzen
+    pub needs_init: bool,
 }
 
 fn one() -> f32 {
@@ -67,6 +100,17 @@ pub struct Document {
     /// Aktuelle Folie im Präsentationsmodus
     #[serde(skip)]
     pub slide: usize,
+    /// Wie viele Stichpunkt-Gruppen der aktuellen Folie schon sichtbar sind
+    #[serde(skip)]
+    pub build: usize,
+    /// Zeitpunkt, zu dem die letzte Gruppe eingeblendet wurde
+    #[serde(skip)]
+    pub build_time: f64,
+    /// Übersicht aller Folien bzw. Stationen (Taste G)
+    #[serde(skip)]
+    pub grid: bool,
+    #[serde(skip)]
+    pub tour: TourState,
 }
 
 impl Document {
@@ -89,6 +133,10 @@ impl Document {
             md_text: String::new(),
             md_checkpointed: false,
             slide: 0,
+            build: 0,
+            build_time: 0.0,
+            grid: false,
+            tour: TourState::default(),
         }
     }
 
@@ -164,6 +212,15 @@ impl Document {
                     .and_then(|b| root.and_then(|r| self.map.children(r).position(|n| n.id == b)))
                     .map(|i| i + 1)
                     .unwrap_or(0);
+                self.build = 0;
+                self.grid = false;
+            }
+            Mode::Tour => {
+                self.tour = TourState {
+                    needs_init: true,
+                    ..TourState::default()
+                };
+                self.grid = false;
             }
             Mode::Mindmap => {
                 if self.mode == Mode::Markdown {

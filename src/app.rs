@@ -1,8 +1,9 @@
 use crate::document::{Document, Mode};
 use crate::export::{self, ExportNode};
-use crate::model::{parse_outline, Clip, MindMap, Node, DEFAULT_TEXT};
+use crate::model::{parse_outline, Clip, MindMap, DEFAULT_TEXT};
+use crate::nodes::{node_size, node_style, paint_node, NodeStyle, MIN_NODE};
 use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
-use crate::{markdown_view, present};
+use crate::{markdown_view, present, tour};
 use eframe::egui::{
     self, epaint::CubicBezierShape, Align, Align2, Color32, FontId, Key, KeyboardShortcut, Layout,
     Modifiers, Pos2, Rect, Sense, Stroke, Vec2,
@@ -15,7 +16,6 @@ use std::sync::Arc;
 
 const MIN_ZOOM: f32 = 0.25;
 const MAX_ZOOM: f32 = 3.0;
-const MIN_NODE: Vec2 = Vec2::new(90.0, 34.0);
 /// Farbschema beim ersten Start: "Dark"
 const DEFAULT_THEME: usize = 1;
 
@@ -65,6 +65,7 @@ const SC_ZOOM_OUT: KeyboardShortcut = shortcut(CMD, Key::Minus);
 const SC_HELP: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F1);
 const SC_MARKDOWN: KeyboardShortcut = shortcut(CMD, Key::E);
 const SC_PRESENT: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F5);
+const SC_TOUR: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F6);
 
 // ---------------------------------------------------------------------------
 // Befehle
@@ -130,104 +131,6 @@ enum Action {
     EditNote(u64),
     OpenExample(usize),
     HideWelcome,
-}
-
-// ---------------------------------------------------------------------------
-// Aussehen der Knoten
-// ---------------------------------------------------------------------------
-
-struct NodeStyle {
-    fill: Color32,
-    text: Color32,
-    /// Farbiger Rand (ab der 2. Ebene) und Farbe der Verbindungslinie
-    accent: Color32,
-    outlined: bool,
-    font_size: f32,
-    padding: Vec2,
-    edge_width: f32,
-}
-
-fn node_style(map: &MindMap, theme: &Theme, id: u64) -> NodeStyle {
-    let accent = match map.color_index(id) {
-        Some(i) => theme.branches[i % theme.branches.len()],
-        None => theme.root,
-    };
-    match map.depth(id) {
-        0 => NodeStyle {
-            fill: accent,
-            text: theme.on_accent,
-            accent,
-            outlined: false,
-            font_size: 20.0,
-            padding: Vec2::new(44.0, 26.0),
-            edge_width: 3.5,
-        },
-        1 => NodeStyle {
-            fill: accent,
-            text: theme.on_accent,
-            accent,
-            outlined: false,
-            font_size: 16.0,
-            padding: Vec2::new(30.0, 16.0),
-            edge_width: 3.5,
-        },
-        _ => NodeStyle {
-            fill: theme.card,
-            text: theme.text,
-            accent,
-            outlined: true,
-            font_size: 14.5,
-            padding: Vec2::new(30.0, 16.0),
-            edge_width: 2.0,
-        },
-    }
-}
-
-/// Größe eines Knotens bei Zoom 1
-fn node_size(ctx: &egui::Context, map: &MindMap, theme: &Theme, node: &Node) -> Vec2 {
-    let style = node_style(map, theme, node.id);
-    let galley = ctx.fonts(|f| {
-        f.layout_no_wrap(
-            node.text.clone(),
-            FontId::proportional(style.font_size),
-            style.text,
-        )
-    });
-    (galley.size() + style.padding).max(MIN_NODE)
-}
-
-fn paint_node(
-    painter: &egui::Painter,
-    theme: &Theme,
-    rect: Rect,
-    style: &NodeStyle,
-    zoom: f32,
-    selected: bool,
-    hit: bool,
-) {
-    let radius = rect.height() / 2.0;
-    painter.rect_filled(
-        rect.translate(Vec2::new(0.0, 3.0 * zoom)).expand(zoom),
-        radius,
-        Color32::from_black_alpha(if theme.dark { 90 } else { 30 }),
-    );
-    if hit {
-        let grow = 9.0 * zoom;
-        painter.rect_filled(
-            rect.expand(grow),
-            radius + grow,
-            theme.selection.gamma_multiply(0.35),
-        );
-    }
-    if selected {
-        let grow = 5.0 * zoom;
-        painter.rect_filled(rect.expand(grow), radius + grow, theme.selection);
-    }
-    if style.outlined {
-        let grow = 2.0 * zoom;
-        painter.rect_filled(rect.expand(grow), radius + grow, style.accent);
-    }
-    painter.rect_filled(rect, radius, style.fill);
 }
 
 /// Zoomt so, dass der Punkt `p` auf dem Bildschirm an seiner Stelle bleibt.
@@ -488,6 +391,8 @@ struct SavedState {
     active: usize,
     #[serde(default = "yes")]
     show_welcome: bool,
+    #[serde(default = "yes")]
+    build_bullets: bool,
 }
 
 fn yes() -> bool {
@@ -500,6 +405,7 @@ struct SavedStateRef<'a> {
     docs: &'a [Document],
     active: usize,
     show_welcome: bool,
+    build_bullets: bool,
 }
 
 pub struct MindMapApp {
@@ -526,6 +432,8 @@ pub struct MindMapApp {
     fullscreen: bool,
     /// Tipp-Karte mit Beispiel-Button auf leeren Mindmaps
     show_welcome: bool,
+    /// Stichpunkte auf Folien nacheinander aufdecken
+    build_bullets: bool,
 }
 
 impl MindMapApp {
@@ -553,6 +461,7 @@ impl MindMapApp {
             note_edit: None,
             fullscreen: false,
             show_welcome: true,
+            build_bullets: true,
         };
 
         if let Some(state) = cc
@@ -577,6 +486,7 @@ impl MindMapApp {
             app.docs = state.docs;
             app.active = state.active;
             app.show_welcome = state.show_welcome;
+            app.build_bullets = state.build_bullets;
         } else if Path::new("mindmap.json").exists() {
             // Datei aus der ersten Version übernehmen
             app.open_path(PathBuf::from("mindmap.json"));
@@ -587,7 +497,7 @@ impl MindMapApp {
         app.active = app.active.min(app.docs.len() - 1);
         // Gespeicherten Modus wiederherstellen, aber nie direkt in die Präsentation
         for doc in &mut app.docs {
-            let mode = if doc.mode == Mode::Present {
+            let mode = if doc.mode.is_presenting() {
                 Mode::Mindmap
             } else {
                 doc.mode
@@ -1079,6 +989,7 @@ impl MindMapApp {
             check(SC_HELP, Command::Help);
             check(SC_MARKDOWN, Command::ToggleMarkdown);
             check(SC_PRESENT, Command::SetMode(Mode::Present));
+            check(SC_TOUR, Command::SetMode(Mode::Tour));
             if !typing {
                 check(SC_REDO, Command::Redo);
                 check(SC_UNDO, Command::Undo);
@@ -1415,6 +1326,15 @@ impl MindMapApp {
                     Command::SetMode(Mode::Present),
                     &mut out,
                 );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::PATH, "Camera tour"),
+                    Some(&SC_TOUR),
+                    Command::SetMode(Mode::Tour),
+                    &mut out,
+                );
+                ui.checkbox(&mut self.build_bullets, "Reveal bullet points one by one");
                 ui.separator();
                 ui.menu_button(l(icon::PALETTE, "Theme"), |ui| {
                     theme_menu(ui, current_theme, &mut out)
@@ -1570,6 +1490,14 @@ impl MindMapApp {
                 true,
                 Command::SetMode(Mode::Present),
             );
+            tool(
+                ui,
+                icon::PATH,
+                "Start camera tour",
+                Some(&SC_TOUR),
+                true,
+                Command::SetMode(Mode::Tour),
+            );
             ui.separator();
             ui.menu_button(egui::RichText::new(icon::EXPORT).size(17.0), |ui| {
                 export_menu(ui, &mut out)
@@ -1691,6 +1619,7 @@ impl MindMapApp {
                                 (Mode::Mindmap, icon::GRAPH, "Mind map"),
                                 (Mode::Markdown, icon::TEXT_ALIGN_LEFT, "Markdown"),
                                 (Mode::Present, icon::PRESENTATION, "Presentation"),
+                                (Mode::Tour, icon::PATH, "Tour"),
                             ];
                             for (mode, ic, label) in modes {
                                 if ui
@@ -1786,6 +1715,8 @@ impl MindMapApp {
             (f(&SC_OPEN), "Open (also imports Markdown)"),
             (f(&SC_MARKDOWN), "Toggle Markdown editor"),
             (f(&SC_PRESENT), "Start presentation"),
+            (f(&SC_TOUR), "Start camera tour"),
+            ("G".into(), "Overview of all slides / stops"),
             ("→ · Space · click".into(), "Next slide"),
             ("← · right-click".into(), "Previous slide"),
             ("F · Esc".into(), "Full screen · end presentation"),
@@ -2151,8 +2082,8 @@ impl MindMapApp {
         self.close_note();
         self.doc_mut().set_mode(mode);
         // Präsentation läuft im Vollbild
-        if mode == Mode::Present || was == Mode::Present {
-            self.fullscreen = mode == Mode::Present;
+        if mode.is_presenting() || was.is_presenting() {
+            self.fullscreen = mode.is_presenting();
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
         }
     }
@@ -2251,14 +2182,20 @@ impl eframe::App for MindMapApp {
         let theme = &THEMES[self.theme];
         let mode = self.doc().mode;
 
-        // Präsentation: nur die Folien, keine Leisten
-        if mode == Mode::Present {
+        // Folien oder Kamerafahrt: nur die Präsentation, keine Leisten
+        if mode.is_presenting() {
             self.tab_pressed = false;
+            let build_bullets = self.build_bullets;
             let mut event = None;
             egui::CentralPanel::default()
                 .frame(egui::Frame::default().fill(theme.background))
                 .show(ctx, |ui| {
-                    event = present::show(ui, &mut self.docs[self.active], theme)
+                    let doc = &mut self.docs[self.active];
+                    event = if mode == Mode::Tour {
+                        tour::show(ui, doc, theme)
+                    } else {
+                        present::show(ui, doc, theme, build_bullets)
+                    };
                 });
             match event {
                 Some(present::Event::Exit) => self.set_mode(ctx, Mode::Mindmap),
@@ -2333,6 +2270,7 @@ impl eframe::App for MindMapApp {
             docs: &self.docs,
             active: self.active,
             show_welcome: self.show_welcome,
+            build_bullets: self.build_bullets,
         };
         eframe::set_value(storage, eframe::APP_KEY, &state);
     }

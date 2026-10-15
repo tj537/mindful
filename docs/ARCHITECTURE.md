@@ -12,7 +12,7 @@ This document explains how Mindful is built inside – for everyone working on t
 6. [Documents, views, undo](#documents-views-undo-documentrs)
 7. [The mind map canvas](#the-mind-map-canvas)
 8. [Markdown sync](#markdown-sync)
-9. [Presentation](#presentation-presentrs)
+9. [Presentation](#presentation-presentrs) and [camera tour](#camera-tour-tourrs)
 10. [Saving, restoring, file format](#saving-restoring-file-format)
 11. [Export](#export-exportrs)
 12. [Themes and style](#themes-and-style-themers)
@@ -33,9 +33,15 @@ flowchart TD
         app["app.rs<br/>MindMapApp: menus, tabs,<br/>mind map canvas, keyboard"]
         md["markdown_view.rs<br/>editor + preview"]
         pr["present.rs<br/>slides"]
+        tr["tour.rs<br/>camera tour"]
+        nd["nodes.rs<br/>node look + drawing"]
     end
     app --> md
     app --> pr
+    app --> tr
+    app --> nd
+    tr --> nd
+    tr --> doc
     app --> doc["document.rs<br/>Document: one tab<br/>file, view, undo"]
     md --> doc
     pr --> doc
@@ -48,7 +54,7 @@ flowchart TD
 |---|---|---|
 | **Data** | `model.rs` | only `Vec2` as a math helper |
 | **Document** | `document.rs` | only `Vec2` |
-| **User interface** | `app.rs`, `markdown_view.rs`, `present.rs` | yes, fully |
+| **User interface** | `app.rs`, `nodes.rs`, `markdown_view.rs`, `present.rs`, `tour.rs` | yes, fully |
 | **Helpers** | `export.rs`, `theme.rs` | colors and geometry |
 
 Data and document barely depend on egui, so switching to a different UI library would mostly affect the UI layer.
@@ -80,8 +86,8 @@ sequenceDiagram
     E->>A: raw_input_hook (intercept Tab)
     E->>A: update
     A->>A: apply theme (only when it changed)
-    alt Presentation
-        A->>A: present::show → end of frame
+    alt Presentation or tour
+        A->>A: present::show / tour::show → end of frame
     else Mind map / Markdown
         A->>A: shortcuts() → list of Commands
         A->>A: draw menu bar, tab bar, status bar (+ Commands)
@@ -160,12 +166,14 @@ A `Document` is one tab. `MindMapApp` holds `docs: Vec<Document>` and the index 
 | `map` | yes | the mind map |
 | `path` | yes | file, once saved |
 | `dirty` | yes | unsaved changes (• in the tab) |
-| `mode` | yes | `Mindmap`, `Markdown` or `Present` |
+| `mode` | yes | `Mindmap`, `Markdown`, `Present` or `Tour` |
 | `selected`, `editing` | no | selection, node being renamed |
 | `pan`, `zoom` | no | view of the mind map canvas |
 | `undo`, `redo` | no | undo history |
 | `md_text` | no | text in the Markdown editor |
-| `slide` | no | current slide |
+| `slide`, `build` | no | current slide, number of bullet groups revealed |
+| `grid` | no | overview (G) is open |
+| `tour` | no | camera tour state: current stop, start camera, flight start time |
 
 ### Undo and redo
 
@@ -216,7 +224,7 @@ screen = center of canvas + pan + pos × zoom
 7. While renaming, place a text field over the node
 8. Tips card and the context menu of the empty canvas
 
-Node size and look come from `node_style()`: level 0 (central topic) and level 1 (main branches) are filled with color, from level 2 on they are light cards with a colored outline.
+Node size and look come from `node_style()` in `nodes.rs` (shared with the camera tour): level 0 (central topic) and level 1 (main branches) are filled with color, from level 2 on they are light cards with a colored outline.
 
 ### Auto layout
 
@@ -265,6 +273,26 @@ Undo: the first change of an editor session creates a snapshot, and everything a
 - **One slide per main branch:** heading, note, children down to the third level, in the branch's color
 
 All measurements are relative to a slide 1280 px wide (`s = width / 1280`) and scale with the window. Changing slides is animated with `animate_value_with_time`: the slide glides briefly to the side and fades in or out. With more than eight bullet points the font shrinks.
+
+**Bullet points one by one:** a slide's bullets are split into *groups* – a top-level bullet together with its children. `doc.build` counts how many groups are visible. → reveals the next group before moving to the next slide, ← hides it again. Hidden groups still take up their space so nothing jumps around. The newest group slides in from the left (`doc.build_time`), older ones are dimmed. The behaviour can be switched off under *View → Reveal bullet points one by one*.
+
+**Overview (G):** `overview_grid()` shows all slides as tiles; a click jumps there. The camera tour uses the same function for its stops.
+
+`present.rs` also holds the parts shared with the tour: `read_nav()` (keys), `corner_buttons()`, `hint()`, `overview_grid()` and the easing curves.
+
+## Camera tour (`tour.rs`)
+
+The tour presents directly on the mind map with its own camera (`Camera { center, zoom }` in world coordinates), independent of the editing view.
+
+**Stops:** overview (central topic + main branches) → every main branch → the whole map.
+
+**Flight:** `target()` computes a camera that fits the nodes of a stop into the window (leaving room at the bottom for the subtitle). `fly()` interpolates between the camera at the start of the flight and the target with an ease-in-out curve: the center glides, the zoom changes geometrically, and on long distances the zoom dips out in the middle (*Prezi arc*). If a key is pressed mid-flight, the new flight starts from wherever the camera is right now.
+
+**Growing children:** children of a main branch are hidden until the tour reaches that branch. There they appear level by level (`GROW_STEP` apart), moving out of their parent's position with a slight overshoot (`ease_out_back`). Going backwards shows them instantly.
+
+**Spotlight:** at a branch stop, everything outside that branch is dimmed to 22 %. The brightness blends from the previous stop to the current one during the flight.
+
+**Subtitle:** the note of the current stop (central topic at the start, the branch afterwards) fades in as a card at the bottom once the camera has arrived.
 
 ---
 
@@ -408,5 +436,8 @@ cargo test
 | `universe_example_is_complete` | the English example is complete |
 | `weltall_example_is_complete` | the German example is complete |
 | `svg_and_png_export` | SVG is escaped correctly, PNG is created |
+| `stops_are_overview_branches_finale` | tour stops are in the right order |
+| `children_appear_only_from_their_branch_on` | children grow at their branch, show instantly when going back |
+| `flight_starts_and_ends_on_target_and_arcs_out` | the camera flight hits its targets and zooms out in between |
 
 The UI itself has no automated tests. Please try changes there by hand – on macOS **and** Windows if possible.

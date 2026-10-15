@@ -6,8 +6,10 @@ mod document;
 mod export;
 mod markdown_view;
 mod model;
+mod nodes;
 mod present;
 mod theme;
+mod tour;
 
 use eframe::egui;
 

@@ -21,13 +21,14 @@ Mind maps, Markdown and presentations in one lightweight desktop app – written
 
 ## What Mindful does
 
-Mindful shows **one mind map in three views**. All three work on the same data, so a change in one appears in the others immediately.
+Mindful shows **one mind map in four views**. All of them work on the same data, so a change in one appears in the others immediately.
 
 | View | What it's for |
 |---|---|
 | **Mind map** | Collect ideas: add nodes, drag them, color them, collapse them, lay them out automatically |
 | **Markdown editor** | Write quickly as text: `#` central topic, `##` main branches, `-` children, plain text as notes; with live preview |
-| **Presentation** | Present: a title slide plus one slide per main branch, full screen |
+| **Presentation** | Present: a title slide plus one slide per main branch, full screen; bullet points appear one by one |
+| **Camera tour** | Present right on the mind map: the camera flies from branch to branch, the current branch is spotlit and its children grow out of it |
 
 Also:
 
@@ -260,14 +261,16 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | **General** | |
 | ⌘E | Toggle Markdown editor |
 | F5 | Start presentation |
+| F6 | Start camera tour |
 | ⌘Z · ⇧⌘Z | Undo · redo |
 | ⌘T · ⌘W | New tab · close tab |
 | Ctrl+Tab · ⌘1…9 | Switch tab |
 | ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
-| **Presentation** | |
-| → · Space · click | Next slide |
-| ← · right-click | Previous slide |
-| F · Esc | Full screen · end presentation |
+| **Presentation and tour** | |
+| → · Space · click | Next bullet point / slide / stop |
+| ← · right-click | Back |
+| G | Overview of all slides or stops |
+| F · Esc | Full screen · end |
 
 ### Markdown format
 
@@ -297,7 +300,9 @@ mindful/
 │   ├── document.rs        one tab: file, view, undo/redo
 │   ├── model.rs           mind map data, auto layout, reading and writing Markdown
 │   ├── markdown_view.rs   Markdown editor with highlighting and preview
-│   ├── present.rs         presentation mode
+│   ├── present.rs         presentation mode (slides)
+│   ├── tour.rs            camera tour through the mind map
+│   ├── nodes.rs           how nodes look and are drawn (shared)
 │   ├── export.rs          SVG and PNG export
 │   └── theme.rs           themes, fonts, widget style
 ├── assets/
