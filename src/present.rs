@@ -6,6 +6,7 @@
 
 use crate::document::Document;
 use crate::model::MindMap;
+use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
     self, Align, Align2, Color32, CursorIcon, FontId, Id, Key, LayerId, Layout, Modifiers, Order,
@@ -453,8 +454,8 @@ pub fn filmstrip(
 struct Slide {
     title: String,
     note: String,
-    /// (Ebene, Text, Farbe)
-    bullets: Vec<(usize, String, Color32)>,
+    /// (Ebene, Text, Farbe, Checkbox)
+    bullets: Vec<(usize, String, Color32, Option<bool>)>,
     color: Color32,
     is_title: bool,
 }
@@ -476,10 +477,10 @@ fn collect(
     id: u64,
     depth: usize,
     color: Color32,
-    out: &mut Vec<(usize, String, Color32)>,
+    out: &mut Vec<(usize, String, Color32, Option<bool>)>,
 ) {
     for child in map.children(id) {
-        out.push((depth, child.text.clone(), color));
+        out.push((depth, child.text.clone(), color, child.task));
         if depth < 2 {
             collect(map, child.id, depth + 1, color, out);
         }
@@ -495,7 +496,7 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
         note: root.note.clone(),
         bullets: map
             .children(root.id)
-            .map(|c| (0, c.text.clone(), color_of(map, theme, c.id)))
+            .map(|c| (0, c.text.clone(), color_of(map, theme, c.id), c.task))
             .collect(),
         color: theme.root,
         is_title: true,
@@ -678,7 +679,7 @@ pub fn show(
             // Kapitel-Marken ploppen nacheinander auf
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0) * s;
-                for (i, (_, text, color)) in slide.bullets.iter().enumerate() {
+                for (i, (_, text, color, _)) in slide.bullets.iter().enumerate() {
                     let pop = progress(now, doc.slide_time + 0.35 + i as f64 * 0.09, 0.4);
                     animating |= pop < 1.0;
                     // Feste Größe vorab, damit eine Marke als Ganzes in die nächste Zeile rutscht
@@ -737,7 +738,7 @@ pub fn show(
             let building = build_bullets && slide.groups() > 0;
             let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
             let mut group = 0;
-            for (i, (depth, text, color)) in slide.bullets.iter().enumerate() {
+            for (i, (depth, text, color, task)) in slide.bullets.iter().enumerate() {
                 if *depth == 0 && i > 0 {
                     group += 1;
                 }
@@ -788,12 +789,25 @@ pub fn show(
                             Vec2::new(base_size * 0.8, base_size * 1.2),
                             Sense::hover(),
                         );
-                        let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
-                        ui.painter().circle_filled(dot.center(), radius, *color);
-                        ui.add(
-                            egui::Label::new(RichText::new(shown).size(size).color(theme.text))
-                                .wrap(),
-                        );
+                        let mut label = RichText::new(shown).size(size).color(theme.text);
+                        if let Some(done) = *task {
+                            // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen
+                            let r = Rect::from_center_size(dot.center(), Vec2::splat(size * 0.62));
+                            paint_checkbox(
+                                ui.painter(),
+                                r,
+                                done,
+                                *color,
+                                theme.text.gamma_multiply(0.7),
+                            );
+                            if done {
+                                label = label.strikethrough().color(theme.text.gamma_multiply(0.5));
+                            }
+                        } else {
+                            let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
+                            ui.painter().circle_filled(dot.center(), radius, *color);
+                        }
+                        ui.add(egui::Label::new(label).wrap());
                     });
                 });
             }

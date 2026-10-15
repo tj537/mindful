@@ -131,6 +131,7 @@ Menus, buttons and shortcuts only return a `Command` or an `Action`. They are ex
 | `parent` | `Option<u64>` | parent node, `None` only for the root |
 | `collapsed` | `bool` | children hidden |
 | `color` | `Option<usize>` | custom color as an index into the branch colors, inherited by descendants |
+| `task` | `Option<bool>` | checkbox: `None` = none, `Some(false)` = open, `Some(true)` = done |
 
 ### `MindMap`
 
@@ -153,6 +154,7 @@ Key functions:
 | `neighbor` | nearest node in a direction (arrow keys) |
 | `extract`, `insert_subtree`, `clip_json` | copy and paste with new IDs |
 | `auto_layout` | automatic layout, see below |
+| `task_progress` | done / total checkboxes below a node (for the progress ring) |
 | `to_markdown`, `apply_outline`, `parse_outline` | Markdown, see [Markdown sync](#markdown-sync) |
 
 ---
@@ -236,6 +238,12 @@ Node size and look come from `node_style()` in `nodes.rs` (shared with the camer
 - Horizontal spacing uses the real node widths, which the UI measures and passes in.
 - Collapsed subtrees move as a whole.
 
+After auto layout the nodes **glide** from their old to their new positions: `canvas()` stores the old positions in `doc.layout_anim` and draws interpolated positions for 0.7 s, while the data already holds the final ones. *Fit to window* (and the fit after auto layout) moves the view smoothly via `doc.view_anim`; any zoom, scroll or drag by the user cancels it.
+
+### Checkboxes
+
+`nodes.rs` draws them (`paint_task`, `paint_label` for the struck-through text, `paint_progress` for the ring) and reserves `TASK_SPACE` on the left of the node. Clicking the box sends `Action::ToggleDone`, ⌘Enter `Action::CycleTask` (none → open → done → open), the context menu `Action::SetTask`. Parents with checkboxes below them get a progress ring on their outer side (above the central topic, around the counter when collapsed).
+
 ---
 
 ## Markdown sync
@@ -249,6 +257,7 @@ Node size and look come from `node_style()` in `nodes.rs` (shared with the camer
 | `### Text` etc. | deeper level |
 | `- Text` (indented) | child; indentation = level below the last heading |
 | plain line | note on the entry above |
+| `- [ ] Text` / `- [x] Text` | checkbox, open / done (also works on headings: `## [x] Text`) |
 
 `to_markdown` writes exactly this format. `parse_outline` reads it and understands a bit more: numbered lists, `*`/`+` bullets, checkboxes. If a text contains **no** headings or bullets at all (e.g. pasted from another program), every line becomes a node and indentation decides the level. The indentation width (2 spaces, 4, tab) is detected automatically.
 
@@ -407,6 +416,12 @@ Icons are inserted into text as characters: `format!("{}  Save", icon::FLOPPY_DI
 
 It shows up in every menu automatically.
 
+### … a new template
+
+1. Put a Markdown file into `assets/templates/`.
+2. Add it to the `TEMPLATES` constant in `app.rs` with a name and an icon.
+3. Add it to the `templates_parse_and_round_trip` test.
+
 ### … a new example
 
 1. Put a Markdown file into `assets/examples/`.
@@ -449,6 +464,8 @@ cargo test
 | `paste_subtree_gets_new_ids` | pasting assigns new IDs |
 | `auto_layout_puts_branches_left_and_right` | auto layout distributes the branches |
 | `collapse_hides_descendants` | collapsing and expanding |
+| `checkboxes_round_trip_and_progress` | checkboxes survive Markdown and progress is counted |
+| `templates_parse_and_round_trip` | every template parses and comes back unchanged |
 | `universe_example_is_complete` | the English example is complete |
 | `weltall_example_is_complete` | the German example is complete |
 | `svg_and_png_export` | SVG is escaped correctly, PNG is created |

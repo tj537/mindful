@@ -7,7 +7,7 @@
 
 use crate::document::{Camera, Document, TourState};
 use crate::model::MindMap;
-use crate::nodes::{node_size, node_style, paint_node};
+use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task};
 use crate::present::{
     backdrop, color_of, corner_buttons, ease_in_out_cubic, ease_out_back, ease_out_cubic,
     filmstrip, hint, laser, read_nav, Backdrop, Effects, Event, StripItem,
@@ -369,11 +369,15 @@ pub fn show(
         let mut p = painter.clone();
         p.set_opacity(d.alpha);
         paint_node(&p, theme, rect, &style, scale, false, false);
+        let task = map.get(d.id).and_then(|n| n.task);
+        if let Some(done) = task {
+            paint_task(&p, rect, &style, done, scale);
+        }
         let font = style.font_size * scale;
         if font >= 3.0 {
             let text = map.get(d.id).map(|n| n.text.clone()).unwrap_or_default();
             let galley = p.layout_no_wrap(text, FontId::proportional(font), style.text);
-            p.galley(rect.center() - galley.size() / 2.0, galley, style.text);
+            paint_label(&p, rect, galley, &style, task, scale);
         }
     }
 

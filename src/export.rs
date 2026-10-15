@@ -15,6 +15,8 @@ pub struct ExportNode {
     pub font_size: f32,
     pub edge_width: f32,
     pub text: String,
+    /// Checkbox: `None` = keine, sonst erledigt ja/nein
+    pub task: Option<bool>,
 }
 
 const FONT: &str = "Helvetica Neue, Helvetica, Arial, sans-serif";
@@ -104,10 +106,55 @@ pub fn to_svg(nodes: &[ExportNode], theme: &Theme) -> String {
             rect(&mut s, r.expand(2.0), radius + 2.0, &hex(n.accent), 1.0);
         }
         rect(&mut s, r, radius, &hex(n.fill), 1.0);
+        let mut text_x = n.center.x;
+        let mut decoration = "";
+        let mut text_opacity = 1.0;
+        if let Some(done) = n.task {
+            // Checkbox wie in der App: links im Knoten, Text rückt nach rechts
+            let size = 14.0;
+            let bx = r.left() + r.height() * 0.5 + 4.0 - size / 2.0;
+            let by = n.center.y - size / 2.0;
+            let color = if n.outlined { n.accent } else { n.text_color };
+            if done {
+                let _ = writeln!(
+                    s,
+                    r#"  <rect x="{bx:.1}" y="{by:.1}" width="{size}" height="{size}" rx="3" fill="{}"/>"#,
+                    hex(color)
+                );
+                let mark = if n.outlined {
+                    "#ffffff".to_string()
+                } else {
+                    hex(n.fill)
+                };
+                let _ = writeln!(
+                    s,
+                    r#"  <polyline points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" fill="none" stroke="{mark}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                    bx + size * 0.22,
+                    by + size * 0.52,
+                    bx + size * 0.42,
+                    by + size * 0.72,
+                    bx + size * 0.78,
+                    by + size * 0.3
+                );
+                decoration = r#" text-decoration="line-through""#;
+                text_opacity = 0.55;
+            } else {
+                let _ = writeln!(
+                    s,
+                    r#"  <rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="3" fill="none" stroke="{}" stroke-width="1.6"/>"#,
+                    bx + 0.8,
+                    by + 0.8,
+                    size - 1.6,
+                    size - 1.6,
+                    hex(n.text_color)
+                );
+            }
+            text_x += 12.0;
+        }
         let _ = writeln!(
             s,
-            r#"  <text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="{:.1}" text-anchor="middle" fill="{}">{}</text>"#,
-            n.center.x,
+            r#"  <text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="{:.1}" text-anchor="middle" fill="{}" fill-opacity="{text_opacity}"{decoration}>{}</text>"#,
+            text_x,
             n.center.y + n.font_size * 0.35,
             n.font_size,
             hex(n.text_color),
@@ -161,6 +208,7 @@ mod tests {
                 font_size: 20.0,
                 edge_width: 3.0,
                 text: "Mitte & <Test>".into(),
+                task: None,
             },
             ExportNode {
                 center: Pos2::new(250.0, 40.0),
@@ -173,6 +221,7 @@ mod tests {
                 font_size: 14.0,
                 edge_width: 2.0,
                 text: "Zweig".into(),
+                task: Some(true),
             },
         ];
         let svg = to_svg(&nodes, &THEMES[0]);

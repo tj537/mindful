@@ -92,3 +92,15 @@ Die vielleicht größte offene Frage: Sind wir allein?
   - Jupitermond Europa
   - Saturnmond Enceladus
 - Die Suche geht weiter – mit Teleskopen, Sonden und Radioantennen
+
+## Checkliste: Sterne beobachten
+
+Dinge, die man mit eigenen Augen sehen kann – meist reicht eine klare Nacht.
+
+- [x] Großen Wagen und Polarstern finden
+- [x] Den Mond mit dem Fernglas ansehen
+- [ ] Die vier großen Jupitermonde entdecken
+- [ ] Die ISS über den Himmel ziehen sehen
+- [ ] Einen Meteorschauer beobachten
+  Die Perseiden haben jedes Jahr um den 12. August ihren Höhepunkt.
+- [ ] Einen Sternenpark besuchen

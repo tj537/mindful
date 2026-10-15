@@ -1,7 +1,12 @@
+use crate::document::ViewAnim;
 use crate::document::{Document, Mode};
 use crate::export::{self, ExportNode};
 use crate::model::{parse_outline, Clip, MindMap, DEFAULT_TEXT};
-use crate::nodes::{node_size, node_style, paint_node, NodeStyle, MIN_NODE};
+use crate::nodes::{
+    node_size, node_style, paint_label, paint_node, paint_progress, paint_task, NodeStyle,
+    MIN_NODE, TASK_SPACE,
+};
+use crate::present::ease_in_out_cubic;
 use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
 use crate::{markdown_view, present, tour};
 use eframe::egui::{
@@ -20,6 +25,40 @@ const MAX_ZOOM: f32 = 3.0;
 const DEFAULT_THEME: usize = 1;
 
 /// Mitgelieferte Beispiele (Name, Markdown)
+/// Vorlagen für neue Mindmaps (Name, Symbol, Markdown)
+const TEMPLATES: [(&str, &str, &str); 6] = [
+    (
+        "Brainstorming",
+        icon::LIGHTBULB,
+        include_str!("../assets/templates/brainstorming.md"),
+    ),
+    (
+        "Project plan",
+        icon::LIST_CHECKS,
+        include_str!("../assets/templates/project-plan.md"),
+    ),
+    (
+        "SWOT analysis",
+        icon::SQUARES_FOUR,
+        include_str!("../assets/templates/swot.md"),
+    ),
+    (
+        "Weekly plan",
+        icon::CHECK_SQUARE,
+        include_str!("../assets/templates/weekly-plan.md"),
+    ),
+    (
+        "Meeting notes",
+        icon::NOTE_PENCIL,
+        include_str!("../assets/templates/meeting-notes.md"),
+    ),
+    (
+        "Book summary",
+        icon::BOOK_OPEN,
+        include_str!("../assets/templates/book-summary.md"),
+    ),
+];
+
 const EXAMPLES: [(&str, &str); 2] = [
     (
         "The Universe",
@@ -66,6 +105,7 @@ const SC_HELP: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F1);
 const SC_MARKDOWN: KeyboardShortcut = shortcut(CMD, Key::E);
 const SC_PRESENT: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F5);
 const SC_TOUR: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F6);
+const SC_TASK: KeyboardShortcut = shortcut(CMD, Key::Enter);
 
 // ---------------------------------------------------------------------------
 // Befehle
@@ -111,6 +151,7 @@ enum Command {
     ToggleMarkdown,
     TogglePreview,
     OpenExample(usize),
+    OpenTemplate(usize),
 }
 
 /// Änderungen an einzelnen Knoten der aktiven Mindmap
@@ -120,6 +161,11 @@ enum Action {
     Rename(u64),
     Delete(u64),
     Toggle(u64),
+    /// Checkbox anklicken: offen ↔ erledigt
+    ToggleDone(u64),
+    /// ⌘Enter: keine → offen → erledigt → offen
+    CycleTask(u64),
+    SetTask(u64, Option<bool>),
     SetColor(u64, Option<usize>),
     Copy(u64),
     Cut(u64),
@@ -130,6 +176,7 @@ enum Action {
     SetTheme(usize),
     EditNote(u64),
     OpenExample(usize),
+    OpenTemplate(usize),
     HideWelcome,
 }
 
@@ -141,21 +188,24 @@ fn zoom_at(doc: &mut Document, area: Rect, p: Pos2, zoom: f32) {
     doc.zoom = zoom;
 }
 
-fn fit_view(doc: &mut Document, area: Rect, sizes: &HashMap<u64, Vec2>) {
+/// Verschiebung und Zoom, bei denen alle sichtbaren Knoten ins Bild passen
+fn fit_target(doc: &Document, area: Rect, sizes: &HashMap<u64, Vec2>) -> Option<(Vec2, f32)> {
     let mut bounds = Rect::NOTHING;
     for n in doc.map.nodes.iter().filter(|n| !doc.map.is_hidden(n.id)) {
         let size = sizes.get(&n.id).copied().unwrap_or(MIN_NODE);
         bounds = bounds.union(Rect::from_center_size(Pos2::new(n.pos[0], n.pos[1]), size));
     }
     if !bounds.is_positive() {
-        return;
+        return None;
     }
     let zoom = ((area.width() - 80.0) / bounds.width())
         .min((area.height() - 80.0) / bounds.height())
         .clamp(MIN_ZOOM, 1.25);
-    doc.zoom = zoom;
-    doc.pan = -bounds.center().to_vec2() * zoom;
+    Some((-bounds.center().to_vec2() * zoom, zoom))
 }
+
+/// Dauer von Gleiten und weicher Kamerafahrt in der Mindmap
+const GLIDE: f64 = 0.7;
 
 fn cmd_item(
     ui: &mut egui::Ui,
@@ -304,6 +354,41 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
         l(icon::ARROWS_IN_SIMPLE, "Collapse")
     };
     action_item(ui, has_children, &toggle, "Space", Action::Toggle(id), out);
+    let task = map.get(id).and_then(|n| n.task);
+    let cmd_enter = ui.ctx().format_shortcut(&SC_TASK);
+    match task {
+        None => action_item(
+            ui,
+            true,
+            &l(icon::CHECK_SQUARE, "Add checkbox"),
+            &cmd_enter,
+            Action::SetTask(id, Some(false)),
+            out,
+        ),
+        Some(done) => {
+            let (ic, label) = if done {
+                (icon::SQUARE, "Mark as not done")
+            } else {
+                (icon::CHECK_SQUARE, "Mark as done")
+            };
+            action_item(
+                ui,
+                true,
+                &l(ic, label),
+                &cmd_enter,
+                Action::SetTask(id, Some(!done)),
+                out,
+            );
+            action_item(
+                ui,
+                true,
+                &l(icon::X_SQUARE, "Remove checkbox"),
+                "",
+                Action::SetTask(id, None),
+                out,
+            );
+        }
+    }
     action_item(
         ui,
         true,
@@ -375,6 +460,9 @@ struct Laid {
     /// Auf welcher Seite des Elternknotens er liegt (+1 rechts, -1 links)
     side: f32,
     hit: bool,
+    task: Option<bool>,
+    /// Erledigte / alle Checkboxen darunter
+    progress: Option<(usize, usize)>,
 }
 
 // ---------------------------------------------------------------------------
@@ -589,6 +677,19 @@ impl MindMapApp {
         }
     }
 
+    fn open_template(&mut self, i: usize) {
+        let Some((name, _, text)) = TEMPLATES.get(i) else {
+            return;
+        };
+        let Some(map) = MindMap::from_outline(text) else {
+            return;
+        };
+        let mut doc = Document::new(map, None);
+        doc.layout_pending = true;
+        self.push_doc(doc);
+        self.status = format!("New mind map from the “{name}” template");
+    }
+
     fn open_example(&mut self, i: usize) {
         let Some((name, text)) = EXAMPLES.get(i) else {
             return;
@@ -709,6 +810,7 @@ impl MindMapApp {
                     font_size: style.font_size,
                     edge_width: style.edge_width,
                     text: n.text.clone(),
+                    task: n.task,
                 }
             })
             .collect()
@@ -864,6 +966,7 @@ impl MindMapApp {
             }
             Command::TogglePreview => self.md_preview = !self.md_preview,
             Command::OpenExample(i) => self.open_example(i),
+            Command::OpenTemplate(i) => self.open_template(i),
         }
     }
 
@@ -954,9 +1057,28 @@ impl MindMapApp {
                 doc.checkpoint();
                 doc.layout_pending = true;
             }
-            Action::Fit => doc.fit_pending = true,
+            Action::Fit => {
+                doc.fit_pending = true;
+                doc.fit_smooth = true;
+            }
+            Action::ToggleDone(id) | Action::CycleTask(id) | Action::SetTask(id, _) => {
+                let current = doc.map.get(id).and_then(|n| n.task);
+                let new = match action {
+                    Action::ToggleDone(_) => current.map(|done| !done),
+                    Action::CycleTask(_) => Some(current == Some(false)),
+                    Action::SetTask(_, task) => task,
+                    _ => current,
+                };
+                if new != current {
+                    doc.checkpoint();
+                    if let Some(n) = doc.map.get_mut(id) {
+                        n.task = new;
+                    }
+                }
+            }
             Action::SetTheme(i) => self.theme = i,
             Action::OpenExample(i) => self.open_example(i),
+            Action::OpenTemplate(i) => self.open_template(i),
             Action::HideWelcome => {
                 self.show_welcome = false;
                 self.status = "Tips hidden – turn them back on in the Help menu".into();
@@ -1079,6 +1201,9 @@ impl MindMapApp {
         if cut {
             return Some(Action::Cut(sel));
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&SC_TASK)) {
+            return Some(Action::CycleTask(sel));
+        }
         if pressed(Key::Enter) {
             return Some(Action::AddSibling(sel));
         }
@@ -1145,6 +1270,19 @@ impl MindMapApp {
                     Command::Open,
                     &mut out,
                 );
+                ui.menu_button(l(icon::FILE_DASHED, "New from template"), |ui| {
+                    ui.set_min_width(200.0);
+                    for (i, (name, ic, _)) in TEMPLATES.iter().enumerate() {
+                        cmd_item(
+                            ui,
+                            true,
+                            &l(ic, name),
+                            None,
+                            Command::OpenTemplate(i),
+                            &mut out,
+                        );
+                    }
+                });
                 ui.menu_button(l(icon::BOOK_OPEN, "Open example"), |ui| {
                     ui.set_min_width(180.0);
                     for (i, (name, _)) in EXAMPLES.iter().enumerate() {
@@ -1702,6 +1840,7 @@ impl MindMapApp {
             ("F2 · double-click".into(), "Rename"),
             ("Del".into(), "Delete node and its children"),
             ("Space".into(), "Collapse / expand"),
+            (f(&SC_TASK), "Add checkbox / tick it off"),
             ("Arrow keys".into(), "Move selection"),
             ("Esc".into(), "Clear selection"),
             (f(&SC_COPY), "Copy branch"),
@@ -1767,6 +1906,8 @@ impl MindMapApp {
         self.canvas_rect = area;
         let mut action = None;
 
+        let now = ui.input(|i| i.time);
+
         // Anordnen und "alles anzeigen" brauchen die echten Knotengrößen
         if doc.layout_pending || doc.fit_pending {
             let sizes: HashMap<u64, Vec2> = doc
@@ -1776,14 +1917,45 @@ impl MindMapApp {
                 .map(|n| (n.id, node_size(&ctx, &doc.map, theme, n)))
                 .collect();
             if doc.layout_pending {
+                // Alte Positionen merken: die Knoten gleiten von dort an ihren neuen Platz
+                let before = doc.map.nodes.iter().map(|n| (n.id, n.pos)).collect();
                 let widths = sizes.iter().map(|(id, s)| (*id, s.x)).collect();
                 doc.map.auto_layout(&widths);
+                doc.layout_anim = Some((before, now));
                 doc.layout_pending = false;
                 doc.fit_pending = true;
+                doc.fit_smooth = true;
             }
             if doc.fit_pending {
-                fit_view(doc, area, &sizes);
+                if let Some((pan, zoom)) = fit_target(doc, area, &sizes) {
+                    if doc.fit_smooth {
+                        doc.view_anim = Some(ViewAnim {
+                            from_pan: doc.pan,
+                            from_zoom: doc.zoom,
+                            to_pan: pan,
+                            to_zoom: zoom,
+                            start: now,
+                        });
+                    } else {
+                        doc.pan = pan;
+                        doc.zoom = zoom;
+                    }
+                }
                 doc.fit_pending = false;
+                doc.fit_smooth = false;
+            }
+        }
+
+        // Weiche Kamerafahrt
+        if let Some(v) = doc.view_anim {
+            let t = ((now - v.start) / GLIDE).clamp(0.0, 1.0) as f32;
+            let e = ease_in_out_cubic(t);
+            doc.zoom = (v.from_zoom.ln() + (v.to_zoom.ln() - v.from_zoom.ln()) * e).exp();
+            doc.pan = v.from_pan + (v.to_pan - v.from_pan) * e;
+            if t >= 1.0 {
+                doc.view_anim = None;
+            } else {
+                ctx.request_repaint();
             }
         }
 
@@ -1793,14 +1965,17 @@ impl MindMapApp {
                 ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
             if zoom_delta != 1.0 {
                 if let Some(p) = hover {
+                    doc.view_anim = None;
                     let zoom = doc.zoom * zoom_delta;
                     zoom_at(doc, area, p, zoom);
                 }
-            } else {
+            } else if scroll != Vec2::ZERO {
+                doc.view_anim = None;
                 doc.pan += scroll;
             }
         }
         if bg.dragged() {
+            doc.view_anim = None;
             doc.pan += bg.drag_delta();
         }
         if bg.clicked() {
@@ -1828,6 +2003,28 @@ impl MindMapApp {
             y += spacing;
         }
 
+        // Nach dem Anordnen gleiten die Knoten von ihren alten Plätzen herüber
+        let mut gliding: HashMap<u64, [f32; 2]> = HashMap::new();
+        if let Some((from, start)) = &doc.layout_anim {
+            let e = ease_in_out_cubic(((now - *start) / GLIDE).clamp(0.0, 1.0) as f32);
+            if e < 1.0 {
+                for n in &doc.map.nodes {
+                    let a = from.get(&n.id).copied().unwrap_or(n.pos);
+                    gliding.insert(
+                        n.id,
+                        [a[0] + (n.pos[0] - a[0]) * e, a[1] + (n.pos[1] - a[1]) * e],
+                    );
+                }
+            }
+        }
+        if doc.layout_anim.is_some() {
+            if gliding.is_empty() {
+                doc.layout_anim = None;
+            } else {
+                ctx.request_repaint();
+            }
+        }
+
         // Sichtbare Knoten berechnen
         let layout: Vec<Laid> = doc
             .map
@@ -1841,19 +2038,30 @@ impl MindMapApp {
                     FontId::proportional(style.font_size * zoom),
                     style.text,
                 );
-                let size = (galley.size() + style.padding * zoom).max(MIN_NODE * zoom);
+                let task_space = if n.task.is_some() { TASK_SPACE } else { 0.0 };
+                let size = (galley.size() + (style.padding + Vec2::new(task_space, 0.0)) * zoom)
+                    .max(MIN_NODE * zoom);
                 let side = match n.parent {
                     Some(p) if n.pos[0] < doc.map.pos(p).x => -1.0,
                     _ => 1.0,
                 };
                 Laid {
                     id: n.id,
-                    rect: Rect::from_center_size(to_screen(n.pos), size),
+                    rect: Rect::from_center_size(
+                        to_screen(gliding.get(&n.id).copied().unwrap_or(n.pos)),
+                        size,
+                    ),
                     galley,
                     style,
                     collapsed: n.collapsed && doc.map.has_children(n.id),
                     side,
                     hit: !query.is_empty() && n.text.to_lowercase().contains(&query),
+                    task: n.task,
+                    progress: if doc.map.has_children(n.id) {
+                        doc.map.task_progress(n.id)
+                    } else {
+                        None
+                    },
                 }
             })
             .collect();
@@ -1899,6 +2107,7 @@ impl MindMapApp {
             }
             if resp.drag_started() {
                 doc.checkpoint();
+                doc.layout_anim = None;
             }
             if resp.dragged() {
                 // Knoten samt Unterbaum verschieben
@@ -1921,6 +2130,52 @@ impl MindMapApp {
                 doc.selected == Some(id),
                 l.hit,
             );
+
+            // Checkbox zum Anklicken
+            if let Some(done) = l.task {
+                let r = paint_task(&painter, rect, &l.style, done, zoom);
+                let check = ui.interact(
+                    r.expand(4.0 * zoom),
+                    ui.id().with(("task", id)),
+                    Sense::click(),
+                );
+                let tip = if done {
+                    "Mark as not done"
+                } else {
+                    "Mark as done"
+                };
+                if check.on_hover_text(tip).clicked() {
+                    action = Some(Action::ToggleDone(id));
+                }
+            }
+
+            // Fortschrittsring: außen neben dem Knoten, bei der Mitte darüber.
+            // Ist der Zweig eingeklappt, liegt der Ring um den Zähler.
+            if let Some(progress) = l.progress {
+                let c = if doc.map.parent_of(id).is_none() {
+                    rect.center_top() - Vec2::new(0.0, 16.0 * zoom)
+                } else {
+                    rect.center() + Vec2::new(l.side * (rect.width() / 2.0 + 16.0 * zoom), 0.0)
+                };
+                let radius = if l.collapsed { 15.0 } else { 8.0 } * zoom;
+                paint_progress(
+                    &painter,
+                    c,
+                    radius,
+                    progress,
+                    l.style.accent,
+                    theme.grid,
+                    zoom,
+                );
+                if !l.collapsed {
+                    ui.interact(
+                        Rect::from_center_size(c, Vec2::splat(radius * 2.4)),
+                        ui.id().with(("progress", id)),
+                        Sense::hover(),
+                    )
+                    .on_hover_text(format!("{} of {} done", progress.0, progress.1));
+                }
+            }
 
             // Notiz-Symbol oben rechts; die Notiz erscheint beim Drüberfahren
             let note = doc
@@ -1976,8 +2231,12 @@ impl MindMapApp {
             if doc.editing == Some(id) {
                 let mut lost = false;
                 if let Some(node) = doc.map.get_mut(id) {
+                    let mut field = rect.shrink2(Vec2::new(12.0, 4.0) * zoom);
+                    if l.task.is_some() {
+                        field.min.x += TASK_SPACE * zoom;
+                    }
                     let edit = ui.put(
-                        rect.shrink2(Vec2::new(12.0, 4.0) * zoom),
+                        field,
                         egui::TextEdit::singleline(&mut node.text)
                             .font(FontId::proportional(l.style.font_size * zoom))
                             .text_color(l.style.text)
@@ -1998,11 +2257,7 @@ impl MindMapApp {
                     doc.end_edit();
                 }
             } else {
-                painter.galley(
-                    rect.center() - l.galley.size() / 2.0,
-                    l.galley.clone(),
-                    l.style.text,
-                );
+                paint_label(&painter, rect, l.galley.clone(), &l.style, l.task, zoom);
             }
         }
 
@@ -2011,7 +2266,7 @@ impl MindMapApp {
         if self.show_welcome && pristine {
             let card = Rect::from_center_size(
                 Pos2::new(area.center().x, area.bottom() - 70.0),
-                Vec2::new(area.width().min(640.0), 80.0),
+                Vec2::new(area.width().min(760.0), 80.0),
             );
             let mut card_ui = ui.new_child(
                 egui::UiBuilder::new()
@@ -2041,6 +2296,15 @@ impl MindMapApp {
                         {
                             action = Some(Action::OpenExample(0));
                         }
+                        ui.menu_button(format!("{}  Templates", icon::FILE_DASHED), |ui| {
+                            ui.set_min_width(200.0);
+                            for (i, (name, ic, _)) in TEMPLATES.iter().enumerate() {
+                                if ui.button(format!("{ic}  {name}")).clicked() {
+                                    action = Some(Action::OpenTemplate(i));
+                                    ui.close_menu();
+                                }
+                            }
+                        });
                         let close = ui.add(egui::Button::new(icon::X).frame(false));
                         if close.on_hover_text("Hide tips").clicked() {
                             action = Some(Action::HideWelcome);

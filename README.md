@@ -35,6 +35,9 @@ Also:
 - Several mind maps in tabs. Everything is restored on the next start, including unsaved changes.
 - Save and open as `.mindmap` files, import Markdown and plain-text outlines
 - Export as PNG image, SVG graphic or Markdown
+- **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; parent nodes show a progress ring, slides and exports show the boxes too
+- **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
+- Auto layout with animation: nodes glide to their new places and the view follows smoothly
 - Undo/redo, search, zoom, copy/paste, notes on every node
 - Presentation effects: slide transitions (slide, fade, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (aurora, starfield), title animations, slow camera drift in the tour, a laser pointer and a slide strip for jumping around
 - 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
@@ -253,6 +256,7 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | F2 · double-click | Rename |
 | Del · Backspace | Delete node and its children |
 | Space | Collapse / expand |
+| ⌘Enter | Add checkbox / tick it off |
 | Arrow keys | Move selection |
 | ⌘C · ⌘X · ⌘V · ⌘D | Copy · cut · paste · duplicate |
 | ⌘L | Auto layout |
@@ -288,6 +292,8 @@ Note on the branch (shown on the slide below the heading).
 - Child
   Note on the child
   - deeper
+- [ ] Open task
+- [x] Done task
 ```
 
 ---
@@ -309,7 +315,8 @@ mindful/
 │   └── theme.rs           themes, fonts, widget style
 ├── assets/
 │   ├── icon.svg / icon.png    app icon (source / for the window)
-│   └── examples/              bundled examples (English and German)
+│   ├── examples/              bundled examples (English and German)
+│   └── templates/             templates for new mind maps
 ├── examples/make_icon.rs  renders the icon for the Mac bundle
 ├── packaging/macos/       Info.plist for Mindful.app
 ├── scripts/build-mac.sh   builds dist/Mindful.app

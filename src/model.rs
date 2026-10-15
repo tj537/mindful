@@ -24,6 +24,9 @@ pub struct Node {
     /// Eigene Farbe (Index in die Zweigfarben des Farbschemas), vererbt sich an Unterpunkte
     #[serde(default)]
     pub color: Option<usize>,
+    /// Checkbox: `None` = keine, `Some(false)` = offen, `Some(true)` = erledigt
+    #[serde(default)]
+    pub task: Option<bool>,
 }
 
 impl Node {
@@ -36,6 +39,7 @@ impl Node {
             parent,
             collapsed: false,
             color: None,
+            task: None,
         }
     }
 }
@@ -58,6 +62,7 @@ pub struct OutlineItem {
     pub level: usize,
     pub text: String,
     pub note: String,
+    pub task: Option<bool>,
 }
 
 impl MindMap {
@@ -180,6 +185,18 @@ impl MindMap {
             }
             cur = parent;
         }
+    }
+
+    /// Erledigte und alle Checkboxen unterhalb des Knotens (ohne ihn selbst),
+    /// `None`, wenn es darunter keine gibt.
+    pub fn task_progress(&self, id: u64) -> Option<(usize, usize)> {
+        let tasks: Vec<bool> = self
+            .subtree(id)
+            .into_iter()
+            .skip(1)
+            .filter_map(|n| self.get(n).and_then(|n| n.task))
+            .collect();
+        (!tasks.is_empty()).then(|| (tasks.iter().filter(|done| **done).count(), tasks.len()))
     }
 
     /// Der Knoten selbst plus alle Nachfahren.
@@ -385,10 +402,10 @@ impl MindMap {
         let Some(root) = self.root().and_then(|r| self.get(r)) else {
             return out;
         };
-        out.push_str(&format!("# {}\n", root.text));
+        out.push_str(&format!("# {}{}\n", task_box(root.task), root.text));
         push_note(&root.note, None, &mut out);
         for branch in self.children(root.id) {
-            out.push_str(&format!("\n## {}\n", branch.text));
+            out.push_str(&format!("\n## {}{}\n", task_box(branch.task), branch.text));
             push_note(&branch.note, None, &mut out);
             if self.has_children(branch.id) {
                 out.push('\n');
@@ -401,7 +418,11 @@ impl MindMap {
     fn markdown_bullets(&self, id: u64, level: usize, out: &mut String) {
         for child in self.children(id) {
             let indent = "  ".repeat(level);
-            out.push_str(&format!("{indent}- {}\n", child.text));
+            out.push_str(&format!(
+                "{indent}- {}{}\n",
+                task_box(child.task),
+                child.text
+            ));
             push_note(&child.note, Some(&format!("{indent}  ")), out);
             self.markdown_bullets(child.id, level + 1, out);
         }
@@ -422,6 +443,7 @@ impl MindMap {
             let id = self.add_child_text(p, &item.text);
             if let Some(n) = self.get_mut(id) {
                 n.note = item.note.clone();
+                n.task = item.task;
             }
             if stack.is_empty() {
                 top.push(id);
@@ -447,10 +469,15 @@ impl MindMap {
         let min = items.iter().map(|i| i.level).min().unwrap_or(0);
         let single_root = items.first().is_some_and(|i| i.level == min)
             && items.iter().filter(|i| i.level == min).count() == 1;
-        let (root_text, root_note, rest) = match items.first() {
-            Some(first) if single_root => (first.text.clone(), first.note.clone(), &items[1..]),
-            Some(_) => ("Mind map".to_string(), String::new(), &items[..]),
-            None => (String::new(), String::new(), &items[..]),
+        let (root_text, root_note, root_task, rest) = match items.first() {
+            Some(first) if single_root => (
+                first.text.clone(),
+                first.note.clone(),
+                first.task,
+                &items[1..],
+            ),
+            Some(_) => ("Mind map".to_string(), String::new(), None, &items[..]),
+            None => (String::new(), String::new(), None, &items[..]),
         };
 
         let old = std::mem::replace(
@@ -466,12 +493,14 @@ impl MindMap {
             Some(r) => Node {
                 text: root_text,
                 note: root_note,
+                task: root_task,
                 ..r.clone()
             },
             None => {
                 let mut n = Node::new(self.next_id, &root_text, Vec2::ZERO, None);
                 self.next_id += 1;
                 n.note = root_note;
+                n.task = root_task;
                 n
             }
         };
@@ -504,6 +533,7 @@ impl MindMap {
                     self.nodes.push(Node {
                         text: item.text.clone(),
                         note: item.note.clone(),
+                        task: item.task,
                         parent: Some(parent),
                         ..n
                     });
@@ -513,6 +543,7 @@ impl MindMap {
                     let id = self.add_child_text(parent, &item.text);
                     if let Some(n) = self.get_mut(id) {
                         n.note = item.note.clone();
+                        n.task = item.task;
                     }
                     id
                 }
@@ -542,9 +573,31 @@ fn push_note(note: &str, indent: Option<&str>, out: &mut String) {
     }
 }
 
+/// Markdown-Schreibweise einer Checkbox
+fn task_box(task: Option<bool>) -> &'static str {
+    match task {
+        None => "",
+        Some(false) => "[ ] ",
+        Some(true) => "[x] ",
+    }
+}
+
+/// Trennt eine Checkbox (`[ ]`, `[x]`) vom Text
+fn split_task(text: &str) -> (Option<bool>, String) {
+    let t = text.trim();
+    for (prefix, done) in [("[ ]", false), ("[x]", true), ("[X]", true)] {
+        if let Some(rest) = t.strip_prefix(prefix) {
+            if rest.is_empty() || rest.starts_with(' ') {
+                return (Some(done), rest.trim().to_string());
+            }
+        }
+    }
+    (None, t.to_string())
+}
+
 enum Line {
-    Heading(usize, String),
-    Bullet(usize, String),
+    Heading(usize, String, Option<bool>),
+    Bullet(usize, String, Option<bool>),
     Plain(usize, String),
     Blank,
 }
@@ -556,21 +609,27 @@ fn classify(line: &str) -> Line {
     }
     let hashes = trimmed.chars().take_while(|&c| c == '#').count();
     if hashes > 0 && trimmed[hashes..].starts_with(' ') {
-        return Line::Heading(hashes, trimmed[hashes..].trim().to_string());
+        let (task, text) = split_task(&trimmed[hashes..]);
+        return Line::Heading(hashes, text, task);
     }
     let indent: usize = line
         .chars()
         .take_while(|c| c.is_whitespace())
         .map(|c| if c == '\t' { 4 } else { 1 })
         .sum();
-    for bullet in ["- [ ] ", "- [x] ", "- ", "* ", "+ "] {
+    for bullet in ["- ", "* ", "+ "] {
         if let Some(rest) = trimmed.strip_prefix(bullet) {
-            return Line::Bullet(indent, rest.trim().to_string());
+            let (task, text) = split_task(rest);
+            return Line::Bullet(indent, text, task);
         }
+    }
+    if trimmed == "-" || trimmed == "- [ ]" {
+        return Line::Bullet(indent, String::new(), (trimmed != "-").then_some(false));
     }
     if let Some((num, rest)) = trimmed.split_once(". ") {
         if !num.is_empty() && num.chars().all(|c| c.is_ascii_digit()) {
-            return Line::Bullet(indent, rest.trim().to_string());
+            let (task, text) = split_task(rest);
+            return Line::Bullet(indent, text, task);
         }
     }
     Line::Plain(indent, trimmed.to_string())
@@ -591,7 +650,7 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
     let unit = lines
         .iter()
         .filter_map(|l| match l {
-            Line::Bullet(i, _) if markdown => Some(*i),
+            Line::Bullet(i, ..) if markdown => Some(*i),
             Line::Plain(i, _) if !markdown => Some(*i),
             _ => None,
         })
@@ -599,10 +658,11 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
         .min()
         .unwrap_or(2);
 
-    let item = |level: usize, text: String| OutlineItem {
+    let item = |level: usize, text: String, task: Option<bool>| OutlineItem {
         level,
         text,
         note: String::new(),
+        task,
     };
     let mut items: Vec<OutlineItem> = Vec::new();
     let mut heading_level = 0;
@@ -610,12 +670,14 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
     for line in lines {
         let blank = matches!(line, Line::Blank);
         match line {
-            Line::Heading(h, t) => {
+            Line::Heading(h, t, task) => {
                 heading_level = h;
-                items.push(item(h - 1, t));
+                items.push(item(h - 1, t, task));
             }
-            Line::Bullet(indent, t) => items.push(item(heading_level + indent / unit, t)),
-            Line::Plain(indent, t) if !markdown => items.push(item(indent / unit, t)),
+            Line::Bullet(indent, t, task) => {
+                items.push(item(heading_level + indent / unit, t, task))
+            }
+            Line::Plain(indent, t) if !markdown => items.push(item(indent / unit, t, None)),
             Line::Plain(_, t) => match items.last_mut() {
                 Some(last) => {
                     if !last.note.is_empty() {
@@ -623,7 +685,7 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
                     }
                     last.note.push_str(&t);
                 }
-                None => items.push(item(0, t)),
+                None => items.push(item(0, t, None)),
             },
             Line::Blank => {}
         }
@@ -654,6 +716,22 @@ mod tests {
         let budget = map.nodes.iter().find(|n| n.text == "Budget").unwrap();
         assert_eq!(budget.note, "Grob 5000 Euro");
         assert_eq!(map.to_markdown(), md);
+    }
+
+    #[test]
+    fn checkboxes_round_trip_and_progress() {
+        let md =
+            "# Trip\n\n## Packing\n\n- [x] Passport\n- [ ] Charger\n- Snacks\n  - [X] Apples\n";
+        let map = MindMap::from_outline(md).unwrap();
+        let find = |t: &str| map.nodes.iter().find(|n| n.text == t).unwrap();
+        assert_eq!(find("Passport").task, Some(true));
+        assert_eq!(find("Charger").task, Some(false));
+        assert_eq!(find("Snacks").task, None);
+        assert_eq!(find("Apples").task, Some(true));
+        assert_eq!(map.task_progress(find("Packing").id), Some((2, 3)));
+        assert_eq!(map.task_progress(find("Charger").id), None);
+        // [X] wird beim Schreiben zu [x]
+        assert_eq!(map.to_markdown(), md.replace("[X]", "[x]"));
     }
 
     #[test]
@@ -726,13 +804,33 @@ mod example_tests {
     use super::*;
 
     #[test]
+    fn templates_parse_and_round_trip() {
+        for md in [
+            include_str!("../assets/templates/brainstorming.md"),
+            include_str!("../assets/templates/project-plan.md"),
+            include_str!("../assets/templates/swot.md"),
+            include_str!("../assets/templates/weekly-plan.md"),
+            include_str!("../assets/templates/meeting-notes.md"),
+            include_str!("../assets/templates/book-summary.md"),
+        ] {
+            let map = MindMap::from_outline(md).unwrap();
+            assert!(map.children(map.root().unwrap()).count() >= 4);
+            // Im Markdown-Editor erscheint die Vorlage genau so, wie sie geschrieben ist
+            assert_eq!(map.to_markdown(), md);
+        }
+    }
+
+    #[test]
     fn universe_example_is_complete() {
         let md = include_str!("../assets/examples/universe.md");
         let map = MindMap::from_outline(md).unwrap();
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "The Universe");
+        // Die Checkliste: 2 von 6 erledigt
+        let checklist = map.children(root).last().unwrap();
+        assert_eq!(map.task_progress(checklist.id), Some((2, 6)));
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 7);
+        assert_eq!(branches.len(), 8);
         assert!(branches
             .iter()
             .all(|b| !b.note.is_empty() && map.has_children(b.id)));
@@ -746,7 +844,7 @@ mod example_tests {
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "Das Weltall");
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 7);
+        assert_eq!(branches.len(), 8);
         assert!(branches
             .iter()
             .all(|b| !b.note.is_empty() && map.has_children(b.id)));

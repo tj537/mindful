@@ -1,6 +1,7 @@
 use crate::model::{MindMap, DEFAULT_TEXT};
 use eframe::egui::Vec2;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -29,6 +30,16 @@ impl Mode {
 pub struct Camera {
     pub center: Vec2,
     pub zoom: f32,
+}
+
+/// Weiche Kamerafahrt der Mindmap-Ansicht (z. B. bei „Alles anzeigen“)
+#[derive(Clone, Copy)]
+pub struct ViewAnim {
+    pub from_pan: Vec2,
+    pub from_zoom: f32,
+    pub to_pan: Vec2,
+    pub to_zoom: f32,
+    pub start: f64,
 }
 
 /// Zustand der Kamerafahrt (nicht gespeichert)
@@ -90,6 +101,14 @@ pub struct Document {
     /// Beim nächsten Zeichnen automatisch anordnen
     #[serde(skip)]
     pub layout_pending: bool,
+    /// „Alles anzeigen“ weich animieren statt springen
+    #[serde(skip)]
+    pub fit_smooth: bool,
+    /// Knoten gleiten nach dem Anordnen von den alten Positionen (mit Startzeit)
+    #[serde(skip)]
+    pub layout_anim: Option<(HashMap<u64, [f32; 2]>, f64)>,
+    #[serde(skip)]
+    pub view_anim: Option<ViewAnim>,
 
     /// Text im Markdown-Editor
     #[serde(skip)]
@@ -133,6 +152,9 @@ impl Document {
             zoom: 1.0,
             fit_pending: true,
             layout_pending: false,
+            fit_smooth: false,
+            layout_anim: None,
+            view_anim: None,
             md_text: String::new(),
             md_checkpointed: false,
             slide: 0,

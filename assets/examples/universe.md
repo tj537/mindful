@@ -92,3 +92,15 @@ Perhaps the biggest open question: are we alone?
   - Jupiter's moon Europa
   - Saturn's moon Enceladus
 - The search goes on – with telescopes, probes and radio antennas
+
+## Stargazing Checklist
+
+Things to see with your own eyes – most of them need nothing but a clear night.
+
+- [x] Find the Big Dipper and the North Star
+- [x] Look at the Moon through binoculars
+- [ ] See Jupiter's four largest moons
+- [ ] Spot the ISS passing overhead
+- [ ] Watch a meteor shower
+  The Perseids peak every year around 12 August.
+- [ ] Visit a dark-sky park

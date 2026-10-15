@@ -3,9 +3,10 @@
 
 use crate::document::Document;
 use crate::model::MindMap;
+use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
-    self, text::LayoutJob, Color32, FontId, Margin, RichText, Sense, TextFormat, Vec2,
+    self, text::LayoutJob, Color32, FontId, Margin, Rect, RichText, Sense, TextFormat, Vec2,
 };
 use egui_phosphor::regular as icon;
 
@@ -13,7 +14,7 @@ const BODY: f32 = 15.0;
 
 /// Länge des Aufzählungszeichens am Zeilenanfang ("- ", "* ", "1. " …)
 fn bullet_len(trimmed: &str) -> Option<usize> {
-    for bullet in ["- [ ] ", "- [x] ", "- ", "* ", "+ "] {
+    for bullet in ["- [ ] ", "- [x] ", "- [X] ", "- ", "* ", "+ "] {
         if trimmed.starts_with(bullet) {
             return Some(bullet.len());
         }
@@ -60,8 +61,15 @@ fn highlight(text: &str, theme: &Theme) -> LayoutJob {
             job.append(&line[split..], 0.0, fmt(size, theme.text));
         } else if let Some(len) = bullet_len(trimmed) {
             let split = indent + len;
+            // Erledigte Aufgaben blasser
+            let done = trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ");
+            let text_color = if done {
+                note_color.gamma_multiply(0.8)
+            } else {
+                theme.text
+            };
             job.append(&line[..split], 0.0, fmt(BODY, branch_color));
-            job.append(&line[split..], 0.0, fmt(BODY, theme.text));
+            job.append(&line[split..], 0.0, fmt(BODY, text_color));
         } else {
             job.append(line, 0.0, fmt(BODY, note_color));
         }
@@ -164,8 +172,23 @@ fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color
         let indent = 12.0 + depth as f32 * 20.0;
         ui.horizontal_top(|ui| {
             ui.add_space(indent);
-            ui.label(RichText::new("•").color(color).strong());
-            ui.add(egui::Label::new(child.text.as_str()).wrap());
+            match child.task {
+                Some(done) => {
+                    let (r, _) = ui.allocate_exact_size(Vec2::splat(15.0), Sense::hover());
+                    let r =
+                        Rect::from_center_size(r.center() + Vec2::new(0.0, 2.0), Vec2::splat(13.0));
+                    paint_checkbox(ui.painter(), r, done, color, ui.visuals().text_color());
+                    let mut text = RichText::new(child.text.as_str());
+                    if done {
+                        text = text.strikethrough().weak();
+                    }
+                    ui.add(egui::Label::new(text).wrap());
+                }
+                None => {
+                    ui.label(RichText::new("•").color(color).strong());
+                    ui.add(egui::Label::new(child.text.as_str()).wrap());
+                }
+            }
         });
         note(ui, &child.note, indent + 16.0);
         bullets(ui, map, child.id, depth + 1, color);
