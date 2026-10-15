@@ -4,7 +4,8 @@ use crate::document::Document;
 use crate::model::MindMap;
 use crate::theme::Theme;
 use eframe::egui::{
-    self, Align, Align2, Color32, FontId, Key, Layout, Modifiers, Rect, RichText, Sense, UiBuilder, Vec2,
+    self, Align, Align2, Color32, FontId, Key, Layout, Modifiers, Rect, RichText, Sense, UiBuilder,
+    Vec2,
 };
 use egui_phosphor::regular as icon;
 
@@ -28,7 +29,13 @@ fn color_of(map: &MindMap, theme: &Theme, id: u64) -> Color32 {
         .unwrap_or(theme.root)
 }
 
-fn collect(map: &MindMap, id: u64, depth: usize, color: Color32, out: &mut Vec<(usize, String, Color32)>) {
+fn collect(
+    map: &MindMap,
+    id: u64,
+    depth: usize,
+    color: Color32,
+    out: &mut Vec<(usize, String, Color32)>,
+) {
     for child in map.children(id) {
         out.push((depth, child.text.clone(), color));
         if depth < 2 {
@@ -78,7 +85,13 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
     let (next, prev, home, end, exit, full) = ui.input_mut(|i| {
         let mut any = |keys: &[Key]| keys.iter().any(|k| i.consume_key(Modifiers::NONE, *k));
         (
-            any(&[Key::ArrowRight, Key::ArrowDown, Key::Space, Key::PageDown, Key::Enter]),
+            any(&[
+                Key::ArrowRight,
+                Key::ArrowDown,
+                Key::Space,
+                Key::PageDown,
+                Key::Enter,
+            ]),
             any(&[Key::ArrowLeft, Key::ArrowUp, Key::PageUp, Key::Backspace]),
             any(&[Key::Home]),
             any(&[Key::End]),
@@ -139,14 +152,25 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
     // Buttons oben rechts
     let mut corner = ui.new_child(
         UiBuilder::new()
-            .max_rect(Rect::from_min_size(area.right_top() + Vec2::new(-110.0, 10.0), Vec2::new(100.0, 36.0)))
+            .max_rect(Rect::from_min_size(
+                area.right_top() + Vec2::new(-110.0, 10.0),
+                Vec2::new(100.0, 36.0),
+            ))
             .layout(Layout::right_to_left(Align::Center)),
     );
     let big = |ic: &str| RichText::new(ic).size(18.0);
-    if corner.button(big(icon::X)).on_hover_text("Präsentation beenden (Esc)").clicked() {
+    if corner
+        .button(big(icon::X))
+        .on_hover_text("Präsentation beenden (Esc)")
+        .clicked()
+    {
         event = Some(Event::Exit);
     }
-    if corner.button(big(icon::CORNERS_OUT)).on_hover_text("Vollbild (F)").clicked() {
+    if corner
+        .button(big(icon::CORNERS_OUT))
+        .on_hover_text("Vollbild (F)")
+        .clicked()
+    {
         event = Some(Event::ToggleFullscreen);
     }
 
@@ -164,9 +188,24 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
 
     if slide.is_title {
         ui.add_space(content.height() * 0.22);
-        ui.add(egui::Label::new(RichText::new(&slide.title).size(76.0 * s).strong().color(theme.text)).wrap());
+        ui.add(
+            egui::Label::new(
+                RichText::new(&slide.title)
+                    .size(76.0 * s)
+                    .strong()
+                    .color(theme.text),
+            )
+            .wrap(),
+        );
         if !slide.note.trim().is_empty() {
-            ui.add(egui::Label::new(RichText::new(slide.note.trim()).size(28.0 * s).color(theme.text.gamma_multiply(0.7))).wrap());
+            ui.add(
+                egui::Label::new(
+                    RichText::new(slide.note.trim())
+                        .size(28.0 * s)
+                        .color(theme.text.gamma_multiply(0.7)),
+                )
+                .wrap(),
+            );
         }
         ui.add_space(36.0 * s);
         // Die Hauptzweige als farbige Kapitel-Marken
@@ -174,13 +213,16 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
             ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0) * s;
             for (_, text, color) in &slide.bullets {
                 // Feste Größe vorab, damit eine Marke als Ganzes in die nächste Zeile rutscht
-                let galley = ui
-                    .painter()
-                    .layout_no_wrap(text.clone(), FontId::proportional(20.0 * s), theme.on_accent);
+                let galley = ui.painter().layout_no_wrap(
+                    text.clone(),
+                    FontId::proportional(20.0 * s),
+                    theme.on_accent,
+                );
                 let size = galley.size() + Vec2::new(36.0, 16.0) * s;
                 let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
                 ui.painter().rect_filled(rect, rect.height() / 2.0, *color);
-                ui.painter().galley(rect.center() - galley.size() / 2.0, galley, theme.on_accent);
+                ui.painter()
+                    .galley(rect.center() - galley.size() / 2.0, galley, theme.on_accent);
             }
         });
     } else {
@@ -189,12 +231,27 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
                 .size(18.0 * s)
                 .color(slide.color),
         );
-        ui.add(egui::Label::new(RichText::new(&slide.title).size(54.0 * s).strong().color(theme.text)).wrap());
+        ui.add(
+            egui::Label::new(
+                RichText::new(&slide.title)
+                    .size(54.0 * s)
+                    .strong()
+                    .color(theme.text),
+            )
+            .wrap(),
+        );
         let (line, _) = ui.allocate_exact_size(Vec2::new(90.0, 6.0) * s, Sense::hover());
         painter.rect_filled(line, 3.0 * s, slide.color.gamma_multiply(opacity));
         ui.add_space(14.0 * s);
         if !slide.note.trim().is_empty() {
-            ui.add(egui::Label::new(RichText::new(slide.note.trim()).size(24.0 * s).color(theme.text.gamma_multiply(0.75))).wrap());
+            ui.add(
+                egui::Label::new(
+                    RichText::new(slide.note.trim())
+                        .size(24.0 * s)
+                        .color(theme.text.gamma_multiply(0.75)),
+                )
+                .wrap(),
+            );
             ui.add_space(10.0 * s);
         }
         // Bei vielen Punkten die Schrift etwas verkleinern
@@ -203,7 +260,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
             let size = (30.0 - *depth as f32 * 4.0) * s * shrink;
             ui.horizontal_top(|ui| {
                 ui.add_space(*depth as f32 * 40.0 * s);
-                let (dot, _) = ui.allocate_exact_size(Vec2::new(size * 0.8, size * 1.2), Sense::hover());
+                let (dot, _) =
+                    ui.allocate_exact_size(Vec2::new(size * 0.8, size * 1.2), Sense::hover());
                 let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
                 ui.painter().circle_filled(dot.center(), radius, *color);
                 ui.add(egui::Label::new(RichText::new(text).size(size).color(theme.text)).wrap());
@@ -219,7 +277,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme) -> Option<Even
     painter.rect_filled(track, 2.0 * s, theme.grid);
     let progress = ((anim + 1.0) / slides.len() as f32).clamp(0.0, 1.0);
     painter.rect_filled(
-        Rect::from_min_size(track.min, Vec2::new(track.width() * progress, track.height())),
+        Rect::from_min_size(
+            track.min,
+            Vec2::new(track.width() * progress, track.height()),
+        ),
         2.0 * s,
         slide.color,
     );

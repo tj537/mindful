@@ -15,7 +15,10 @@ const APP_NAME: &str = "Mindful";
 
 /// Die App hieß früher "Mindmap": gespeicherte Tabs und Einstellungen einmalig übernehmen.
 fn migrate_storage() {
-    let (Some(old), Some(new)) = (eframe::storage_dir("Mindmap"), eframe::storage_dir(APP_NAME)) else {
+    let (Some(old), Some(new)) = (
+        eframe::storage_dir("Mindmap"),
+        eframe::storage_dir(APP_NAME),
+    ) else {
         return;
     };
     if !old.exists() || new.exists() || std::fs::create_dir_all(&new).is_err() {

@@ -153,7 +153,9 @@ impl MindMap {
         let targets: Vec<u64> = self
             .nodes
             .iter()
-            .filter(|n| !collapsed || (n.parent.is_some() && n.parent == root && self.has_children(n.id)))
+            .filter(|n| {
+                !collapsed || (n.parent.is_some() && n.parent == root && self.has_children(n.id))
+            })
             .map(|n| n.id)
             .collect();
         for n in &mut self.nodes {
@@ -225,8 +227,16 @@ impl MindMap {
             // Tiefere Ebenen: vom Großelternknoten weg, Geschwister abwechselnd versetzt
             Some(gp) => {
                 let away = parent_pos - self.pos(gp);
-                let dir = if away.length() > 1.0 { away.normalized() } else { Vec2::X };
-                let side = if (n as u32) % 2 == 0 { 1.0 } else { -1.0 };
+                let dir = if away.length() > 1.0 {
+                    away.normalized()
+                } else {
+                    Vec2::X
+                };
+                let side = if (n as u32).is_multiple_of(2) {
+                    1.0
+                } else {
+                    -1.0
+                };
                 let offset = ((n + 1.0) / 2.0).floor() * 55.0 * side;
                 parent_pos + dir * 200.0 + dir.rot90() * offset
             }
@@ -263,7 +273,10 @@ impl MindMap {
     }
 
     pub fn clip_json(&self, id: u64) -> String {
-        serde_json::to_string(&Clip { mindmap_clip: self.extract(id) }).unwrap_or_default()
+        serde_json::to_string(&Clip {
+            mindmap_clip: self.extract(id),
+        })
+        .unwrap_or_default()
     }
 
     /// Fügt einen kopierten Teilbaum unter `parent` ein, mit neuen IDs.
@@ -313,7 +326,7 @@ impl MindMap {
         out.insert(root, root_pos);
 
         let kids: Vec<u64> = self.children(root).map(|n| n.id).collect();
-        let right = (kids.len() + 1) / 2;
+        let right = kids.len().div_ceil(2);
         for (side, group) in [(1.0, &kids[..right]), (-1.0, &kids[right..])] {
             let total: f32 = group.iter().map(|k| self.subtree_height(*k)).sum();
             let mut y = root_pos.y - total / 2.0;
@@ -332,7 +345,14 @@ impl MindMap {
         }
     }
 
-    fn place(&self, id: u64, pos: Vec2, side: f32, widths: &HashMap<u64, f32>, out: &mut HashMap<u64, Vec2>) {
+    fn place(
+        &self,
+        id: u64,
+        pos: Vec2,
+        side: f32,
+        widths: &HashMap<u64, f32>,
+        out: &mut HashMap<u64, Vec2>,
+    ) {
         let width = |id: u64| widths.get(&id).copied().unwrap_or(90.0);
         let old = self.pos(id);
         out.insert(id, pos);
@@ -680,7 +700,9 @@ mod tests {
     #[test]
     fn auto_layout_puts_branches_left_and_right() {
         let mut map = MindMap::new("Mitte");
-        let ids: Vec<u64> = (0..4).map(|i| map.add_child_text(0, &format!("Zweig {i}"))).collect();
+        let ids: Vec<u64> = (0..4)
+            .map(|i| map.add_child_text(0, &format!("Zweig {i}")))
+            .collect();
         map.auto_layout(&HashMap::new());
         assert!(map.pos(ids[0]).x > 0.0 && map.pos(ids[1]).x > 0.0);
         assert!(map.pos(ids[2]).x < 0.0 && map.pos(ids[3]).x < 0.0);
@@ -711,7 +733,9 @@ mod example_tests {
         assert_eq!(map.get(root).unwrap().text, "Das Weltall");
         let branches: Vec<&Node> = map.children(root).collect();
         assert_eq!(branches.len(), 7);
-        assert!(branches.iter().all(|b| !b.note.is_empty() && map.has_children(b.id)));
+        assert!(branches
+            .iter()
+            .all(|b| !b.note.is_empty() && map.has_children(b.id)));
         // Beim Öffnen im Markdown-Editor kommt exakt derselbe Text heraus
         assert_eq!(map.to_markdown(), md);
     }

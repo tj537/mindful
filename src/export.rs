@@ -59,7 +59,13 @@ pub fn to_svg(nodes: &[ExportNode], theme: &Theme) -> String {
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="{:.1} {:.1} {w} {h}">"#,
         b.min.x, b.min.y
     );
-    rect(&mut s, Rect::from_min_size(b.min, Vec2::new(w, h)), 0.0, &hex(theme.background), 1.0);
+    rect(
+        &mut s,
+        Rect::from_min_size(b.min, Vec2::new(w, h)),
+        0.0,
+        &hex(theme.background),
+        1.0,
+    );
 
     // Verbindungslinien
     for n in nodes {
@@ -87,7 +93,13 @@ pub fn to_svg(nodes: &[ExportNode], theme: &Theme) -> String {
     for n in nodes {
         let r = Rect::from_center_size(n.center, n.size);
         let radius = r.height() / 2.0;
-        rect(&mut s, r.translate(Vec2::new(0.0, 3.0)).expand(1.0), radius, "#000000", shadow);
+        rect(
+            &mut s,
+            r.translate(Vec2::new(0.0, 3.0)).expand(1.0),
+            radius,
+            "#000000",
+            shadow,
+        );
         if n.outlined {
             rect(&mut s, r.expand(2.0), radius + 2.0, &hex(n.accent), 1.0);
         }
@@ -122,7 +134,11 @@ pub fn svg_to_png(svg: &str, path: &Path) -> Result<(), String> {
         .ok_or_else(|| "Bild ist zu groß".to_string())?;
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
         .ok_or_else(|| "Bild ist zu groß".to_string())?;
-    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+    resvg::render(
+        &tree,
+        tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
     pixmap.save_png(path).map_err(|e| e.to_string())
 }
 

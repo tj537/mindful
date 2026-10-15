@@ -1,13 +1,13 @@
 use crate::document::{Document, Mode};
-use crate::{markdown_view, present};
 use crate::export::{self, ExportNode};
 use crate::model::{parse_outline, Clip, MindMap, Node, DEFAULT_TEXT};
 use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
-use egui_phosphor::regular as icon;
+use crate::{markdown_view, present};
 use eframe::egui::{
     self, epaint::CubicBezierShape, Align, Align2, Color32, FontId, Key, KeyboardShortcut, Layout,
     Modifiers, Pos2, Rect, Sense, Stroke, Vec2,
 };
+use egui_phosphor::regular as icon;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -178,12 +178,24 @@ fn node_style(map: &MindMap, theme: &Theme, id: u64) -> NodeStyle {
 fn node_size(ctx: &egui::Context, map: &MindMap, theme: &Theme, node: &Node) -> Vec2 {
     let style = node_style(map, theme, node.id);
     let galley = ctx.fonts(|f| {
-        f.layout_no_wrap(node.text.clone(), FontId::proportional(style.font_size), style.text)
+        f.layout_no_wrap(
+            node.text.clone(),
+            FontId::proportional(style.font_size),
+            style.text,
+        )
     });
     (galley.size() + style.padding).max(MIN_NODE)
 }
 
-fn paint_node(painter: &egui::Painter, theme: &Theme, rect: Rect, style: &NodeStyle, zoom: f32, selected: bool, hit: bool) {
+fn paint_node(
+    painter: &egui::Painter,
+    theme: &Theme,
+    rect: Rect,
+    style: &NodeStyle,
+    zoom: f32,
+    selected: bool,
+    hit: bool,
+) {
     let radius = rect.height() / 2.0;
     painter.rect_filled(
         rect.translate(Vec2::new(0.0, 3.0 * zoom)).expand(zoom),
@@ -192,7 +204,11 @@ fn paint_node(painter: &egui::Painter, theme: &Theme, rect: Rect, style: &NodeSt
     );
     if hit {
         let grow = 9.0 * zoom;
-        painter.rect_filled(rect.expand(grow), radius + grow, theme.selection.gamma_multiply(0.35));
+        painter.rect_filled(
+            rect.expand(grow),
+            radius + grow,
+            theme.selection.gamma_multiply(0.35),
+        );
     }
     if selected {
         let grow = 5.0 * zoom;
@@ -229,7 +245,14 @@ fn fit_view(doc: &mut Document, area: Rect, sizes: &HashMap<u64, Vec2>) {
     doc.pan = -bounds.center().to_vec2() * zoom;
 }
 
-fn cmd_item(ui: &mut egui::Ui, enabled: bool, label: &str, sc: Option<&KeyboardShortcut>, cmd: Command, out: &mut Option<Command>) {
+fn cmd_item(
+    ui: &mut egui::Ui,
+    enabled: bool,
+    label: &str,
+    sc: Option<&KeyboardShortcut>,
+    cmd: Command,
+    out: &mut Option<Command>,
+) {
     let mut button = egui::Button::new(label);
     if let Some(sc) = sc {
         button = button.shortcut_text(ui.ctx().format_shortcut(sc));
@@ -241,7 +264,13 @@ fn cmd_item(ui: &mut egui::Ui, enabled: bool, label: &str, sc: Option<&KeyboardS
 }
 
 /// Flacher Icon-Button mit Tooltip (samt Tastenkürzel)
-fn icon_button(ui: &mut egui::Ui, ic: &str, tip: &str, sc: Option<&KeyboardShortcut>, enabled: bool) -> bool {
+fn icon_button(
+    ui: &mut egui::Ui,
+    ic: &str,
+    tip: &str,
+    sc: Option<&KeyboardShortcut>,
+    enabled: bool,
+) -> bool {
     let tip = match sc {
         Some(sc) => format!("{tip}   {}", ui.ctx().format_shortcut(sc)),
         None => tip.to_string(),
@@ -256,9 +285,30 @@ fn icon_button(ui: &mut egui::Ui, ic: &str, tip: &str, sc: Option<&KeyboardShort
 fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
     ui.set_min_width(220.0);
     let l = |ic: &str, text: &str| format!("{ic}  {text}");
-    cmd_item(ui, true, &l(icon::IMAGE, "Bild (PNG) …"), None, Command::Export(ExportKind::Png), out);
-    cmd_item(ui, true, &l(icon::FILE_SVG, "Vektorgrafik (SVG) …"), None, Command::Export(ExportKind::Svg), out);
-    cmd_item(ui, true, &l(icon::MARKDOWN_LOGO, "Gliederung (Markdown) …"), None, Command::Export(ExportKind::Markdown), out);
+    cmd_item(
+        ui,
+        true,
+        &l(icon::IMAGE, "Bild (PNG) …"),
+        None,
+        Command::Export(ExportKind::Png),
+        out,
+    );
+    cmd_item(
+        ui,
+        true,
+        &l(icon::FILE_SVG, "Vektorgrafik (SVG) …"),
+        None,
+        Command::Export(ExportKind::Svg),
+        out,
+    );
+    cmd_item(
+        ui,
+        true,
+        &l(icon::MARKDOWN_LOGO, "Gliederung (Markdown) …"),
+        None,
+        Command::Export(ExportKind::Markdown),
+        out,
+    );
 }
 
 /// Farbschemas mit kleiner Farbvorschau
@@ -267,7 +317,13 @@ fn theme_menu(ui: &mut egui::Ui, current: usize, out: &mut Option<Command>) {
     for (i, t) in THEMES.iter().enumerate() {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
-            for c in [t.background, t.root, t.branches[0], t.branches[1], t.branches[2]] {
+            for c in [
+                t.background,
+                t.root,
+                t.branches[0],
+                t.branches[1],
+                t.branches[2],
+            ] {
                 let (rect, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
                 ui.painter().circle_filled(rect.center(), 5.5, c);
             }
@@ -280,7 +336,14 @@ fn theme_menu(ui: &mut egui::Ui, current: usize, out: &mut Option<Command>) {
     }
 }
 
-fn action_item(ui: &mut egui::Ui, enabled: bool, label: &str, shortcut: &str, action: Action, out: &mut Option<Action>) {
+fn action_item(
+    ui: &mut egui::Ui,
+    enabled: bool,
+    label: &str,
+    shortcut: &str,
+    action: Action,
+    out: &mut Option<Action>,
+) {
     if ui
         .add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut))
         .clicked()
@@ -299,20 +362,57 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     let collapsed = map.get(id).is_some_and(|n| n.collapsed);
 
     let l = |ic: &str, text: &str| format!("{ic}  {text}");
-    action_item(ui, true, &l(icon::PLUS_CIRCLE, "Neuer Unterpunkt"), "Tab", Action::AddChild(id), out);
-    action_item(ui, true, &l(icon::ARROW_BEND_DOWN_RIGHT, "Neuer Nachbar"), "Enter", Action::AddSibling(id), out);
-    action_item(ui, true, &l(icon::PENCIL_SIMPLE, "Umbenennen"), "F2", Action::Rename(id), out);
+    action_item(
+        ui,
+        true,
+        &l(icon::PLUS_CIRCLE, "Neuer Unterpunkt"),
+        "Tab",
+        Action::AddChild(id),
+        out,
+    );
+    action_item(
+        ui,
+        true,
+        &l(icon::ARROW_BEND_DOWN_RIGHT, "Neuer Nachbar"),
+        "Enter",
+        Action::AddSibling(id),
+        out,
+    );
+    action_item(
+        ui,
+        true,
+        &l(icon::PENCIL_SIMPLE, "Umbenennen"),
+        "F2",
+        Action::Rename(id),
+        out,
+    );
     let toggle = if collapsed {
         l(icon::ARROWS_OUT_SIMPLE, "Ausklappen")
     } else {
         l(icon::ARROWS_IN_SIMPLE, "Einklappen")
     };
-    action_item(ui, has_children, &toggle, "Leertaste", Action::Toggle(id), out);
-    action_item(ui, true, &l(icon::NOTE_PENCIL, "Notiz …"), "", Action::EditNote(id), out);
+    action_item(
+        ui,
+        has_children,
+        &toggle,
+        "Leertaste",
+        Action::Toggle(id),
+        out,
+    );
+    action_item(
+        ui,
+        true,
+        &l(icon::NOTE_PENCIL, "Notiz …"),
+        "",
+        Action::EditNote(id),
+        out,
+    );
     ui.menu_button(l(icon::PALETTE, "Farbe"), |ui| {
         ui.horizontal(|ui| {
             for (i, color) in theme.branches.iter().enumerate() {
-                let swatch = egui::Button::new("").fill(*color).min_size(Vec2::splat(24.0));
+                let swatch = egui::Button::new("")
+                    .fill(*color)
+                    .min_size(Vec2::splat(24.0));
                 if ui.add(swatch).clicked() {
                     *out = Some(Action::SetColor(id, Some(i)));
                     ui.close_menu();
@@ -325,11 +425,39 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
         }
     });
     ui.separator();
-    action_item(ui, true, &l(icon::COPY, "Kopieren"), &copy, Action::Copy(id), out);
-    action_item(ui, !is_root, &l(icon::SCISSORS, "Ausschneiden"), &cut, Action::Cut(id), out);
-    action_item(ui, !is_root, &l(icon::COPY_SIMPLE, "Duplizieren"), &dup, Action::Duplicate(id), out);
+    action_item(
+        ui,
+        true,
+        &l(icon::COPY, "Kopieren"),
+        &copy,
+        Action::Copy(id),
+        out,
+    );
+    action_item(
+        ui,
+        !is_root,
+        &l(icon::SCISSORS, "Ausschneiden"),
+        &cut,
+        Action::Cut(id),
+        out,
+    );
+    action_item(
+        ui,
+        !is_root,
+        &l(icon::COPY_SIMPLE, "Duplizieren"),
+        &dup,
+        Action::Duplicate(id),
+        out,
+    );
     ui.separator();
-    action_item(ui, !is_root, &l(icon::TRASH, "Löschen"), "Entf", Action::Delete(id), out);
+    action_item(
+        ui,
+        !is_root,
+        &l(icon::TRASH, "Löschen"),
+        "Entf",
+        Action::Delete(id),
+        out,
+    );
 }
 
 /// Ein sichtbarer Knoten mit fertig berechneter Bildschirmposition
@@ -430,7 +558,10 @@ impl MindMapApp {
             .and_then(|s| eframe::get_value::<SavedState>(s, eframe::APP_KEY))
         {
             if let Some(name) = state.theme_name {
-                app.theme = THEMES.iter().position(|t| t.name == name).unwrap_or(DEFAULT_THEME);
+                app.theme = THEMES
+                    .iter()
+                    .position(|t| t.name == name)
+                    .unwrap_or(DEFAULT_THEME);
             }
             app.docs = state.docs;
             app.active = state.active;
@@ -445,7 +576,11 @@ impl MindMapApp {
         app.active = app.active.min(app.docs.len() - 1);
         // Gespeicherten Modus wiederherstellen, aber nie direkt in die Präsentation
         for doc in &mut app.docs {
-            let mode = if doc.mode == Mode::Present { Mode::Mindmap } else { doc.mode };
+            let mode = if doc.mode == Mode::Present {
+                Mode::Mindmap
+            } else {
+                doc.mode
+            };
             doc.set_mode(mode);
         }
         app
@@ -466,7 +601,8 @@ impl MindMapApp {
         if let Some(doc) = self.docs.get_mut(self.active) {
             doc.end_edit();
         }
-        self.docs.push(Document::new(MindMap::new("Zentrales Thema"), None));
+        self.docs
+            .push(Document::new(MindMap::new("Zentrales Thema"), None));
         self.active = self.docs.len() - 1;
     }
 
@@ -493,7 +629,11 @@ impl MindMapApp {
 
     fn open_path(&mut self, path: PathBuf) {
         let path = path.canonicalize().unwrap_or(path);
-        if let Some(i) = self.docs.iter().position(|d| d.path.as_deref() == Some(path.as_path())) {
+        if let Some(i) = self
+            .docs
+            .iter()
+            .position(|d| d.path.as_deref() == Some(path.as_path()))
+        {
             self.select_tab(i);
             return;
         }
@@ -522,8 +662,12 @@ impl MindMapApp {
     }
 
     fn open_example(&mut self, i: usize) {
-        let Some((name, text)) = EXAMPLES.get(i) else { return };
-        let Some(map) = MindMap::from_outline(text) else { return };
+        let Some((name, text)) = EXAMPLES.get(i) else {
+            return;
+        };
+        let Some(map) = MindMap::from_outline(text) else {
+            return;
+        };
         let mut doc = Document::new(map, None);
         doc.layout_pending = true;
         self.push_doc(doc);
@@ -533,9 +677,9 @@ impl MindMapApp {
     /// Gibt `false` zurück, wenn nicht gespeichert wurde (z. B. Dialog abgebrochen).
     fn save_doc(&mut self, i: usize) -> bool {
         let is_mindmap = |p: &PathBuf| {
-            p.extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| e.eq_ignore_ascii_case("mindmap") || e.eq_ignore_ascii_case("json"))
+            p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                e.eq_ignore_ascii_case("mindmap") || e.eq_ignore_ascii_case("json")
+            })
         };
         match self.docs[i].path.clone().filter(is_mindmap) {
             Some(path) => self.write_doc(i, &path),
@@ -665,7 +809,9 @@ impl MindMapApp {
                 let svg = export::to_svg(&self.export_nodes(ctx), theme);
                 std::fs::write(&path, svg).map_err(|e| e.to_string())
             }
-            ExportKind::Png => export::svg_to_png(&export::to_svg(&self.export_nodes(ctx), theme), &path),
+            ExportKind::Png => {
+                export::svg_to_png(&export::to_svg(&self.export_nodes(ctx), theme), &path)
+            }
         };
         self.status = match result {
             Ok(()) => format!("Exportiert: {}", path.display()),
@@ -757,7 +903,8 @@ impl MindMapApp {
             Command::CollapseAll | Command::ExpandAll => {
                 let doc = self.doc_mut();
                 doc.checkpoint();
-                doc.map.set_all_collapsed(matches!(cmd, Command::CollapseAll));
+                doc.map
+                    .set_all_collapsed(matches!(cmd, Command::CollapseAll));
                 if doc.selected.is_some_and(|id| doc.map.is_hidden(id)) {
                     doc.selected = doc.map.root();
                 }
@@ -780,7 +927,11 @@ impl MindMapApp {
             Command::Theme(i) => self.theme = i,
             Command::SetMode(mode) => self.set_mode(ctx, mode),
             Command::ToggleMarkdown => {
-                let mode = if self.doc().mode == Mode::Markdown { Mode::Mindmap } else { Mode::Markdown };
+                let mode = if self.doc().mode == Mode::Markdown {
+                    Mode::Mindmap
+                } else {
+                    Mode::Markdown
+                };
                 self.set_mode(ctx, mode);
             }
             Command::TogglePreview => self.md_preview = !self.md_preview,
@@ -835,7 +986,8 @@ impl MindMapApp {
             }
             Action::Copy(id) => {
                 ctx.copy_text(doc.map.clip_json(id));
-                self.status = "Kopiert – mit Einfügen unter einem anderen Knoten wieder einsetzen".into();
+                self.status =
+                    "Kopiert – mit Einfügen unter einem anderen Knoten wieder einsetzen".into();
             }
             Action::Cut(id) => {
                 if let Some(parent) = doc.map.parent_of(id) {
@@ -863,7 +1015,11 @@ impl MindMapApp {
                 // Eigener kopierter Teilbaum, sonst Text als Gliederung
                 let first = match serde_json::from_str::<Clip>(&text) {
                     Ok(clip) => doc.map.insert_subtree(target, clip.mindmap_clip),
-                    Err(_) => doc.map.add_outline(target, &parse_outline(&text)).first().copied(),
+                    Err(_) => doc
+                        .map
+                        .add_outline(target, &parse_outline(&text))
+                        .first()
+                        .copied(),
                 };
                 doc.selected = first.or(Some(target));
             }
@@ -920,8 +1076,15 @@ impl MindMapApp {
                 check(SC_LAYOUT, Command::AutoLayout);
             }
             let digits = [
-                Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7,
-                Key::Num8, Key::Num9,
+                Key::Num1,
+                Key::Num2,
+                Key::Num3,
+                Key::Num4,
+                Key::Num5,
+                Key::Num6,
+                Key::Num7,
+                Key::Num8,
+                Key::Num9,
             ];
             for (n, key) in digits.into_iter().enumerate() {
                 check(shortcut(CMD, key), Command::SelectTab(n));
@@ -1038,95 +1201,378 @@ impl MindMapApp {
 
             ui.menu_button("Datei", |ui| {
                 ui.set_min_width(240.0);
-                cmd_item(ui, true, &l(icon::FILE_PLUS, "Neuer Tab"), Some(&SC_NEW_TAB), Command::NewTab, &mut out);
-                cmd_item(ui, true, &l(icon::FOLDER_OPEN, "Öffnen …"), Some(&SC_OPEN), Command::Open, &mut out);
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::FILE_PLUS, "Neuer Tab"),
+                    Some(&SC_NEW_TAB),
+                    Command::NewTab,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::FOLDER_OPEN, "Öffnen …"),
+                    Some(&SC_OPEN),
+                    Command::Open,
+                    &mut out,
+                );
                 ui.menu_button(l(icon::BOOK_OPEN, "Beispiel öffnen"), |ui| {
                     ui.set_min_width(180.0);
                     for (i, (name, _)) in EXAMPLES.iter().enumerate() {
-                        cmd_item(ui, true, &l(icon::PLANET, name), None, Command::OpenExample(i), &mut out);
+                        cmd_item(
+                            ui,
+                            true,
+                            &l(icon::PLANET, name),
+                            None,
+                            Command::OpenExample(i),
+                            &mut out,
+                        );
                     }
                 });
                 ui.separator();
-                cmd_item(ui, true, &l(icon::FLOPPY_DISK, "Speichern"), Some(&SC_SAVE), Command::Save, &mut out);
-                cmd_item(ui, true, &l(icon::FLOPPY_DISK, "Speichern unter …"), Some(&SC_SAVE_AS), Command::SaveAs, &mut out);
-                ui.menu_button(l(icon::EXPORT, "Exportieren"), |ui| export_menu(ui, &mut out));
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::FLOPPY_DISK, "Speichern"),
+                    Some(&SC_SAVE),
+                    Command::Save,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::FLOPPY_DISK, "Speichern unter …"),
+                    Some(&SC_SAVE_AS),
+                    Command::SaveAs,
+                    &mut out,
+                );
+                ui.menu_button(l(icon::EXPORT, "Exportieren"), |ui| {
+                    export_menu(ui, &mut out)
+                });
                 ui.separator();
-                cmd_item(ui, true, &l(icon::X, "Tab schließen"), Some(&SC_CLOSE), Command::CloseTab(active), &mut out);
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::X, "Tab schließen"),
+                    Some(&SC_CLOSE),
+                    Command::CloseTab(active),
+                    &mut out,
+                );
             });
 
             ui.menu_button("Bearbeiten", |ui| {
                 ui.set_min_width(250.0);
-                cmd_item(ui, can_undo, &l(icon::ARROW_COUNTER_CLOCKWISE, "Rückgängig"), Some(&SC_UNDO), Command::Undo, &mut out);
-                cmd_item(ui, can_redo, &l(icon::ARROW_CLOCKWISE, "Wiederholen"), Some(&SC_REDO), Command::Redo, &mut out);
+                cmd_item(
+                    ui,
+                    can_undo,
+                    &l(icon::ARROW_COUNTER_CLOCKWISE, "Rückgängig"),
+                    Some(&SC_UNDO),
+                    Command::Undo,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    can_redo,
+                    &l(icon::ARROW_CLOCKWISE, "Wiederholen"),
+                    Some(&SC_REDO),
+                    Command::Redo,
+                    &mut out,
+                );
                 ui.separator();
-                cmd_item(ui, has_sel, &l(icon::COPY, "Kopieren"), Some(&SC_COPY), Command::Copy, &mut out);
-                cmd_item(ui, has_sel, &l(icon::SCISSORS, "Ausschneiden"), Some(&SC_CUT), Command::Cut, &mut out);
-                cmd_item(ui, has_sel, &l(icon::COPY_SIMPLE, "Duplizieren"), Some(&SC_DUPLICATE), Command::Duplicate, &mut out);
-                cmd_item(ui, has_sel, &l(icon::TRASH, "Löschen"), None, Command::Delete, &mut out);
+                cmd_item(
+                    ui,
+                    has_sel,
+                    &l(icon::COPY, "Kopieren"),
+                    Some(&SC_COPY),
+                    Command::Copy,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    has_sel,
+                    &l(icon::SCISSORS, "Ausschneiden"),
+                    Some(&SC_CUT),
+                    Command::Cut,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    has_sel,
+                    &l(icon::COPY_SIMPLE, "Duplizieren"),
+                    Some(&SC_DUPLICATE),
+                    Command::Duplicate,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    has_sel,
+                    &l(icon::TRASH, "Löschen"),
+                    None,
+                    Command::Delete,
+                    &mut out,
+                );
                 ui.separator();
-                cmd_item(ui, true, &l(icon::TREE_STRUCTURE, "Automatisch anordnen"), Some(&SC_LAYOUT), Command::AutoLayout, &mut out);
-                cmd_item(ui, true, &l(icon::ARROWS_IN_SIMPLE, "Alle Zweige einklappen"), None, Command::CollapseAll, &mut out);
-                cmd_item(ui, true, &l(icon::ARROWS_OUT_SIMPLE, "Alle Zweige ausklappen"), None, Command::ExpandAll, &mut out);
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::TREE_STRUCTURE, "Automatisch anordnen"),
+                    Some(&SC_LAYOUT),
+                    Command::AutoLayout,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::ARROWS_IN_SIMPLE, "Alle Zweige einklappen"),
+                    None,
+                    Command::CollapseAll,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::ARROWS_OUT_SIMPLE, "Alle Zweige ausklappen"),
+                    None,
+                    Command::ExpandAll,
+                    &mut out,
+                );
                 ui.separator();
-                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS, "Suchen"), Some(&SC_FIND), Command::Find, &mut out);
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::MAGNIFYING_GLASS, "Suchen"),
+                    Some(&SC_FIND),
+                    Command::Find,
+                    &mut out,
+                );
             });
 
             ui.menu_button("Ansicht", |ui| {
                 ui.set_min_width(240.0);
-                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS_PLUS, "Vergrößern"), Some(&SC_ZOOM_IN), Command::ZoomIn, &mut out);
-                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS_MINUS, "Verkleinern"), Some(&SC_ZOOM_OUT), Command::ZoomOut, &mut out);
-                cmd_item(ui, true, &l(icon::MAGNIFYING_GLASS, "Originalgröße"), None, Command::ZoomReset, &mut out);
-                cmd_item(ui, true, &l(icon::ARROWS_OUT, "Alles anzeigen"), Some(&SC_FIT), Command::Fit, &mut out);
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::MAGNIFYING_GLASS_PLUS, "Vergrößern"),
+                    Some(&SC_ZOOM_IN),
+                    Command::ZoomIn,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::MAGNIFYING_GLASS_MINUS, "Verkleinern"),
+                    Some(&SC_ZOOM_OUT),
+                    Command::ZoomOut,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::MAGNIFYING_GLASS, "Originalgröße"),
+                    None,
+                    Command::ZoomReset,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::ARROWS_OUT, "Alles anzeigen"),
+                    Some(&SC_FIT),
+                    Command::Fit,
+                    &mut out,
+                );
                 ui.separator();
-                cmd_item(ui, mode != Mode::Mindmap, &l(icon::GRAPH, "Mindmap"), None, Command::SetMode(Mode::Mindmap), &mut out);
-                cmd_item(ui, true, &l(icon::TEXT_ALIGN_LEFT, "Markdown-Editor"), Some(&SC_MARKDOWN), Command::ToggleMarkdown, &mut out);
-                cmd_item(ui, true, &l(icon::PRESENTATION, "Präsentation"), Some(&SC_PRESENT), Command::SetMode(Mode::Present), &mut out);
+                cmd_item(
+                    ui,
+                    mode != Mode::Mindmap,
+                    &l(icon::GRAPH, "Mindmap"),
+                    None,
+                    Command::SetMode(Mode::Mindmap),
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::TEXT_ALIGN_LEFT, "Markdown-Editor"),
+                    Some(&SC_MARKDOWN),
+                    Command::ToggleMarkdown,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::PRESENTATION, "Präsentation"),
+                    Some(&SC_PRESENT),
+                    Command::SetMode(Mode::Present),
+                    &mut out,
+                );
                 ui.separator();
-                ui.menu_button(l(icon::PALETTE, "Farbschema"), |ui| theme_menu(ui, current_theme, &mut out));
+                ui.menu_button(l(icon::PALETTE, "Farbschema"), |ui| {
+                    theme_menu(ui, current_theme, &mut out)
+                });
             });
 
             ui.menu_button("Hilfe", |ui| {
                 ui.set_min_width(220.0);
-                cmd_item(ui, true, &l(icon::KEYBOARD, "Tastenkürzel"), Some(&SC_HELP), Command::Help, &mut out);
-                cmd_item(ui, true, &l(icon::ROCKET_LAUNCH, "Beispiel: Weltall"), None, Command::OpenExample(0), &mut out);
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::KEYBOARD, "Tastenkürzel"),
+                    Some(&SC_HELP),
+                    Command::Help,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::ROCKET_LAUNCH, "Beispiel: Weltall"),
+                    None,
+                    Command::OpenExample(0),
+                    &mut out,
+                );
                 ui.separator();
                 ui.checkbox(&mut self.show_welcome, "Tipps auf leeren Mindmaps");
             });
 
             // Werkzeugleiste
             ui.separator();
-            let mut tool = |ui: &mut egui::Ui, ic: &str, tip: &str, sc: Option<&KeyboardShortcut>, enabled: bool, cmd: Command| {
+            let mut tool = |ui: &mut egui::Ui,
+                            ic: &str,
+                            tip: &str,
+                            sc: Option<&KeyboardShortcut>,
+                            enabled: bool,
+                            cmd: Command| {
                 if icon_button(ui, ic, tip, sc, enabled) {
                     out = Some(cmd);
                 }
             };
-            tool(ui, icon::FILE_PLUS, "Neuer Tab", Some(&SC_NEW_TAB), true, Command::NewTab);
-            tool(ui, icon::FOLDER_OPEN, "Öffnen", Some(&SC_OPEN), true, Command::Open);
-            tool(ui, icon::FLOPPY_DISK, "Speichern", Some(&SC_SAVE), true, Command::Save);
+            tool(
+                ui,
+                icon::FILE_PLUS,
+                "Neuer Tab",
+                Some(&SC_NEW_TAB),
+                true,
+                Command::NewTab,
+            );
+            tool(
+                ui,
+                icon::FOLDER_OPEN,
+                "Öffnen",
+                Some(&SC_OPEN),
+                true,
+                Command::Open,
+            );
+            tool(
+                ui,
+                icon::FLOPPY_DISK,
+                "Speichern",
+                Some(&SC_SAVE),
+                true,
+                Command::Save,
+            );
             ui.separator();
-            tool(ui, icon::ARROW_COUNTER_CLOCKWISE, "Rückgängig", Some(&SC_UNDO), can_undo, Command::Undo);
-            tool(ui, icon::ARROW_CLOCKWISE, "Wiederholen", Some(&SC_REDO), can_redo, Command::Redo);
+            tool(
+                ui,
+                icon::ARROW_COUNTER_CLOCKWISE,
+                "Rückgängig",
+                Some(&SC_UNDO),
+                can_undo,
+                Command::Undo,
+            );
+            tool(
+                ui,
+                icon::ARROW_CLOCKWISE,
+                "Wiederholen",
+                Some(&SC_REDO),
+                can_redo,
+                Command::Redo,
+            );
             ui.separator();
             if mode == Mode::Mindmap {
-                tool(ui, icon::PLUS_CIRCLE, "Neuer Unterpunkt (Tab)", None, true, Command::AddChild);
-                tool(ui, icon::TRASH, "Löschen (Entf)", None, has_sel, Command::Delete);
+                tool(
+                    ui,
+                    icon::PLUS_CIRCLE,
+                    "Neuer Unterpunkt (Tab)",
+                    None,
+                    true,
+                    Command::AddChild,
+                );
+                tool(
+                    ui,
+                    icon::TRASH,
+                    "Löschen (Entf)",
+                    None,
+                    has_sel,
+                    Command::Delete,
+                );
                 ui.separator();
-                tool(ui, icon::TREE_STRUCTURE, "Automatisch anordnen", Some(&SC_LAYOUT), true, Command::AutoLayout);
-                tool(ui, icon::ARROWS_OUT, "Alles anzeigen", Some(&SC_FIT), true, Command::Fit);
-                tool(ui, icon::MAGNIFYING_GLASS_MINUS, "Verkleinern", Some(&SC_ZOOM_OUT), true, Command::ZoomOut);
-                tool(ui, icon::MAGNIFYING_GLASS_PLUS, "Vergrößern", Some(&SC_ZOOM_IN), true, Command::ZoomIn);
+                tool(
+                    ui,
+                    icon::TREE_STRUCTURE,
+                    "Automatisch anordnen",
+                    Some(&SC_LAYOUT),
+                    true,
+                    Command::AutoLayout,
+                );
+                tool(
+                    ui,
+                    icon::ARROWS_OUT,
+                    "Alles anzeigen",
+                    Some(&SC_FIT),
+                    true,
+                    Command::Fit,
+                );
+                tool(
+                    ui,
+                    icon::MAGNIFYING_GLASS_MINUS,
+                    "Verkleinern",
+                    Some(&SC_ZOOM_OUT),
+                    true,
+                    Command::ZoomOut,
+                );
+                tool(
+                    ui,
+                    icon::MAGNIFYING_GLASS_PLUS,
+                    "Vergrößern",
+                    Some(&SC_ZOOM_IN),
+                    true,
+                    Command::ZoomIn,
+                );
             } else {
-                let tip = if md_preview { "Vorschau ausblenden" } else { "Vorschau einblenden" };
-                tool(ui, icon::SIDEBAR_SIMPLE, tip, None, true, Command::TogglePreview);
+                let tip = if md_preview {
+                    "Vorschau ausblenden"
+                } else {
+                    "Vorschau einblenden"
+                };
+                tool(
+                    ui,
+                    icon::SIDEBAR_SIMPLE,
+                    tip,
+                    None,
+                    true,
+                    Command::TogglePreview,
+                );
             }
-            tool(ui, icon::PLAY, "Präsentation starten", Some(&SC_PRESENT), true, Command::SetMode(Mode::Present));
+            tool(
+                ui,
+                icon::PLAY,
+                "Präsentation starten",
+                Some(&SC_PRESENT),
+                true,
+                Command::SetMode(Mode::Present),
+            );
             ui.separator();
-            ui.menu_button(egui::RichText::new(icon::EXPORT).size(17.0), |ui| export_menu(ui, &mut out))
-                .response
-                .on_hover_text("Exportieren");
-            ui.menu_button(egui::RichText::new(icon::PALETTE).size(17.0), |ui| theme_menu(ui, current_theme, &mut out))
-                .response
-                .on_hover_text("Farbschema");
+            ui.menu_button(egui::RichText::new(icon::EXPORT).size(17.0), |ui| {
+                export_menu(ui, &mut out)
+            })
+            .response
+            .on_hover_text("Exportieren");
+            ui.menu_button(egui::RichText::new(icon::PALETTE).size(17.0), |ui| {
+                theme_menu(ui, current_theme, &mut out)
+            })
+            .response
+            .on_hover_text("Farbschema");
 
             // Suche rechts in der Leiste
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1182,7 +1628,11 @@ impl MindMapApp {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 6.0;
-                            let dot = if active { theme.branches[0] } else { theme.grid };
+                            let dot = if active {
+                                theme.branches[0]
+                            } else {
+                                theme.grid
+                            };
                             ui.label(egui::RichText::new(icon::GRAPH).color(dot));
                             let mut title = doc.title();
                             if doc.dirty {
@@ -1192,7 +1642,11 @@ impl MindMapApp {
                             if active {
                                 text = text.strong();
                             }
-                            let label = ui.add(egui::Label::new(text).selectable(false).sense(Sense::click()));
+                            let label = ui.add(
+                                egui::Label::new(text)
+                                    .selectable(false)
+                                    .sense(Sense::click()),
+                            );
                             if label.clicked() {
                                 out = Some(Command::SelectTab(i));
                             }
@@ -1202,7 +1656,9 @@ impl MindMapApp {
                             if let Some(path) = &doc.path {
                                 label.on_hover_text(path.display().to_string());
                             }
-                            let close = ui.add(egui::Button::new(egui::RichText::new(icon::X).size(12.0)).small());
+                            let close = ui.add(
+                                egui::Button::new(egui::RichText::new(icon::X).size(12.0)).small(),
+                            );
                             if close.on_hover_text("Tab schließen").clicked() {
                                 out = Some(Command::CloseTab(i));
                             }
@@ -1229,7 +1685,10 @@ impl MindMapApp {
                                 (Mode::Present, icon::PRESENTATION, "Präsentation"),
                             ];
                             for (mode, ic, label) in modes {
-                                if ui.selectable_label(current == mode, format!("{ic}  {label}")).clicked() {
+                                if ui
+                                    .selectable_label(current == mode, format!("{ic}  {label}"))
+                                    .clicked()
+                                {
                                     out = Some(Command::SetMode(mode));
                                 }
                             }
@@ -1246,18 +1705,37 @@ impl MindMapApp {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let doc = &self.docs[self.active];
                 if doc.mode == Mode::Markdown {
-                    let words = doc.md_text.split_whitespace().filter(|w| w.chars().any(char::is_alphanumeric)).count();
+                    let words = doc
+                        .md_text
+                        .split_whitespace()
+                        .filter(|w| w.chars().any(char::is_alphanumeric))
+                        .count();
                     ui.label(format!("{} {words} Wörter", icon::TEXT_AA));
                     ui.separator();
-                    ui.label(format!("{} {} Knoten", icon::TREE_STRUCTURE, doc.map.nodes.len()));
+                    ui.label(format!(
+                        "{} {} Knoten",
+                        icon::TREE_STRUCTURE,
+                        doc.map.nodes.len()
+                    ));
                     ui.separator();
                     ui.weak("## Überschrift = Zweig · - Aufzählung = Unterpunkt · Text = Notiz");
                 } else {
-                    ui.label(format!("{} {:.0} %", icon::MAGNIFYING_GLASS, doc.zoom * 100.0));
+                    ui.label(format!(
+                        "{} {:.0} %",
+                        icon::MAGNIFYING_GLASS,
+                        doc.zoom * 100.0
+                    ));
                     ui.separator();
-                    ui.label(format!("{} {} Knoten", icon::TREE_STRUCTURE, doc.map.nodes.len()));
+                    ui.label(format!(
+                        "{} {} Knoten",
+                        icon::TREE_STRUCTURE,
+                        doc.map.nodes.len()
+                    ));
                     ui.separator();
-                    ui.weak(format!("{} Rechtsklick: Menü · F1: Tastenkürzel", icon::KEYBOARD));
+                    ui.weak(format!(
+                        "{} Rechtsklick: Menü · F1: Tastenkürzel",
+                        icon::KEYBOARD
+                    ));
                 }
             });
         });
@@ -1265,7 +1743,11 @@ impl MindMapApp {
 
     fn help_window(&mut self, ctx: &egui::Context) {
         let f = |sc: &KeyboardShortcut| ctx.format_shortcut(sc);
-        let cmd = if cfg!(target_os = "macos") { "⌘" } else { "Strg" };
+        let cmd = if cfg!(target_os = "macos") {
+            "⌘"
+        } else {
+            "Strg"
+        };
         let rows: Vec<(String, &str)> = vec![
             ("Tab".into(), "Unterpunkt anlegen (auch beim Tippen)"),
             ("Enter".into(), "Nachbar anlegen / Tippen beenden"),
@@ -1283,10 +1765,16 @@ impl MindMapApp {
             (f(&SC_LAYOUT), "Automatisch anordnen"),
             (f(&SC_FIND), "Suchen (Enter: nächster Treffer)"),
             (f(&SC_FIT), "Alles anzeigen"),
-            (format!("{} / {}", f(&SC_ZOOM_IN), f(&SC_ZOOM_OUT)), "Zoomen"),
+            (
+                format!("{} / {}", f(&SC_ZOOM_IN), f(&SC_ZOOM_OUT)),
+                "Zoomen",
+            ),
             (format!("{cmd} + Scrollen · Pinch"), "Zoomen an der Maus"),
             ("Fläche ziehen · Scrollen".into(), "Ansicht verschieben"),
-            ("Knoten ziehen".into(), "Knoten samt Unterpunkten verschieben"),
+            (
+                "Knoten ziehen".into(),
+                "Knoten samt Unterpunkten verschieben",
+            ),
             (f(&SC_NEW_TAB), "Neuer Tab"),
             (f(&SC_CLOSE), "Tab schließen"),
             ("Ctrl + Tab".into(), "Nächster Tab"),
@@ -1444,7 +1932,10 @@ impl MindMapApp {
                 [a, a + Vec2::new(dx, 0.0), b - Vec2::new(dx, 0.0), b],
                 false,
                 Color32::TRANSPARENT,
-                Stroke::new(l.style.edge_width * zoom.clamp(0.5, 2.0), l.style.accent.gamma_multiply(0.8)),
+                Stroke::new(
+                    l.style.edge_width * zoom.clamp(0.5, 2.0),
+                    l.style.accent.gamma_multiply(0.8),
+                ),
             ));
         }
 
@@ -1473,15 +1964,33 @@ impl MindMapApp {
             }
             resp.context_menu(|ui| node_menu(ui, theme, &doc.map, id, &mut action));
 
-            paint_node(&painter, theme, rect, &l.style, zoom, doc.selected == Some(id), l.hit);
+            paint_node(
+                &painter,
+                theme,
+                rect,
+                &l.style,
+                zoom,
+                doc.selected == Some(id),
+                l.hit,
+            );
 
             // Notiz-Symbol oben rechts; die Notiz erscheint beim Drüberfahren
-            let note = doc.map.get(id).map(|n| n.note.trim().to_string()).unwrap_or_default();
+            let note = doc
+                .map
+                .get(id)
+                .map(|n| n.note.trim().to_string())
+                .unwrap_or_default();
             if !note.is_empty() {
                 let c = rect.right_top() + Vec2::new(-10.0, 2.0) * zoom;
                 painter.circle_filled(c, 9.0 * zoom, theme.card);
                 painter.circle_stroke(c, 9.0 * zoom, Stroke::new(1.5 * zoom, l.style.accent));
-                painter.text(c, Align2::CENTER_CENTER, icon::NOTE, FontId::proportional(10.0 * zoom), l.style.accent);
+                painter.text(
+                    c,
+                    Align2::CENTER_CENTER,
+                    icon::NOTE,
+                    FontId::proportional(10.0 * zoom),
+                    l.style.accent,
+                );
                 if doc.editing != Some(id) && !resp.dragged() {
                     resp.on_hover_text(note);
                 }
@@ -1492,7 +2001,10 @@ impl MindMapApp {
                 let count = doc.map.subtree(id).len() - 1;
                 let c = rect.center() + Vec2::new(l.side * (rect.width() / 2.0 + 16.0 * zoom), 0.0);
                 painter.line_segment(
-                    [rect.center() + Vec2::new(l.side * rect.width() / 2.0, 0.0), c],
+                    [
+                        rect.center() + Vec2::new(l.side * rect.width() / 2.0, 0.0),
+                        c,
+                    ],
                     Stroke::new(2.0 * zoom, l.style.accent),
                 );
                 painter.circle_filled(c, 11.0 * zoom, l.style.accent);
@@ -1538,7 +2050,11 @@ impl MindMapApp {
                     doc.end_edit();
                 }
             } else {
-                painter.galley(rect.center() - l.galley.size() / 2.0, l.galley.clone(), l.style.text);
+                painter.galley(
+                    rect.center() - l.galley.size() / 2.0,
+                    l.galley.clone(),
+                    l.style.text,
+                );
             }
         }
 
@@ -1561,13 +2077,20 @@ impl MindMapApp {
                 .inner_margin(egui::Margin::symmetric(16, 10))
                 .show(&mut card_ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(icon::LIGHTBULB).size(22.0).color(theme.selection));
+                        ui.label(
+                            egui::RichText::new(icon::LIGHTBULB)
+                                .size(22.0)
+                                .color(theme.selection),
+                        );
                         ui.vertical(|ui| {
                             ui.strong("Leere Mindmap");
                             ui.weak("Tab legt Unterpunkte an, Rechtsklick öffnet das Menü.");
                         });
                         ui.add_space(10.0);
-                        if ui.button(format!("{}  Beispiel: Weltall", icon::ROCKET_LAUNCH)).clicked() {
+                        if ui
+                            .button(format!("{}  Beispiel: Weltall", icon::ROCKET_LAUNCH))
+                            .clicked()
+                        {
                             action = Some(Action::OpenExample(0));
                         }
                         let close = ui.add(egui::Button::new(icon::X).frame(false));
@@ -1586,10 +2109,31 @@ impl MindMapApp {
             let layout_sc = ui.ctx().format_shortcut(&SC_LAYOUT);
             let fit_sc = ui.ctx().format_shortcut(&SC_FIT);
             if let Some(root) = root {
-                action_item(ui, true, "Neuer Hauptzweig", "", Action::AddChild(root), &mut action);
+                action_item(
+                    ui,
+                    true,
+                    "Neuer Hauptzweig",
+                    "",
+                    Action::AddChild(root),
+                    &mut action,
+                );
             }
-            action_item(ui, true, "Automatisch anordnen", &layout_sc, Action::AutoLayout, &mut action);
-            action_item(ui, true, "Alles anzeigen", &fit_sc, Action::Fit, &mut action);
+            action_item(
+                ui,
+                true,
+                "Automatisch anordnen",
+                &layout_sc,
+                Action::AutoLayout,
+                &mut action,
+            );
+            action_item(
+                ui,
+                true,
+                "Alles anzeigen",
+                &fit_sc,
+                Action::Fit,
+                &mut action,
+            );
             ui.separator();
             ui.menu_button("Farbschema", |ui| {
                 for (i, t) in THEMES.iter().enumerate() {
@@ -1658,7 +2202,11 @@ impl MindMapApp {
 
     fn update_title(&mut self, ctx: &egui::Context) {
         let doc = self.doc();
-        let title = format!("{}{} – Mindful", doc.title(), if doc.dirty { " •" } else { "" });
+        let title = format!(
+            "{}{} – Mindful",
+            doc.title(),
+            if doc.dirty { " •" } else { "" }
+        );
         if title != self.window_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.window_title = title;
@@ -1671,10 +2219,22 @@ impl eframe::App for MindMapApp {
     /// Darum wird Tab hier abgefangen, bevor egui es sieht.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         // Im Markdown-Editor rückt Tab ein und bleibt deshalb unangetastet
-        let markdown = self.docs.get(self.active).is_some_and(|d| d.mode == Mode::Markdown);
+        let markdown = self
+            .docs
+            .get(self.active)
+            .is_some_and(|d| d.mode == Mode::Markdown);
         raw_input.events.retain(|event| match event {
-            egui::Event::Key { key: Key::Tab, modifiers, .. } if markdown && !modifiers.ctrl => true,
-            egui::Event::Key { key: Key::Tab, pressed, modifiers, .. } => {
+            egui::Event::Key {
+                key: Key::Tab,
+                modifiers,
+                ..
+            } if markdown && !modifiers.ctrl => true,
+            egui::Event::Key {
+                key: Key::Tab,
+                pressed,
+                modifiers,
+                ..
+            } => {
                 if *pressed {
                     if modifiers.ctrl {
                         self.tab_switch += if modifiers.shift { -1 } else { 1 };
@@ -1702,7 +2262,9 @@ impl eframe::App for MindMapApp {
             let mut event = None;
             egui::CentralPanel::default()
                 .frame(egui::Frame::default().fill(theme.background))
-                .show(ctx, |ui| event = present::show(ui, &mut self.docs[self.active], theme));
+                .show(ctx, |ui| {
+                    event = present::show(ui, &mut self.docs[self.active], theme)
+                });
             match event {
                 Some(present::Event::Exit) => self.set_mode(ctx, Mode::Mindmap),
                 Some(present::Event::ToggleFullscreen) => {
@@ -1723,12 +2285,16 @@ impl eframe::App for MindMapApp {
         let bar = egui::Frame::default()
             .fill(theme.card)
             .inner_margin(egui::Margin::symmetric(12, 6));
-        egui::TopBottomPanel::top("menu").frame(bar).show(ctx, |ui| {
-            commands.extend(self.menu_bar(ui));
-        });
-        egui::TopBottomPanel::top("tabs").frame(bar).show(ctx, |ui| {
-            commands.extend(self.tab_bar(ui, theme));
-        });
+        egui::TopBottomPanel::top("menu")
+            .frame(bar)
+            .show(ctx, |ui| {
+                commands.extend(self.menu_bar(ui));
+            });
+        egui::TopBottomPanel::top("tabs")
+            .frame(bar)
+            .show(ctx, |ui| {
+                commands.extend(self.tab_bar(ui, theme));
+            });
         egui::TopBottomPanel::bottom("status")
             .frame(bar)
             .show(ctx, |ui| self.status_bar(ui));
@@ -1742,7 +2308,9 @@ impl eframe::App for MindMapApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::default().fill(theme.background))
             .show(ctx, |ui| match mode {
-                Mode::Markdown => markdown_view::show(ui, &mut self.docs[self.active], theme, self.md_preview),
+                Mode::Markdown => {
+                    markdown_view::show(ui, &mut self.docs[self.active], theme, self.md_preview)
+                }
                 _ => {
                     if let Some(a) = self.canvas(ui) {
                         action = Some(a);

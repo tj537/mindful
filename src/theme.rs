@@ -214,7 +214,13 @@ pub fn visuals_for(theme: &Theme) -> egui::Visuals {
 
     let radius = CornerRadius::same(8);
     let w = &mut v.widgets;
-    for state in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
+    for state in [
+        &mut w.noninteractive,
+        &mut w.inactive,
+        &mut w.hovered,
+        &mut w.active,
+        &mut w.open,
+    ] {
         state.corner_radius = radius;
         state.fg_stroke.color = theme.text;
         state.expansion = 0.0;
@@ -247,11 +253,23 @@ pub fn apply_spacing(style: &mut egui::Style) {
     s.window_margin = Margin::same(14);
     s.interact_size.y = 26.0;
     style.text_styles = [
-        (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
+        (
+            TextStyle::Small,
+            FontId::new(11.0, FontFamily::Proportional),
+        ),
         (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
-        (TextStyle::Button, FontId::new(14.0, FontFamily::Proportional)),
-        (TextStyle::Heading, FontId::new(19.0, FontFamily::Proportional)),
-        (TextStyle::Monospace, FontId::new(13.0, FontFamily::Monospace)),
+        (
+            TextStyle::Button,
+            FontId::new(14.0, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Heading,
+            FontId::new(19.0, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Monospace,
+            FontId::new(13.0, FontFamily::Monospace),
+        ),
     ]
     .into();
 }
@@ -259,9 +277,12 @@ pub fn apply_spacing(style: &mut egui::Style) {
 /// macOS-Systemschrift (falls vorhanden) und Phosphor-Icons laden
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
-    let system_font = ["/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf"]
-        .iter()
-        .find_map(|p| std::fs::read(p).ok());
+    let system_font = [
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    ]
+    .iter()
+    .find_map(|p| std::fs::read(p).ok());
     if let Some(bytes) = system_font {
         fonts
             .font_data

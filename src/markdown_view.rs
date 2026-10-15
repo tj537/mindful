@@ -4,7 +4,9 @@
 use crate::document::Document;
 use crate::model::MindMap;
 use crate::theme::Theme;
-use eframe::egui::{self, text::LayoutJob, Color32, FontId, Margin, RichText, Sense, TextFormat, Vec2};
+use eframe::egui::{
+    self, text::LayoutJob, Color32, FontId, Margin, RichText, Sense, TextFormat, Vec2,
+};
 use egui_phosphor::regular as icon;
 
 const BODY: f32 = 15.0;
@@ -73,7 +75,11 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool)
             .resizable(true)
             .default_width(ui.available_width() * 0.42)
             .min_width(240.0)
-            .frame(egui::Frame::default().fill(theme.card).inner_margin(Margin::symmetric(28, 20)))
+            .frame(
+                egui::Frame::default()
+                    .fill(theme.card)
+                    .inner_margin(Margin::symmetric(28, 20)),
+            )
             .show_inside(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .id_salt("md_preview_scroll")
@@ -129,7 +135,11 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
     let Some(root) = map.root().and_then(|r| map.get(r)) else {
         return;
     };
-    ui.label(RichText::new(format!("{}  Vorschau", icon::EYE)).small().weak());
+    ui.label(
+        RichText::new(format!("{}  Vorschau", icon::EYE))
+            .small()
+            .weak(),
+    );
     ui.add_space(6.0);
     ui.add(egui::Label::new(RichText::new(root.text.as_str()).size(26.0).strong()).wrap());
     note(ui, &root.note, 0.0);
@@ -140,7 +150,9 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
         ui.horizontal(|ui| {
             let (bar, _) = ui.allocate_exact_size(Vec2::new(4.0, 22.0), Sense::hover());
             ui.painter().rect_filled(bar, 2.0, color);
-            ui.add(egui::Label::new(RichText::new(branch.text.as_str()).size(19.0).strong()).wrap());
+            ui.add(
+                egui::Label::new(RichText::new(branch.text.as_str()).size(19.0).strong()).wrap(),
+            );
         });
         note(ui, &branch.note, 12.0);
         bullets(ui, map, branch.id, 0, color);

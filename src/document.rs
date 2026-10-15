@@ -268,7 +268,9 @@ impl Document {
     }
 
     pub fn end_edit(&mut self) {
-        let Some(id) = self.editing.take() else { return };
+        let Some(id) = self.editing.take() else {
+            return;
+        };
         if let Some(node) = self.map.get_mut(id) {
             if node.text.trim().is_empty() {
                 node.text = DEFAULT_TEXT.into();

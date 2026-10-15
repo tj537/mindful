@@ -17,7 +17,11 @@ fn main() {
             let px = base * scale;
             let mut pixmap = tiny_skia::Pixmap::new(px, px).unwrap();
             let s = px as f32 / tree.size().width();
-            resvg::render(&tree, tiny_skia::Transform::from_scale(s, s), &mut pixmap.as_mut());
+            resvg::render(
+                &tree,
+                tiny_skia::Transform::from_scale(s, s),
+                &mut pixmap.as_mut(),
+            );
             let suffix = if scale == 2 { "@2x" } else { "" };
             let name = format!("icon_{base}x{base}{suffix}.png");
             pixmap.save_png(out.join(name)).expect("PNG schreiben");
