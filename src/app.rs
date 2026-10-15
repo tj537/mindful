@@ -1815,8 +1815,9 @@ impl MindMapApp {
                     .corner_radius(9.0)
                     .inner_margin(egui::Margin::same(3))
                     .show(ui, |ui| {
-                        // Innen links nach rechts, sonst dreht das rechtsbündige Layout die Reihenfolge um
-                        ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        // Das rechtsbündige Layout legt von rechts nach links an –
+                        // darum rückwärts durchgehen, damit links „Markdown“ steht
+                        ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             let modes = [
                                 (Mode::Markdown, icon::TEXT_ALIGN_LEFT, "Markdown"),
@@ -1824,7 +1825,7 @@ impl MindMapApp {
                                 (Mode::Present, icon::PRESENTATION, "Presentation"),
                                 (Mode::Tour, icon::PATH, "Tour"),
                             ];
-                            for (mode, ic, label) in modes {
+                            for (mode, ic, label) in modes.into_iter().rev() {
                                 if ui
                                     .selectable_label(current == mode, format!("{ic}  {label}"))
                                     .clicked()
