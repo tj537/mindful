@@ -113,6 +113,9 @@ pub struct Document {
     /// Text im Markdown-Editor
     #[serde(skip)]
     pub md_text: String,
+    /// Markdown-Editor soll im nächsten Frame den Fokus bekommen
+    #[serde(skip)]
+    pub md_focus: bool,
     /// Schon ein Rückgängig-Schritt für diese Markdown-Sitzung angelegt?
     #[serde(skip)]
     md_checkpointed: bool,
@@ -156,6 +159,7 @@ impl Document {
             layout_anim: None,
             view_anim: None,
             md_text: String::new(),
+            md_focus: false,
             md_checkpointed: false,
             slide: 0,
             build: 0,

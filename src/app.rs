@@ -8,7 +8,7 @@ use crate::nodes::{
 };
 use crate::present::ease_in_out_cubic;
 use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
-use crate::{markdown_view, present, tour};
+use crate::{ai_prompt, markdown_view, present, tour};
 use eframe::egui::{
     self, epaint::CubicBezierShape, Align, Align2, Color32, FontId, Key, KeyboardShortcut, Layout,
     Modifiers, Pos2, Rect, Sense, Stroke, Vec2,
@@ -150,6 +150,8 @@ enum Command {
     SetMode(Mode),
     ToggleMarkdown,
     TogglePreview,
+    CopyPrompt,
+    NewMarkdownTab,
     OpenExample(usize),
     OpenTemplate(usize),
 }
@@ -483,6 +485,8 @@ struct SavedState {
     build_bullets: bool,
     #[serde(default)]
     effects: present::Effects,
+    #[serde(default)]
+    prompt: ai_prompt::PromptForm,
 }
 
 fn yes() -> bool {
@@ -497,6 +501,7 @@ struct SavedStateRef<'a> {
     show_welcome: bool,
     build_bullets: bool,
     effects: present::Effects,
+    prompt: &'a ai_prompt::PromptForm,
 }
 
 pub struct MindMapApp {
@@ -527,6 +532,8 @@ pub struct MindMapApp {
     build_bullets: bool,
     /// Übergänge, Hintergrund usw. für Präsentation und Tour
     effects: present::Effects,
+    /// Eingaben im „AI prompt“-Formular
+    prompt: ai_prompt::PromptForm,
 }
 
 impl MindMapApp {
@@ -556,6 +563,7 @@ impl MindMapApp {
             show_welcome: true,
             build_bullets: true,
             effects: present::Effects::default(),
+            prompt: ai_prompt::PromptForm::default(),
         };
 
         if let Some(state) = cc
@@ -582,6 +590,7 @@ impl MindMapApp {
             app.show_welcome = state.show_welcome;
             app.build_bullets = state.build_bullets;
             app.effects = state.effects;
+            app.prompt = state.prompt;
         } else if Path::new("mindmap.json").exists() {
             // Datei aus der ersten Version übernehmen
             app.open_path(PathBuf::from("mindmap.json"));
@@ -965,6 +974,20 @@ impl MindMapApp {
                 self.set_mode(ctx, mode);
             }
             Command::TogglePreview => self.md_preview = !self.md_preview,
+            Command::CopyPrompt => {
+                ctx.copy_text(ai_prompt::build_prompt(&self.prompt));
+                self.status =
+                    "Prompt copied – paste it into your AI, then paste the answer into a new Markdown tab"
+                        .into();
+            }
+            Command::NewMarkdownTab => {
+                self.new_tab();
+                self.set_mode(ctx, Mode::Markdown);
+                let doc = self.doc_mut();
+                doc.md_text.clear();
+                doc.md_focus = true;
+                self.status = "Paste your AI's answer here (⌘V)".into();
+            }
             Command::OpenExample(i) => self.open_example(i),
             Command::OpenTemplate(i) => self.open_template(i),
         }
@@ -1688,6 +1711,37 @@ impl MindMapApp {
                         .count();
                     ui.weak(format!("{n} matches"));
                 }
+                ui.separator();
+
+                // „AI prompt“ mit Aufklappmenü
+                let popup_id = ui.make_persistent_id("ai_prompt_popup");
+                let ai = ui
+                    .button(format!(
+                        "{}  AI prompt  {}",
+                        icon::MAGIC_WAND,
+                        icon::CARET_DOWN
+                    ))
+                    .on_hover_text("Build a prompt that lets your AI write a mind map");
+                if ai.clicked() {
+                    ui.memory_mut(|m| m.toggle_popup(popup_id));
+                }
+                egui::popup::popup_below_widget(
+                    ui,
+                    popup_id,
+                    &ai,
+                    egui::PopupCloseBehavior::CloseOnClickOutside,
+                    |ui| {
+                        ui.set_width(460.0);
+                        match ai_prompt::form_ui(ui, &mut self.prompt) {
+                            Some(ai_prompt::PromptAction::Copy) => out = Some(Command::CopyPrompt),
+                            Some(ai_prompt::PromptAction::NewMarkdownTab) => {
+                                out = Some(Command::NewMarkdownTab);
+                                ui.memory_mut(|m| m.close_popup());
+                            }
+                            None => {}
+                        }
+                    },
+                );
             });
         });
         out
@@ -2552,6 +2606,7 @@ impl eframe::App for MindMapApp {
             show_welcome: self.show_welcome,
             build_bullets: self.build_bullets,
             effects: self.effects,
+            prompt: &self.prompt,
         };
         eframe::set_value(storage, eframe::APP_KEY, &state);
     }

@@ -18,6 +18,7 @@ This document explains how Mindful is built inside – for everyone working on t
 12. [Themes and style](#themes-and-style-themers)
 13. [Platform specifics](#platform-specifics)
 14. [How do I add …?](#how-do-i-add-)
+    (see also [AI prompt](#ai-prompt-ai_promptrs))
 15. [Tests](#tests)
 
 ---
@@ -275,6 +276,16 @@ Undo: the first change of an editor session creates a snapshot, and everything a
 
 ---
 
+## AI prompt (`ai_prompt.rs`)
+
+The *AI prompt* button next to the search field opens a popup (`egui::popup::popup_below_widget`) with a small form: topic, language (free text plus quick picks), description, scope and an optional checklist. The form is stored with the app state, so it remembers the last entries.
+
+`build_prompt()` fills these into a fixed English prompt that explains Mindful's Markdown format to the AI – `#` central topic with an intro paragraph, `##` branches with a one-sentence note, short bullets, optional notes and `- [ ]` checkboxes, Markdown only – and ends with a short example. A test makes sure that example is itself valid Mindful Markdown.
+
+*Copy prompt* puts the prompt on the clipboard. *New Markdown tab* opens an empty tab in the Markdown editor and focuses it, ready for pasting the answer; from there the usual Markdown sync turns it into a mind map.
+
+There is no network access: Mindful never talks to an AI itself, the user copies and pastes.
+
 ## Presentation (`present.rs`)
 
 `slides()` creates the slides from the mind map:
@@ -466,6 +477,8 @@ cargo test
 | `collapse_hides_descendants` | collapsing and expanding |
 | `checkboxes_round_trip_and_progress` | checkboxes survive Markdown and progress is counted |
 | `templates_parse_and_round_trip` | every template parses and comes back unchanged |
+| `prompt_contains_the_inputs` | the AI prompt contains topic, language, description, scope |
+| `example_in_the_prompt_is_valid_mindful_markdown` | the format example in the prompt parses and round-trips |
 | `universe_example_is_complete` | the English example is complete |
 | `weltall_example_is_complete` | the German example is complete |
 | `svg_and_png_export` | SVG is escaped correctly, PNG is created |

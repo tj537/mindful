@@ -1,6 +1,7 @@
 // Unter Windows kein Konsolenfenster neben der App öffnen (nur im Release-Build)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai_prompt;
 mod app;
 mod document;
 mod export;

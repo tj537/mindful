@@ -116,7 +116,11 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool)
                         .lock_focus(true)
                         .hint_text("# Topic\n\n## Branch\n\nA note about the branch\n\n- Child\n  - deeper")
                         .layouter(&mut layouter);
-                    if ui.add(editor).changed() {
+                    let resp = ui.add(editor);
+                    if std::mem::take(&mut doc.md_focus) {
+                        resp.request_focus();
+                    }
+                    if resp.changed() {
                         doc.markdown_changed();
                     }
                 });

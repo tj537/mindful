@@ -36,6 +36,7 @@ Also:
 - Save and open as `.mindmap` files, import Markdown and plain-text outlines
 - Export as PNG image, SVG graphic or Markdown
 - **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; parent nodes show a progress ring, slides and exports show the boxes too
+- **AI prompt**: describe topic, language, details and scope, copy a ready-made prompt for ChatGPT, Claude & co., and paste the AI's Markdown answer into a new tab – it becomes a mind map instantly
 - **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
 - Auto layout with animation: nodes glide to their new places and the view follows smoothly
 - Undo/redo, search, zoom, copy/paste, notes on every node
@@ -310,6 +311,7 @@ mindful/
 │   ├── markdown_view.rs   Markdown editor with highlighting and preview
 │   ├── present.rs         presentation mode (slides)
 │   ├── tour.rs            camera tour through the mind map
+│   ├── ai_prompt.rs       "AI prompt" form and the generated prompt
 │   ├── nodes.rs           how nodes look and are drawn (shared)
 │   ├── export.rs          SVG and PNG export
 │   └── theme.rs           themes, fonts, widget style
