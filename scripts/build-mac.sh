@@ -1,5 +1,10 @@
 #!/bin/bash
 # Builds dist/Mindful.app – double-click it or pin it to the Dock.
+#
+#   ./scripts/build-mac.sh            build only
+#   ./scripts/build-mac.sh --install  build and replace /Applications/Mindful.app
+#
+# Pin the app from /Applications: the Dock icon then always opens the latest build.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -8,6 +13,7 @@ command -v "$CARGO" >/dev/null || CARGO="$HOME/.cargo/bin/cargo"
 VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
 APP=dist/Mindful.app
 ICONSET=target/AppIcon.iconset
+INSTALL_DIR=/Applications
 
 echo "==> Building release binary"
 "$CARGO" build --release
@@ -25,5 +31,14 @@ sed "s/__VERSION__/$VERSION/g" packaging/macos/Info.plist > "$APP/Contents/Info.
 
 # Local ad-hoc signature (no Apple account needed) so macOS accepts the bundle as a whole
 codesign --force --deep --sign - "$APP"
-
 echo "==> Done: $APP"
+
+if [[ "${1:-}" == "--install" ]]; then
+    echo "==> Installing to $INSTALL_DIR"
+    # A running copy would keep the old version open
+    osascript -e 'tell application "Mindful" to quit' >/dev/null 2>&1 || true
+    sleep 1
+    rm -rf "$INSTALL_DIR/Mindful.app"
+    cp -R "$APP" "$INSTALL_DIR/"
+    echo "==> Installed: $INSTALL_DIR/Mindful.app"
+fi

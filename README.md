@@ -192,6 +192,14 @@ The script:
 3. assembles `dist/Mindful.app` (binary, icon, `packaging/macos/Info.plist`),
 4. signs the bundle locally (`codesign --sign -`).
 
+To build **and install** in one step – replacing `/Applications/Mindful.app` and quitting a running copy first:
+
+```bash
+./scripts/build-mac.sh --install
+```
+
+Pin the app to the Dock from **/Applications**, not from `dist/`: the Dock icon then always opens the latest build.
+
 The version number comes from `Cargo.toml`. The result runs on Macs with **the same processor type** as the one it was built on.
 
 **For Intel Macs**, or as a **universal app for both**, additionally run:
