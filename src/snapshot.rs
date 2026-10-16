@@ -181,4 +181,126 @@ mod tests {
             );
         }
     }
+
+    /// Vorschaubild für GitHub (Profil, Social Preview): 1280 × 640
+    #[test]
+    #[ignore]
+    fn render_social_preview() {
+        use crate::present::Backdrop;
+        use eframe::egui::{Align2, Color32, FontId, Pos2, Rect, Stroke};
+        let theme = &THEMES[1];
+        let fx = Effects::default();
+        let mut map =
+            MindMap::from_outline(include_str!("../assets/examples/universe.md")).unwrap();
+        crate::images::resolve(&mut map, None);
+        let find = |map: &MindMap, title: &str| {
+            1 + map
+                .children(map.root().unwrap())
+                .position(|n| n.text == title)
+                .unwrap()
+        };
+        let (gallery, chart) = (find(&map, "Planet Portraits"), find(&map, "Planet Sizes"));
+        let mut snap = Snapshot::retina(1280.0, 640.0, 1.0);
+        install_fonts(&snap.ctx);
+        snap.ctx.set_visuals(visuals_for(theme));
+        snap.ctx.style_mut(apply_spacing);
+        let mut shapes = Vec::new();
+        for t in [10.0, 11.0, 30.0] {
+            shapes = snap.frame(t, |ctx| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::default().fill(theme.background))
+                    .show(ctx, |ui| {
+                        let area = ui.max_rect();
+                        let p = ui.painter().clone();
+                        present::backdrop(
+                            &p,
+                            area,
+                            theme,
+                            Backdrop::Stars,
+                            30.0,
+                            Vec2::ZERO,
+                            Vec2::ZERO,
+                        );
+                        // Links: Name, Satz, Stichworte
+                        let accent = theme.branches[0];
+                        let x = 70.0;
+                        p.circle_filled(
+                            Pos2::new(x + 34.0, 150.0),
+                            34.0,
+                            accent.gamma_multiply(0.2),
+                        );
+                        p.text(
+                            Pos2::new(x + 34.0, 150.0),
+                            Align2::CENTER_CENTER,
+                            egui_phosphor::regular::GRAPH,
+                            FontId::proportional(36.0),
+                            accent,
+                        );
+                        p.text(
+                            Pos2::new(x + 84.0, 150.0),
+                            Align2::LEFT_CENTER,
+                            "Mindful",
+                            FontId::proportional(64.0),
+                            theme.text,
+                        );
+                        let lines = ["Mind maps, Markdown and", "presentations in one small app"];
+                        for (i, line) in lines.iter().enumerate() {
+                            p.text(
+                                Pos2::new(x, 240.0 + i as f32 * 40.0),
+                                Align2::LEFT_CENTER,
+                                *line,
+                                FontId::proportional(31.0),
+                                theme.text.gamma_multiply(0.8),
+                            );
+                        }
+                        let mut cx = x;
+                        for (i, chip) in ["Mind map", "Slides", "Charts", "Presenter view"]
+                            .iter()
+                            .enumerate()
+                        {
+                            let g = p.layout_no_wrap(
+                                chip.to_string(),
+                                FontId::proportional(19.0),
+                                theme.on_accent,
+                            );
+                            let r = Rect::from_min_size(
+                                Pos2::new(cx, 345.0),
+                                g.size() + Vec2::new(28.0, 14.0),
+                            );
+                            p.rect_filled(
+                                r,
+                                r.height() / 2.0,
+                                theme.branches[i % theme.branches.len()],
+                            );
+                            p.galley(r.center() - g.size() / 2.0, g, theme.on_accent);
+                            cx = r.right() + 10.0;
+                        }
+                        p.text(
+                            Pos2::new(x, 430.0),
+                            Align2::LEFT_CENTER,
+                            "Free & open source  ·  macOS  ·  written in Rust",
+                            FontId::proportional(19.0),
+                            theme.text.gamma_multiply(0.55),
+                        );
+                        p.line_segment(
+                            [Pos2::new(x, 470.0), Pos2::new(x + 60.0, 470.0)],
+                            Stroke::new(4.0, accent),
+                        );
+                        // Rechts: zwei Folien übereinander
+                        let back =
+                            Rect::from_min_size(Pos2::new(700.0, 90.0), Vec2::new(500.0, 281.0));
+                        let front =
+                            Rect::from_min_size(Pos2::new(640.0, 280.0), Vec2::new(520.0, 292.0));
+                        let mut ui_back =
+                            ui.new_child(egui::UiBuilder::new().max_rect(back).id_salt("back"));
+                        present::draw_card(&mut ui_back, back, &map, theme, &fx, gallery);
+                        let mut ui_front =
+                            ui.new_child(egui::UiBuilder::new().max_rect(front).id_salt("front"));
+                        present::draw_card(&mut ui_front, front, &map, theme, &fx, chart);
+                        let _ = Color32::WHITE;
+                    });
+            });
+        }
+        snap.save(&shapes, Path::new("target/snapshots/social-preview.png"));
+    }
 }

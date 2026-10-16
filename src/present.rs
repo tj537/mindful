@@ -1824,6 +1824,33 @@ fn presenter_window(
     )
 }
 
+/// Für Tests: Folie `index` fertig aufgebaut als Karte (mit Schatten) in `card` zeichnen
+#[cfg(test)]
+pub fn draw_card(
+    ui: &mut egui::Ui,
+    card: Rect,
+    map: &MindMap,
+    theme: &Theme,
+    fx: &Effects,
+    index: usize,
+) {
+    let slides = slides(map, theme);
+    let now = ui.input(|i| i.time);
+    let view = SlideView {
+        slides: &slides,
+        index,
+        build: slides[index].groups(),
+        build_time: f64::NEG_INFINITY,
+        slide_time: now - 1000.0,
+        now,
+        appear: 1.0,
+        progress: (index + 1) as f32 / slides.len() as f32,
+        interactive: false,
+        page: false,
+    };
+    render_slide(ui, card, &view, map, theme, fx, true);
+}
+
 /// Anzahl der Folien (Titelfolie plus eine je Hauptzweig)
 pub fn slide_count(map: &MindMap, theme: &Theme) -> usize {
     slides(map, theme).len()
