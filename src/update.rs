@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 
 const LATEST: &str = "https://api.github.com/repos/tj537/mindful/releases/latest";
 pub const RELEASES: &str = "https://github.com/tj537/mindful/releases/latest";
+/// Project page (Help menu)
+pub const REPOSITORY: &str = "https://github.com/tj537/mindful";
 
 /// A newer version than the one running
 #[derive(Clone, Debug, PartialEq)]

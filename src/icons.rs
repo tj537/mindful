@@ -135,7 +135,14 @@ pub fn picker(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String>
     {
         picked = Some(None);
     }
-    ui.weak("Emojis work too: type them into the text (⌃⌘Space).");
+    let emoji_keys = match ui.ctx().os() {
+        egui::os::OperatingSystem::Mac => " (⌃⌘Space)",
+        egui::os::OperatingSystem::Windows => " (Win+.)",
+        _ => "",
+    };
+    ui.weak(format!(
+        "Emojis work too: type them into the text{emoji_keys}."
+    ));
     if picked.is_some() {
         ui.close_menu();
     }

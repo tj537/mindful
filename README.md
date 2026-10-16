@@ -70,6 +70,7 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 **Writing and organizing**
 - **Icons on nodes:** 64 icons from the right-click menu, written as `:rocket:` in Markdown and shown in the branch colour on the mind map and the slides. Typed emojis work too.
 - Tabs, undo/redo, search, copy & paste, notes on every node, 16 colour themes (from Light and Dark to Nord, Dracula, Tokyo Night, Gruvbox, Solarized and Catppuccin) plus a colour editor for your own – all behind the gear at the top right.
+- The status bar at the bottom holds zoom, *Fit to window* and *Auto layout*; *Help → Mindful on GitHub* opens the project page.
 - Mindful tells you when a new version is out (one request to GitHub per start; can be switched off in the settings).
 - Templates (brainstorming, project plan, SWOT, weekly plan, meeting notes, book summary) and a complete example to explore: **File → Open example → The Universe** (also in German).
 - **AI prompt:** describe a topic, copy the generated prompt into ChatGPT, Claude or any other assistant and paste the answer into a new tab. The prompt teaches the AI Mindful's format, including when to use which slide layout.
@@ -113,7 +114,7 @@ Mindful keeps open tabs and settings in `~/Library/Application Support/Mindful/`
 
 ### Keyboard shortcuts
 
-On the Mac use ⌘, on Windows and Linux use Ctrl.
+The table uses Mac keys. On Windows and Linux use Ctrl instead of ⌘ (and Shift for ⇧) – the menus, tooltips and the F1 window inside the app show the right keys for your system. On a Mac laptop the F keys may need fn.
 
 | Key | Action |
 |---|---|
@@ -121,7 +122,7 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | Tab · Enter | Add child · add sibling |
 | Just type | Replace the selected node's text, like a spreadsheet cell |
 | F2 · double-click | Rename (the text is selected, so typing replaces it; placeholders open with a single click) |
-| Del | Delete node and its children |
+| ⌫ (Del · Backspace on Windows) | Delete node and its children |
 | Space | Collapse / expand |
 | ⌘Enter | Add checkbox / tick it off |
 | Arrow keys | Move selection |
@@ -134,10 +135,11 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | F5 · F6 | Start presentation · start tour |
 | ⌘Z · ⇧⌘Z | Undo · redo |
 | ⌘T · ⌘W | New tab · close tab (right-click a tab to duplicate it) |
-| Ctrl+Tab · ⌘1…9 | Switch tab |
+| ⌃Tab · ⌃⇧Tab · ⌘1…9 | Next · previous · jump to tab (⌃ is Control on the Mac too) |
 | ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
 | **Presenting** | |
 | Space · → · ← | Next · back |
+| Home · End | First · last slide (fn← · fn→ on a Mac) |
 | G | Quick jump to any slide |
 | L | Laser pointer |
 | P | Presenter view (notes, next slide, timer) |

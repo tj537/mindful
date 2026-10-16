@@ -536,7 +536,7 @@ The line art sits in the group `<g id="logo">`. `logo::paint` renders only that 
 | Where | What | File |
 |---|---|---|
 | Shortcuts | `Modifiers::COMMAND` is ⌘ on the Mac, Ctrl elsewhere | `app.rs` |
-| “⌘” vs “Ctrl” label | `cfg!(target_os = "macos")` | `help_window` |
+| “⌘” vs “Ctrl” label | `ctx.format_shortcut` for every `KeyboardShortcut` (menus, tooltips); keys that aren't one (⌃Tab, ⌘1…9, ⌫, zoom with scroll, Home/End, the emoji picker) switch on `ctx.os()` | `help_window`, `present::shortcuts_list`, `icons::picker` |
 | Font | SF only on the Mac, egui default elsewhere | `theme.rs::install_fonts` |
 | Console window | hidden on Windows in release builds | `main.rs`, `windows_subsystem` |
 | Data folder | chosen by eframe per system | README |

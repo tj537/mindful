@@ -221,6 +221,12 @@ fn shortcuts_list(ui: &mut egui::Ui, tour: bool) {
     } else {
         "Next bullet point / slide"
     };
+    // Mac keyboards mostly have no Home/End keys: fn + arrow does the same
+    let home_end = if ui.ctx().os() == egui::os::OperatingSystem::Mac {
+        "fn←  fn→"
+    } else {
+        "Home  End"
+    };
     egui::Grid::new("present_keys")
         .num_columns(2)
         .spacing([16.0, 4.0])
@@ -228,7 +234,7 @@ fn shortcuts_list(ui: &mut egui::Ui, tour: bool) {
             for (keys, what) in [
                 ("Space  →", next),
                 ("←", "Back"),
-                ("Home  End", "First / last"),
+                (home_end, "First / last"),
                 ("G", "Quick jump (← → Enter)"),
                 ("L", "Laser pointer"),
                 ("P", "Presenter view (slides only)"),

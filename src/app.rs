@@ -164,6 +164,8 @@ enum Command {
     InsertImage,
     PasteImage,
     Help,
+    /// Open the project page on GitHub in the browser
+    OpenGitHub,
     Theme(usize),
     SetMode(Mode),
     ToggleMarkdown,
@@ -1740,6 +1742,7 @@ impl MindMapApp {
             Command::Find => self.search_focus = true,
             Command::FindNext => self.find_next(),
             Command::Help => self.show_help = !self.show_help,
+            Command::OpenGitHub => crate::update::open_url(crate::update::REPOSITORY),
             Command::Theme(i) => self.theme = i,
             Command::SetMode(mode) => self.set_mode(ctx, mode),
             Command::ToggleMarkdown => {
@@ -1763,7 +1766,10 @@ impl MindMapApp {
                 let doc = self.doc_mut();
                 doc.md_text.clear();
                 doc.md_focus = true;
-                self.status = "Paste your AI's answer here (⌘V)".into();
+                self.status = format!(
+                    "Paste your AI's answer here ({})",
+                    ctx.format_shortcut(&SC_PASTE)
+                );
             }
             Command::OpenExample(i) => self.open_example(i),
             Command::OpenTemplate(i) => self.open_template(i),
@@ -2417,6 +2423,15 @@ impl MindMapApp {
                     Command::OpenExample(0),
                     &mut out,
                 );
+                ui.separator();
+                cmd_item(
+                    ui,
+                    true,
+                    &l(icon::GITHUB_LOGO, "Mindful on GitHub"),
+                    None,
+                    Command::OpenGitHub,
+                    &mut out,
+                );
             });
 
             // Toolbar
@@ -2467,40 +2482,22 @@ impl MindMapApp {
                     can_redo,
                     Command::Redo,
                 );
-                if show_view_tools {
+                // Auto layout and fit sit in the status bar; Markdown has the preview here
+                if show_view_tools && mode == Mode::Markdown {
                     ui.separator();
-                    if mode == Mode::Mindmap {
-                        tool(
-                            ui,
-                            icon::TREE_STRUCTURE,
-                            "Auto layout",
-                            Some(&SC_LAYOUT),
-                            true,
-                            Command::AutoLayout,
-                        );
-                        tool(
-                            ui,
-                            icon::ARROWS_OUT,
-                            "Fit to window",
-                            Some(&SC_FIT),
-                            true,
-                            Command::Fit,
-                        );
+                    let tip = if md_preview {
+                        "Hide preview"
                     } else {
-                        let tip = if md_preview {
-                            "Hide preview"
-                        } else {
-                            "Show preview"
-                        };
-                        tool(
-                            ui,
-                            icon::SIDEBAR_SIMPLE,
-                            tip,
-                            None,
-                            true,
-                            Command::TogglePreview,
-                        );
-                    }
+                        "Show preview"
+                    };
+                    tool(
+                        ui,
+                        icon::SIDEBAR_SIMPLE,
+                        tip,
+                        None,
+                        true,
+                        Command::TogglePreview,
+                    );
                 }
                 if show_extra_tools {
                     ui.separator();
@@ -2773,7 +2770,8 @@ impl MindMapApp {
         // Narrow window: hide the tip on the right, cut off the message on the left
         let width = ui.available_width();
         let show_hint = width >= 1050.0;
-        let right = if show_hint { 560.0 } else { 300.0 };
+        let markdown = self.docs[self.active].mode == Mode::Markdown;
+        let right = if markdown && show_hint { 560.0 } else { 360.0 };
         ui.horizontal(|ui| {
             // New version: coloured button at the far left, opens the download page
             let mut used = 0.0;
@@ -2819,7 +2817,7 @@ impl MindMapApp {
                     ui.separator();
                     ui.label(format!(
                         "{} {}",
-                        icon::TREE_STRUCTURE,
+                        icon::GRAPH,
                         count(doc.map.nodes.len(), "node")
                     ));
                     if show_hint {
@@ -2862,15 +2860,26 @@ impl MindMapApp {
                     ui.separator();
                     ui.label(format!(
                         "{} {}",
-                        icon::TREE_STRUCTURE,
+                        icon::GRAPH,
                         count(doc.map.nodes.len(), "node")
                     ));
-                    if show_hint {
-                        ui.separator();
-                        ui.weak(format!(
-                            "{} Right-click: menu · F1: shortcuts",
-                            icon::KEYBOARD
-                        ));
+                    // Fit and auto layout (right to left, so fit comes first)
+                    ui.separator();
+                    for (ic, tip, sc, cmd) in [
+                        (icon::ARROWS_OUT, "Fit to window", &SC_FIT, Command::Fit),
+                        (
+                            icon::TREE_STRUCTURE,
+                            "Auto layout",
+                            &SC_LAYOUT,
+                            Command::AutoLayout,
+                        ),
+                    ] {
+                        let button = egui::Button::new(egui::RichText::new(ic).size(15.0))
+                            .min_size(Vec2::new(26.0, 20.0));
+                        let tip = format!("{tip}   {}", ui.ctx().format_shortcut(sc));
+                        if ui.add(button).on_hover_text(tip).clicked() {
+                            out = Some(cmd);
+                        }
                     }
                 }
             });
@@ -2880,17 +2889,17 @@ impl MindMapApp {
 
     fn help_window(&mut self, ctx: &egui::Context) {
         let f = |sc: &KeyboardShortcut| ctx.format_shortcut(sc);
-        let cmd = if cfg!(target_os = "macos") {
-            "⌘"
-        } else {
-            "Ctrl"
+        // Keys that aren't a `KeyboardShortcut`, written like egui writes the others
+        let mac = ctx.os() == egui::os::OperatingSystem::Mac;
+        let keys = |on_mac: &str, elsewhere: &str| -> String {
+            if mac { on_mac } else { elsewhere }.into()
         };
         let rows: Vec<(String, &str)> = vec![
             ("Tab".into(), "Add child (also while typing)"),
             ("Enter".into(), "Add sibling / finish typing"),
             ("Type".into(), "Replace the selected node's text"),
             ("F2 · double-click".into(), "Rename (text selected)"),
-            ("Del".into(), "Delete node and its children"),
+            (keys("⌫", "Del · Backspace"), "Delete node and its children"),
             ("Space".into(), "Collapse / expand"),
             (f(&SC_TASK), "Add checkbox / tick it off"),
             ("Arrow keys".into(), "Move selection"),
@@ -2905,13 +2914,19 @@ impl MindMapApp {
             (f(&SC_FIND), "Find (Enter: next match)"),
             (f(&SC_FIT), "Fit to window"),
             (format!("{} / {}", f(&SC_ZOOM_IN), f(&SC_ZOOM_OUT)), "Zoom"),
-            (format!("{cmd} + scroll · pinch"), "Zoom at the pointer"),
+            (
+                keys("⌘ scroll · pinch", "Ctrl+scroll · pinch"),
+                "Zoom at the pointer",
+            ),
             ("Drag canvas · scroll".into(), "Pan the view"),
             ("Drag node".into(), "Move node and its children"),
             (f(&SC_NEW_TAB), "New tab"),
             (f(&SC_CLOSE), "Close tab"),
-            ("Ctrl + Tab".into(), "Next tab"),
-            (format!("{cmd} 1 … 9"), "Jump to tab"),
+            (
+                keys("⌃Tab · ⌃⇧Tab", "Ctrl+Tab · Ctrl+Shift+Tab"),
+                "Next / previous tab",
+            ),
+            (keys("⌘1 … ⌘9", "Ctrl+1 … Ctrl+9"), "Jump to tab"),
             (f(&SC_SAVE), "Save"),
             (f(&SC_SAVE_AS), "Save as"),
             (f(&SC_OPEN), "Open (also imports Markdown)"),
