@@ -290,7 +290,7 @@ mod tests {
                         p.text(
                             Pos2::new(x, 430.0),
                             Align2::LEFT_CENTER,
-                            "Free & open source  ·  macOS  ·  written in Rust",
+                            "Free & open source  ·  macOS & Windows  ·  written in Rust",
                             FontId::proportional(19.0),
                             theme.text.gamma_multiply(0.55),
                         );
