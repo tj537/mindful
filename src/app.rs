@@ -2142,7 +2142,8 @@ impl MindMapApp {
         egui::menu::bar(ui, |ui| {
             // Mehr Luft in den Menü-Knöpfen (File, Edit, …)
             ui.spacing_mut().button_padding = Vec2::new(10.0, 5.0);
-            ui.label(egui::RichText::new(icon::GRAPH).size(20.0).color(accent));
+            let logo_color = ui.visuals().strong_text_color();
+            crate::logo::show(ui, 24.0, logo_color).on_hover_text("Mindful");
             if show_wordmark {
                 ui.label(egui::RichText::new("Mindful").strong().size(15.0));
             }

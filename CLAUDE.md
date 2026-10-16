@@ -13,6 +13,7 @@ Mind maps, Markdown and presentations in one desktop app. Rust + eframe/egui 0.3
 | `./scripts/build-mac.sh --install` | builds `dist/Mindful.app` and replaces `/Applications/Mindful.app` |
 | `./scripts/build-mac.sh --zip` | builds `dist/Mindful-macos-arm64.zip` (release asset) |
 | `cargo run --release --example make_space_images` | regenerates the example pictures in `assets/examples/images/` |
+| `cargo run --release --example make_icon -- --assets` | regenerates `assets/icon.png` and `assets/icon.ico` from `assets/icon.svg` (the source of the app icon and the in-app logo) |
 
 Commit only when `cargo test` exits 0 (check the exit code; don't hide it behind a pipe).
 

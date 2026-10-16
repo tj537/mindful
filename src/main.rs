@@ -8,6 +8,7 @@ mod document;
 mod export;
 mod icons;
 mod images;
+mod logo;
 mod markdown_view;
 mod model;
 mod nodes;

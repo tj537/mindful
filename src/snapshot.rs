@@ -268,20 +268,9 @@ mod tests {
                         // Links: Name, Satz, Stichworte
                         let accent = theme.branches[0];
                         let x = 70.0;
-                        p.circle_filled(
-                            Pos2::new(x + 34.0, 150.0),
-                            34.0,
-                            accent.gamma_multiply(0.2),
-                        );
+                        crate::logo::paint(&p, Pos2::new(x + 34.0, 150.0), 72.0, theme.text);
                         p.text(
-                            Pos2::new(x + 34.0, 150.0),
-                            Align2::CENTER_CENTER,
-                            egui_phosphor::regular::GRAPH,
-                            FontId::proportional(36.0),
-                            accent,
-                        );
-                        p.text(
-                            Pos2::new(x + 84.0, 150.0),
+                            Pos2::new(x + 88.0, 150.0),
                             Align2::LEFT_CENTER,
                             "Mindful",
                             FontId::proportional(64.0),

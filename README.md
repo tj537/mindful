@@ -239,6 +239,7 @@ A few minutes later both downloads are on the release page, and running copies o
 | `cargo clippy --all-targets` | lint |
 | `cargo fmt` | format |
 | `cargo test --release render_ -- --ignored` | render every slide and the app window to `target/snapshots/` without opening a window, handy for checking visual changes |
+| `cargo run --release --example make_icon -- --assets` | rebuild `assets/icon.png` and `assets/icon.ico` after changing the app icon in `assets/icon.svg` |
 
 How the code fits together (data model, the flow of a frame, Markdown sync, file format, how to add features) is described in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
@@ -254,6 +255,7 @@ src/
 ├── tour.rs            camera tour
 ├── images.rs          inserting, scaling and drawing pictures
 ├── icons.rs           icons on nodes
+├── logo.rs            the Mindful mark (from assets/icon.svg)
 ├── remote.rs          phone remote (small web server)
 ├── update.rs          update check
 build.rs               embeds the icon into the Windows .exe

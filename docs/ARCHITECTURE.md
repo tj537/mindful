@@ -517,6 +517,18 @@ A `Theme` describes background, grid, card color, text colors, root color, selec
 
 Icons are inserted into text as characters: `format!("{}  Save", icon::FLOPPY_DISK)`.
 
+### App icon and logo (`logo.rs`)
+
+`assets/icon.svg` is the single source of the Mindful mark: a circle with an **M**, five branches with nodes and square brackets on a white rounded square. Everything else is derived from it:
+
+| Output | Made by |
+|---|---|
+| macOS `.icns` | `scripts/build-mac.sh` → `cargo run --release --example make_icon -- <dir.iconset>` → `iconutil` |
+| `assets/icon.png` (window icon, 256 px) and `assets/icon.ico` (Windows, 16–256 px as PNGs) | `cargo run --release --example make_icon -- --assets` – run it after changing the SVG and commit both files |
+| Logo in the menu bar and in the social preview | `logo.rs` at runtime |
+
+The line art sits in the group `<g id="logo">`. `logo::paint` renders only that node with `resvg::render_node` (scaled to the physical pixel size and centred), turns it into a white mask and draws it tinted with the theme's text colour, so the mark follows every theme. Textures are cached per pixel size in `ctx.data`.
+
 ---
 
 ## Platform specifics
@@ -530,6 +542,7 @@ Icons are inserted into text as characters: `format!("{}  Save", icon::FLOPPY_DI
 | Data folder | chosen by eframe per system | README |
 | Mac bundle | `Info.plist`, `.icns`, `codesign` | `packaging/`, `scripts/build-mac.sh` |
 | Windows icon | `assets/icon.ico` embedded into the `.exe` with `winresource` (only when building on Windows) | `build.rs` |
+| Window icon | `assets/icon.png` set on the viewport (taskbar, Dock when started without the bundle) | `main.rs` |
 | Child processes | `curl` and `cmd /C start` run with `CREATE_NO_WINDOW`, so no console window flashes up | `update.rs` |
 | Phone remote | the firewall may ask once whether Mindful may accept connections | `remote.rs` |
 
@@ -601,6 +614,7 @@ cargo test
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
 | `render_slides` (ignored, run on demand) | renders every slide of both examples, the presenter view and a tour overview to PNG for a visual check |
 | `icons_are_read_from_shortcodes` | `:rocket: Text` becomes an icon, unknown names stay text |
+| `logo_is_found_in_the_app_icon` | `assets/icon.svg` has a `logo` group that renders without the icon background |
 | `versions_are_compared` | update check: `v0.3.0` is newer than `0.2.0`, nonsense is ignored |
 | `phone_requests_need_the_token_and_queue_commands` | the remote server rejects wrong tokens, serves the page and state, queues Next |
 | `placeholders_can_be_typed_over` | simulated click + typing replaces a placeholder; typing on a selected node replaces its text |
