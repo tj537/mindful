@@ -2125,6 +2125,7 @@ pub fn show(
     let go_to = |doc: &mut Document, slide: usize, build: usize| {
         if slide != doc.slide {
             doc.slide_time = now;
+            crate::sound::play(crate::sound::Sound::Swish);
         }
         doc.slide = slide;
         doc.build = build;

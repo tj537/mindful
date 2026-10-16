@@ -220,6 +220,9 @@ fn camera(tour: &TourState, to: Camera, now: f64, area: Rect, fx: &Effects) -> C
 
 /// New flight: to another stop or (when revealing) to another level
 fn fly_to(tour: &mut TourState, stop: usize, level: usize, backwards: bool, cam: Camera, now: f64) {
+    if stop != tour.stop {
+        crate::sound::play(crate::sound::Sound::Swish);
+    }
     tour.from = cam;
     tour.backwards = backwards;
     tour.prev_stop = tour.stop;

@@ -19,6 +19,7 @@ mod remote;
 mod search;
 #[cfg(test)]
 mod snapshot;
+mod sound;
 mod theme;
 mod tour;
 mod update;

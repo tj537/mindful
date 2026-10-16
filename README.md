@@ -71,6 +71,7 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 - **Icons on nodes:** 64 icons from the right-click menu, written as `:rocket:` in Markdown and shown in the branch colour on the mind map and the slides. Typed emojis work too.
 - Tabs, undo/redo, copy & paste, a description and speaker notes on every node, 16 colour themes (from Light and Dark to Nord, Dracula, Tokyo Night, Gruvbox, Solarized and Catppuccin) plus a colour editor for your own – all behind the gear at the top right.
 - **Search** (⌘F) looks through the text, descriptions and speaker notes, jumps to the first match while you type and marks every match – in the mind map with a ring (also on collapsed branches that hide one), in the Markdown editor with a highlight. Enter goes to the next match.
+- **Sound feedback** (optional, off by default, ⚙︎ → *Sound feedback*): quiet, synthesized sounds – a soft pop for a new node, a chime when you tick off a task, a whoosh that pans from left to right when you switch views and a light swish for the next slide. No audio files: every sound is computed in the app.
 - The status bar at the bottom holds zoom, *Fit to window* and *Auto layout*; *Help → Mindful on GitHub* opens the project page.
 - Mindful tells you when a new version is out (one request to GitHub per start; can be switched off in the settings).
 - Templates (brainstorming, project plan, SWOT, weekly plan, meeting notes, book summary) and a complete example to explore: **File → Open example → The Universe** (also in German).
@@ -213,7 +214,7 @@ The first build takes a few minutes. Platform prerequisites:
 
 - **macOS:** the Xcode command line tools (`xcode-select --install`).
 - **Windows:** the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the *Desktop development with C++* workload.
-- **Linux (Debian/Ubuntu):** `sudo apt install build-essential libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev zenity`
+- **Linux (Debian/Ubuntu):** `sudo apt install build-essential libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libasound2-dev zenity` (`libasound2-dev` is for the sound feedback)
 
 **Mac app bundle:** `./scripts/build-mac.sh` builds `dist/Mindful.app`. With `--install` it also copies the app into `/Applications`, with `--zip` it packs the release download. The bundle runs on Macs with the same processor type as the build machine.
 
@@ -262,6 +263,7 @@ src/
 ├── images.rs          inserting, scaling and drawing pictures
 ├── icons.rs           icons on nodes
 ├── search.rs          search: matches in text, descriptions and speaker notes
+├── sound.rs           optional sound feedback (synthesized, played with rodio)
 ├── logo.rs            the Mindful mark (from assets/icon.svg)
 ├── remote.rs          phone remote (small web server)
 ├── update.rs          update check

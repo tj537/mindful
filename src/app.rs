@@ -737,10 +737,18 @@ struct SavedState {
     check_updates: bool,
     #[serde(default)]
     custom_colors: CustomColors,
+    #[serde(default)]
+    sound: bool,
+    #[serde(default = "half")]
+    sound_volume: f32,
 }
 
 fn yes() -> bool {
     true
+}
+
+fn half() -> f32 {
+    0.5
 }
 
 #[derive(Serialize)]
@@ -754,6 +762,8 @@ struct SavedStateRef<'a> {
     prompt: &'a ai_prompt::PromptForm,
     check_updates: bool,
     custom_colors: CustomColors,
+    sound: bool,
+    sound_volume: f32,
 }
 
 pub struct MindMapApp {
@@ -764,6 +774,9 @@ pub struct MindMapApp {
     applied_theme: Option<Theme>,
     /// Custom colours from the colour editor
     custom_colors: CustomColors,
+    /// Quiet sound feedback (off by default) and its volume 0…1
+    sound: bool,
+    sound_volume: f32,
     show_color_editor: bool,
     /// Tab was pressed (intercepted before egui uses it to move the focus)
     tab_pressed: bool,
@@ -846,6 +859,8 @@ impl MindMapApp {
             theme: DEFAULT_THEME,
             applied_theme: None,
             custom_colors: CustomColors::default(),
+            sound: false,
+            sound_volume: 0.5,
             show_color_editor: false,
             tab_pressed: false,
             tab_switch: 0,
@@ -900,6 +915,8 @@ impl MindMapApp {
                 };
             }
             app.custom_colors = state.custom_colors;
+            app.sound = state.sound;
+            app.sound_volume = state.sound_volume;
             app.docs = state.docs;
             app.active = state.active;
             app.show_welcome = state.show_welcome;
@@ -932,6 +949,7 @@ impl MindMapApp {
 
     /// One frame of the whole UI
     pub fn show(&mut self, ctx: &egui::Context) {
+        crate::sound::configure(self.sound, self.sound_volume);
         self.poll_pdf_export(ctx);
         self.poll_update_check();
         let current = self.current_theme();
@@ -1373,6 +1391,33 @@ impl MindMapApp {
             "Tips on empty mind maps",
             "A small card with the example and templates on new, empty mind maps",
         );
+        toggle(
+            ui,
+            &mut self.sound,
+            "Sound feedback",
+            "Quiet, synthesized sounds: a pop for new nodes, a chime for done tasks, a whoosh when switching views",
+        );
+        if self.sound {
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                ui.label(icon::SPEAKER_LOW);
+                ui.add(
+                    egui::Slider::new(&mut self.sound_volume, 0.0..=1.0)
+                        .show_value(false)
+                        .trailing_fill(true),
+                )
+                .on_hover_text("Volume");
+                ui.label(icon::SPEAKER_HIGH);
+                if ui
+                    .small_button(format!("{}  Try", icon::PLAY))
+                    .on_hover_text("Play a sound at this volume")
+                    .clicked()
+                {
+                    crate::sound::configure(true, self.sound_volume);
+                    crate::sound::play(crate::sound::Sound::Done);
+                }
+            });
+        }
         toggle(
             ui,
             &mut self.check_updates,
@@ -1834,6 +1879,7 @@ impl MindMapApp {
                     let child = doc.map.add_child(id);
                     doc.begin_edit(child, false);
                     self.focus_pending = true;
+                    crate::sound::play(crate::sound::Sound::Create);
                 }
             }
             Action::AddSibling(id) => {
@@ -1843,6 +1889,7 @@ impl MindMapApp {
                 let sibling = doc.map.add_child(parent);
                 doc.begin_edit(sibling, false);
                 self.focus_pending = true;
+                crate::sound::play(crate::sound::Sound::Create);
             }
             Action::Rename(id) => {
                 doc.begin_edit(id, true);
@@ -1863,6 +1910,7 @@ impl MindMapApp {
                     doc.checkpoint();
                     doc.map.remove(id);
                     doc.selected = Some(parent);
+                    crate::sound::play(crate::sound::Sound::Delete);
                 }
             }
             Action::Toggle(id) => {
@@ -1979,6 +2027,9 @@ impl MindMapApp {
                     doc.checkpoint();
                     if let Some(n) = doc.map.get_mut(id) {
                         n.task = new;
+                    }
+                    if new == Some(true) {
+                        crate::sound::play(crate::sound::Sound::Done);
                     }
                 }
             }
@@ -3556,6 +3607,7 @@ impl MindMapApp {
         }
         self.close_note();
         self.doc_mut().set_mode(mode);
+        crate::sound::play(crate::sound::Sound::Whoosh);
         // Talk over: stop the phone remote, close the port
         if was == Mode::Present {
             crate::remote::stop();
@@ -3685,6 +3737,8 @@ impl eframe::App for MindMapApp {
             prompt: &self.prompt,
             check_updates: self.check_updates,
             custom_colors: self.custom_colors,
+            sound: self.sound,
+            sound_volume: self.sound_volume,
         };
         eframe::set_value(storage, eframe::APP_KEY, &state);
     }

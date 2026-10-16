@@ -440,6 +440,20 @@ The search box sits in the menu bar (⌘F focuses it). A node matches when its t
 - **In the mind map** every match gets a glow and a ring in `nodes::SEARCH` (amber in every theme, at least 1.5 px wide, so it stays visible when zoomed far out), and `search::mark` gives the matching part of the label a background. A collapsed node lights up too when a match is hidden below it.
 - **In the Markdown editor** the layouter marks every match the same way; Enter scrolls to the next one (`doc.md_find`, `md_find_scroll`, scrolled with the galley position of that character) while the focus stays in the search box.
 
+## Sound feedback (`sound.rs`)
+
+Off by default; *Settings → Sound feedback* turns it on, with a volume slider and a *Try* button (`sound`, `sound_volume` in the saved state). `MindMapApp::show` passes both to `sound::configure` every frame (two atomics), and `sound::play(Sound::…)` is called where things happen: `Create` in `Action::AddChild`/`AddSibling`, `Delete` in `Action::Delete`, `Done` when a task becomes done, `Whoosh` in `set_mode`, `Swish` when the slide changes (`present::show`) or the tour flies to another stop (`tour::fly_to`). The same sound is played at most every 60 ms, so a held key doesn't pile up.
+
+There are no audio files – `sound::render` computes each sound as 44.1 kHz stereo samples:
+
+| Sound | How it is made |
+|---|---|
+| `Create` / `Delete` | a sine (plus a little second harmonic) gliding down in pitch, 1.5 ms attack and exponential decay – a soft, woody pop; lower and duller for delete |
+| `Done` | two bell tones a fifth apart (880 Hz and 1318.5 Hz, the second 70 ms later), each with a slightly detuned overtone |
+| `Whoosh` / `Swish` | white noise (xorshift) through a state-variable band-pass whose centre sweeps up exponentially, with a swell envelope and equal-power panning from left to right |
+
+Every sound ends with a 6 ms fade so it never clicks. Playback runs on a thread of its own (`mindful-sound`), started with the first sound: it opens the default output with `rodio::DeviceSinkBuilder::open_default_sink` and adds each sound to the device's mixer as a `SamplesBuffer`, so sounds can overlap. `rodio` is used with `playback` only (no decoders). Without an output device the thread ends, the next `play` notices the closed channel and switches sound off. Linux builds need `libasound2-dev` (ALSA, installed in CI). `cargo test --release render_ -- --ignored` also writes every sound to `target/snapshots/sounds/*.wav` to listen to.
+
 ## Icons on nodes (`icons.rs`)
 
 `Node::icon` holds a short name from `ICONS` (64 entries: name, Phosphor glyph, label). In Markdown it is written as a GitHub-style shortcode before the text – `## :rocket: Spaceflight`, `- :bulb: Idea` – and read back by `split_icon` (unknown names and things like `10:30:` stay text). `nodes::label_job` puts the glyph in front of the label (in the branch colour on outlined nodes), `icons::label` does the same for slides, the preview and the presenter view, and slide titles colour the glyph in the slide colour (`title_job`). The context menu has an *Icon* picker (`icons::picker`, `Action::SetIcon`).
@@ -626,6 +640,7 @@ cargo test
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
 | `render_slides` (ignored, run on demand) | renders every slide of both examples, the presenter view and a tour overview to PNG for a visual check |
 | `speaker_notes_round_trip_apart_from_the_description` | `<!-- notes: … -->` (one line and a block, under headings and bullets) is read into `speaker_notes`, kept apart from the description, survives editing and is written back exactly |
+| `sounds_are_short_quiet_and_end_softly` | every sound is 0.05–0.6 s long, peaks between 0.02 and 0.5, ends without a click; the whoosh moves from left to right; with sound off nothing starts |
 | `matches_ignore_case_and_find_notes` | search ignores case, keeps byte positions after umlauts, finds text, description and speaker notes in outline order and marks only the match in a `LayoutJob` |
 | `icons_are_read_from_shortcodes` | `:rocket: Text` becomes an icon, unknown names stay text |
 | `logo_is_found_in_the_app_icon` | `assets/icon.svg` has a `logo` group that renders without the icon background |

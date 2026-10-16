@@ -9,7 +9,7 @@ Mind maps, Markdown and presentations in one desktop app. Rust + eframe/egui 0.3
 | `cargo test --release` | all tests (fast) |
 | `cargo clippy --release --all-targets` | must stay free of warnings |
 | `cargo fmt` | CI checks `cargo fmt --check` |
-| `cargo test --release render_ -- --ignored` | renders every slide, the presenter view, the phone-remote card, the app window (several widths/themes) and the social preview to `target/snapshots/*.png` – look at them after UI changes |
+| `cargo test --release render_ -- --ignored` | renders every slide, the presenter view, the phone-remote card, the app window (several widths/themes) and the social preview to `target/snapshots/*.png`, and the sounds to `target/snapshots/sounds/*.wav` – look at (and listen to) them after UI changes |
 | `./scripts/build-mac.sh --install` | builds `dist/Mindful.app` and replaces `/Applications/Mindful.app` |
 | `./scripts/build-mac.sh --zip` | builds `dist/Mindful-macos-arm64.zip` (release asset) |
 | `cargo run --release --example make_space_images` | regenerates the example pictures in `assets/examples/images/` |
@@ -41,5 +41,6 @@ Asset names never change (`Mindful-macos-arm64.zip`, `Mindful-windows-x64.zip`) 
 ## Platform notes
 
 - Windows: `build.rs` embeds `assets/icon.ico` (only when building on Windows); child processes use `CREATE_NO_WINDOW`; `main.rs` sets the GUI subsystem.
+- Sound (`src/sound.rs`) uses `rodio` with `playback` only; Linux builds need `libasound2-dev` (CI installs it).
 - The phone remote (`src/remote.rs`) is a tiny `std::net` HTTP server with a random token; the firewall may ask once.
 - The Mac bundle is ad-hoc signed only (no notarization yet), so first launch needs *Open Anyway*.
