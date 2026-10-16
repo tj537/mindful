@@ -3,6 +3,11 @@
 **Mind maps, Markdown and presentations in one small desktop app.**
 Write an outline, see it as a mind map, and present it as slides or as a camera flight through the map, all from the same data. Mindful is written in Rust with [egui](https://github.com/emilk/egui). It starts instantly and keeps your mind map in a single file.
 
+<p align="center">
+  <a href="https://github.com/tj537/mindful/releases/latest/download/Mindful-macos-arm64.zip"><img src="https://img.shields.io/badge/Download_for_macOS-Apple_silicon-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download Mindful for macOS (Apple silicon)" height="44"></a>
+</p>
+<p align="center"><sub>macOS 11 or newer · M1 and newer · <a href="#download">install notes</a> · <a href="https://github.com/tj537/mindful/releases">all releases</a></sub></p>
+
 ![Mindful showing the example mind map “The Universe”](docs/screenshot-mindmap.png)
 
 | Slides with diagram layouts | Pictures on slides |
@@ -35,7 +40,7 @@ Write an outline, see it as a mind map, and present it as slides or as a camera 
 
 ## Download
 
-Get the latest version from the [Releases page](../../releases).
+**[⬇ Download Mindful for macOS (Apple silicon)](https://github.com/tj537/mindful/releases/latest/download/Mindful-macos-arm64.zip)**. Older versions are on the [Releases page](https://github.com/tj537/mindful/releases).
 
 | System | Status |
 |---|---|
@@ -153,7 +158,7 @@ The first build takes a few minutes. Platform prerequisites:
 - **Windows:** the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the *Desktop development with C++* workload.
 - **Linux (Debian/Ubuntu):** `sudo apt install build-essential libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev zenity`
 
-**Mac app bundle:** `./scripts/build-mac.sh` builds `dist/Mindful.app`. With `--install` it also copies the app into `/Applications`. The bundle runs on Macs with the same processor type as the build machine.
+**Mac app bundle:** `./scripts/build-mac.sh` builds `dist/Mindful.app`. With `--install` it also copies the app into `/Applications`, with `--zip` it packs the release download. The bundle runs on Macs with the same processor type as the build machine.
 
 ### Development
 
@@ -186,7 +191,7 @@ src/
 
 ## Contributing
 
-Bug reports and ideas are welcome in the [issues](../../issues). For code changes, please open a pull request and run `cargo fmt`, `cargo clippy --all-targets` and `cargo test` first. Most code comments are still in German; English ones are welcome.
+Bug reports and ideas are welcome in the [issues](https://github.com/tj537/mindful/issues). For code changes, please open a pull request and run `cargo fmt`, `cargo clippy --all-targets` and `cargo test` first. Most code comments are still in German; English ones are welcome.
 
 ### Known limitations
 

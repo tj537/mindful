@@ -3,6 +3,7 @@
 #
 #   ./scripts/build-mac.sh            build only
 #   ./scripts/build-mac.sh --install  build and replace /Applications/Mindful.app
+#   ./scripts/build-mac.sh --zip      build and pack dist/Mindful-macos-arm64.zip for a release
 #
 # Pin the app from /Applications: the Dock icon then always opens the latest build.
 set -euo pipefail
@@ -32,6 +33,15 @@ sed "s/__VERSION__/$VERSION/g" packaging/macos/Info.plist > "$APP/Contents/Info.
 # Local ad-hoc signature (no Apple account needed) so macOS accepts the bundle as a whole
 codesign --force --deep --sign - "$APP"
 echo "==> Done: $APP"
+
+if [[ "${1:-}" == "--zip" ]]; then
+    # Fixed file name, so the README's "latest download" link always works
+    ZIP="dist/Mindful-macos-$(uname -m).zip"
+    rm -f "$ZIP"
+    ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+    echo "==> Packed: $ZIP"
+    shasum -a 256 "$ZIP"
+fi
 
 if [[ "${1:-}" == "--install" ]]; then
     echo "==> Installing to $INSTALL_DIR"
