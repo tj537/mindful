@@ -6,6 +6,7 @@ mod app;
 mod diagrams;
 mod document;
 mod export;
+mod images;
 mod markdown_view;
 mod model;
 mod nodes;

@@ -188,8 +188,10 @@ impl Document {
             .to_lowercase();
 
         if matches!(ext.as_str(), "md" | "markdown" | "txt") {
-            let map = MindMap::from_outline(&text)
+            let mut map = MindMap::from_markdown_with_images(&text)
                 .ok_or_else(|| "The file contains no outline".to_string())?;
+            // Bildverweise wie ![](foto.jpg) neben der Datei gleich mit einlesen
+            crate::images::resolve(&mut map, path.parent());
             // Import: ohne Pfad, damit Speichern nach einem .mindmap-Namen fragt
             let mut doc = Self::new(map, None);
             doc.layout_pending = true;
@@ -207,6 +209,8 @@ impl Document {
 
     pub fn save_to(&mut self, path: &Path) -> Result<(), String> {
         self.end_edit();
+        // Bilder, die kein Knoten mehr zeigt, nicht mitspeichern
+        self.map.prune_images();
         let text = serde_json::to_string_pretty(&self.map).map_err(|e| e.to_string())?;
         fs::write(path, text).map_err(|e| e.to_string())?;
         self.path = Some(path.to_path_buf());
@@ -268,6 +272,15 @@ impl Document {
                     self.fit_pending = true;
                 }
             }
+        }
+        // Im Editor getippte Bildpfade (![](~/Bilder/foto.jpg)) beim Verlassen einlesen
+        if self.mode == Mode::Markdown && mode != Mode::Markdown {
+            let base = self
+                .path
+                .as_ref()
+                .and_then(|p| p.parent())
+                .map(Path::to_path_buf);
+            crate::images::resolve(&mut self.map, base.as_deref());
         }
         self.mode = mode;
     }

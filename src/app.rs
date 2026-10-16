@@ -1,9 +1,11 @@
 use crate::document::ViewAnim;
 use crate::document::{Document, Mode};
 use crate::export::{self, ExportNode};
-use crate::model::{parse_outline, Clip, MindMap, SlideLayout, DEFAULT_TEXT};
+use crate::images;
+use crate::model::{parse_outline, Clip, MindMap, SlideLayout, StoredImage, DEFAULT_TEXT};
 use crate::nodes::{
-    node_size, node_style, paint_label, paint_node, paint_task, NodeStyle, MIN_NODE, TASK_SPACE,
+    node_size, node_style, paint_label, paint_node, paint_task, paint_thumb, thumb_size,
+    with_thumb, NodeStyle, MIN_NODE, TASK_SPACE,
 };
 use crate::present::ease_in_out_cubic;
 use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
@@ -144,6 +146,8 @@ enum Command {
     Find,
     FindNext,
     AddChild,
+    InsertImage,
+    PasteImage,
     Help,
     Theme(usize),
     SetMode(Mode),
@@ -170,6 +174,11 @@ enum Action {
     /// Folien-Layout eines Hauptzweigs
     SetLayout(u64, Option<SlideLayout>),
     SetColor(u64, Option<usize>),
+    /// Bild(er) per Dateidialog einfügen
+    InsertImage(u64),
+    /// Bild aus der Zwischenablage einfügen
+    PasteImage(u64),
+    RemoveImage(u64),
     Copy(u64),
     Cut(u64),
     Duplicate(u64),
@@ -181,6 +190,17 @@ enum Action {
     OpenExample(usize),
     OpenTemplate(usize),
     HideWelcome,
+}
+
+/// Beschriftung aus einem Dateinamen: „mars_rover-2“ → „Mars rover 2“
+fn caption(name: &str) -> String {
+    let text = name.replace(['_', '-'], " ");
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => "Image".into(),
+    }
 }
 
 /// Zoomt so, dass der Punkt `p` auf dem Bildschirm an seiner Stelle bleibt.
@@ -400,6 +420,40 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
         Action::EditNote(id),
         out,
     );
+    let has_image = map.get(id).is_some_and(|n| n.image.is_some());
+    ui.menu_button(l(icon::IMAGE, "Image"), |ui| {
+        let insert = if has_image {
+            "Replace image …"
+        } else {
+            "Insert image …"
+        };
+        action_item(
+            ui,
+            true,
+            &l(icon::IMAGE_SQUARE, insert),
+            "",
+            Action::InsertImage(id),
+            out,
+        );
+        action_item(
+            ui,
+            true,
+            &l(icon::CLIPBOARD, "Paste image"),
+            "",
+            Action::PasteImage(id),
+            out,
+        );
+        action_item(
+            ui,
+            has_image,
+            &l(icon::X_SQUARE, "Remove image"),
+            "",
+            Action::RemoveImage(id),
+            out,
+        );
+        ui.separator();
+        ui.weak("Tip: drag images from the Finder onto a node");
+    });
     // Folien-Layout nur für Hauptzweige (jeder ist eine Folie)
     if map.depth(id) == 1 {
         let current = map.get(id).and_then(|n| n.layout);
@@ -477,6 +531,8 @@ struct Laid {
     side: f32,
     hit: bool,
     task: Option<bool>,
+    /// Mit Vorschaubild: als Karte zeichnen
+    card: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -538,6 +594,10 @@ pub struct MindMapApp {
     /// Offenes Notizfenster: Knoten und Stand vorher (für Rückgängig)
     note_edit: Option<(u64, MindMap)>,
     fullscreen: bool,
+    /// Zeitpunkt des letzten eingefügten Textes (⌘V ohne Text = Bild einfügen)
+    last_paste: f64,
+    /// Bildschirm-Rechtecke der Knoten im letzten Frame (Ziel beim Hineinziehen von Bildern)
+    node_rects: HashMap<u64, Rect>,
     /// Tipp-Karte mit Beispiel-Button auf leeren Mindmaps
     show_welcome: bool,
     /// Stichpunkte auf Folien nacheinander aufdecken
@@ -572,6 +632,8 @@ impl MindMapApp {
             md_preview: true,
             note_edit: None,
             fullscreen: false,
+            last_paste: 0.0,
+            node_rects: HashMap::new(),
             show_welcome: true,
             build_bullets: true,
             effects: present::Effects::default(),
@@ -716,9 +778,11 @@ impl MindMapApp {
         let Some((name, text)) = EXAMPLES.get(i) else {
             return;
         };
-        let Some(map) = MindMap::from_outline(text) else {
+        let Some(mut map) = MindMap::from_outline(text) else {
             return;
         };
+        // Die Beispielbilder sind in die App eingebaut
+        images::resolve(&mut map, None);
         let mut doc = Document::new(map, None);
         doc.layout_pending = true;
         self.push_doc(doc);
@@ -763,6 +827,93 @@ impl MindMapApp {
                 false
             }
         }
+    }
+
+    /// Wohin ein hineingezogenes Bild gehört: in der Präsentation an die aktuelle Folie,
+    /// in der Mindmap an den Knoten unter dem Mauszeiger, sonst an den ausgewählten
+    fn drop_target(&self, ctx: &egui::Context) -> Option<u64> {
+        let doc = self.doc();
+        let root = doc.map.root()?;
+        let fallback = doc
+            .selected
+            .filter(|id| doc.map.get(*id).is_some())
+            .unwrap_or(root);
+        Some(match doc.mode {
+            Mode::Present => match doc.slide {
+                0 => root,
+                n => doc.map.children(root).nth(n - 1).map_or(root, |c| c.id),
+            },
+            Mode::Mindmap => ctx
+                .input(|i| i.pointer.latest_pos())
+                .and_then(|p| {
+                    self.node_rects
+                        .iter()
+                        .find(|(_, r)| r.contains(p))
+                        .map(|(id, _)| *id)
+                })
+                .unwrap_or(fallback),
+            _ => fallback,
+        })
+    }
+
+    /// Bilddateien einlesen und einfügen; andere Dateien (.mindmap, .md) öffnen
+    fn add_image_files(&mut self, target: u64, paths: Vec<PathBuf>) {
+        let (pictures, others): (Vec<PathBuf>, Vec<PathBuf>) =
+            paths.into_iter().partition(|p| images::is_image_path(p));
+        for path in others {
+            self.open_path(path);
+        }
+        if pictures.is_empty() {
+            return;
+        }
+        let mut found = Vec::new();
+        let mut failed = Vec::new();
+        for path in &pictures {
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            match images::import_file(path) {
+                Ok(img) => found.push((caption(&name), img)),
+                Err(e) => failed.push(format!("{name}: {e}")),
+            }
+        }
+        self.add_images(target, found);
+        if !failed.is_empty() {
+            self.status = format!("Could not read {}", failed.join(", "));
+        }
+    }
+
+    /// Ein Bild kommt an den Knoten selbst, mehrere werden je ein neuer Unterpunkt
+    fn add_images(&mut self, target: u64, found: Vec<(String, (String, StoredImage))>) {
+        let doc = &mut self.docs[self.active];
+        if found.is_empty() || doc.map.get(target).is_none() {
+            return;
+        }
+        doc.end_edit();
+        doc.checkpoint();
+        let count = found.len();
+        if count == 1 {
+            let (_, img) = found.into_iter().next().unwrap();
+            images::attach(&mut doc.map, target, img);
+        } else {
+            for (name, img) in found {
+                let child = doc.map.add_child_text(target, &name);
+                images::attach(&mut doc.map, child, img);
+            }
+        }
+        doc.selected = Some(target);
+        doc.layout_pending = true;
+        let text = doc
+            .map
+            .get(target)
+            .map(|n| n.text.clone())
+            .unwrap_or_default();
+        self.status = if count == 1 {
+            format!("Image added to “{text}”")
+        } else {
+            format!("{count} images added under “{text}”")
+        };
     }
 
     fn close_tab(&mut self, i: usize) {
@@ -854,9 +1005,8 @@ impl MindMapApp {
         };
         let theme = &THEMES[self.theme];
         let result = match kind {
-            ExportKind::Markdown => {
-                std::fs::write(&path, self.doc().map.to_markdown()).map_err(|e| e.to_string())
-            }
+            ExportKind::Markdown => std::fs::write(&path, self.doc().map.to_markdown_with_images())
+                .map_err(|e| e.to_string()),
             ExportKind::Svg => {
                 let svg = export::to_svg(&self.export_nodes(ctx), theme);
                 std::fs::write(&path, svg).map_err(|e| e.to_string())
@@ -944,6 +1094,16 @@ impl MindMapApp {
             Command::Duplicate => {
                 if let Some(id) = selected {
                     self.apply(ctx, Action::Duplicate(id));
+                }
+            }
+            Command::InsertImage => {
+                if let Some(id) = selected {
+                    self.apply(ctx, Action::InsertImage(id));
+                }
+            }
+            Command::PasteImage => {
+                if let Some(id) = selected {
+                    self.apply(ctx, Action::PasteImage(id));
                 }
             }
             Command::Delete => {
@@ -1051,6 +1211,29 @@ impl MindMapApp {
                     n.color = color;
                 }
             }
+            Action::InsertImage(id) => {
+                let Some(paths) = rfd::FileDialog::new()
+                    .set_title("Insert image")
+                    .add_filter("Images", &images::EXTENSIONS)
+                    .pick_files()
+                else {
+                    return;
+                };
+                self.add_image_files(id, paths);
+            }
+            Action::PasteImage(id) => match images::from_clipboard() {
+                Some(found) => self.add_images(id, vec![("Image".into(), found)]),
+                None => self.status = "There is no image on the clipboard".into(),
+            },
+            Action::RemoveImage(id) => {
+                if doc.map.get(id).is_some_and(|n| n.image.is_some()) {
+                    doc.checkpoint();
+                    if let Some(n) = doc.map.get_mut(id) {
+                        n.image = None;
+                    }
+                    doc.layout_pending = true;
+                }
+            }
             Action::Copy(id) => {
                 ctx.copy_text(doc.map.clip_json(id));
                 self.status = "Copied – select another node and paste to insert it there".into();
@@ -1080,7 +1263,12 @@ impl MindMapApp {
                 doc.checkpoint();
                 // Eigener kopierter Teilbaum, sonst Text als Gliederung
                 let first = match serde_json::from_str::<Clip>(&text) {
-                    Ok(clip) => doc.map.insert_subtree(target, clip.mindmap_clip),
+                    Ok(clip) => {
+                        for (key, img) in clip.images {
+                            doc.map.images.entry(key).or_insert(img);
+                        }
+                        doc.map.insert_subtree(target, clip.mindmap_clip)
+                    }
                     Err(_) => doc
                         .map
                         .add_outline(target, &parse_outline(&text))
@@ -1207,19 +1395,36 @@ impl MindMapApp {
         }
 
         let mut paste = None;
-        let (mut copy, mut cut) = (false, false);
+        let (mut copy, mut cut, mut v_released) = (false, false, false);
+        let now = ctx.input(|i| i.time);
         ctx.input(|i| {
             for event in &i.events {
                 match event {
                     egui::Event::Copy => copy = true,
                     egui::Event::Cut => cut = true,
                     egui::Event::Paste(text) => paste = Some(text.clone()),
+                    // Liegt nur ein Bild in der Zwischenablage, meldet egui kein „Paste“ –
+                    // aber das Loslassen von V bei gedrückter ⌘-Taste kommt an
+                    egui::Event::Key {
+                        key: Key::V,
+                        pressed: false,
+                        modifiers,
+                        ..
+                    } if modifiers.command => v_released = true,
                     _ => {}
                 }
             }
         });
         if let Some(text) = paste {
+            self.last_paste = now;
             return Some(Action::Paste(text));
+        }
+        if v_released && now - self.last_paste > 1.0 {
+            let target = doc
+                .selected
+                .filter(|id| doc.map.get(*id).is_some())
+                .or(doc.map.root())?;
+            return Some(Action::PasteImage(target));
         }
 
         let pressed = |key: Key| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, key));
@@ -1418,6 +1623,23 @@ impl MindMapApp {
                     &l(icon::TRASH, "Delete"),
                     None,
                     Command::Delete,
+                    &mut out,
+                );
+                ui.separator();
+                cmd_item(
+                    ui,
+                    has_sel,
+                    &l(icon::IMAGE_SQUARE, "Insert image …"),
+                    None,
+                    Command::InsertImage,
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    has_sel,
+                    &l(icon::CLIPBOARD, "Paste image"),
+                    None,
+                    Command::PasteImage,
                     &mut out,
                 );
                 ui.separator();
@@ -1995,8 +2217,7 @@ impl MindMapApp {
             if doc.layout_pending {
                 // Alte Positionen merken: die Knoten gleiten von dort an ihren neuen Platz
                 let before = doc.map.nodes.iter().map(|n| (n.id, n.pos)).collect();
-                let widths = sizes.iter().map(|(id, s)| (*id, s.x)).collect();
-                doc.map.auto_layout(&widths);
+                doc.map.auto_layout(&sizes);
                 doc.layout_anim = Some((before, now));
                 doc.layout_pending = false;
                 doc.fit_pending = true;
@@ -2102,7 +2323,7 @@ impl MindMapApp {
         }
 
         // Sichtbare Knoten berechnen
-        let layout: Vec<Laid> = doc
+        let mut layout: Vec<Laid> = doc
             .map
             .nodes
             .iter()
@@ -2115,8 +2336,13 @@ impl MindMapApp {
                     style.text,
                 );
                 let task_space = if n.task.is_some() { TASK_SPACE } else { 0.0 };
-                let size = (galley.size() + (style.padding + Vec2::new(task_space, 0.0)) * zoom)
+                let mut size = (galley.size()
+                    + (style.padding + Vec2::new(task_space, 0.0)) * zoom)
                     .max(MIN_NODE * zoom);
+                let thumb = thumb_size(&doc.map, n);
+                if let Some(thumb) = thumb {
+                    size = with_thumb(size, thumb * zoom);
+                }
                 let side = match n.parent {
                     Some(p) if n.pos[0] < doc.map.pos(p).x => -1.0,
                     _ => 1.0,
@@ -2133,10 +2359,23 @@ impl MindMapApp {
                     side,
                     hit: !query.is_empty() && n.text.to_lowercase().contains(&query),
                     task: n.task,
+                    card: thumb.is_some(),
                 }
             })
             .collect();
+        // Bild wird hineingezogen: Knoten unter dem Mauszeiger hervorheben
+        let file_hover = ctx.input(|i| {
+            (!i.raw.hovered_files.is_empty())
+                .then(|| i.pointer.latest_pos())
+                .flatten()
+        });
+        if let Some(p) = file_hover {
+            if let Some(l) = layout.iter_mut().rev().find(|l| l.rect.contains(p)) {
+                l.hit = true;
+            }
+        }
         let rects: HashMap<u64, Rect> = layout.iter().map(|l| (l.id, l.rect)).collect();
+        self.node_rects = rects.clone();
 
         // Ausgewählten Knoten ins Bild holen, falls er außerhalb liegt
         if let Some(id) = doc.reveal.take() {
@@ -2200,11 +2439,17 @@ impl MindMapApp {
                 zoom,
                 doc.selected == Some(id),
                 l.hit,
+                l.card,
             );
+            // Vorschaubild oben, Text und Checkbox darunter
+            let label = match doc.map.get(id) {
+                Some(n) => paint_thumb(&painter, &doc.map, n, rect, zoom),
+                None => rect,
+            };
 
             // Checkbox zum Anklicken
             if let Some(done) = l.task {
-                let r = paint_task(&painter, rect, &l.style, done, zoom);
+                let r = paint_task(&painter, label, &l.style, done, zoom);
                 let check = ui.interact(
                     r.expand(4.0 * zoom),
                     ui.id().with(("task", id)),
@@ -2274,7 +2519,7 @@ impl MindMapApp {
             if doc.editing == Some(id) {
                 let mut lost = false;
                 if let Some(node) = doc.map.get_mut(id) {
-                    let mut field = rect.shrink2(Vec2::new(12.0, 4.0) * zoom);
+                    let mut field = label.shrink2(Vec2::new(12.0, 4.0) * zoom);
                     if l.task.is_some() {
                         field.min.x += TASK_SPACE * zoom;
                     }
@@ -2300,8 +2545,21 @@ impl MindMapApp {
                     doc.end_edit();
                 }
             } else {
-                paint_label(&painter, rect, l.galley.clone(), &l.style, l.task, zoom);
+                paint_label(&painter, label, l.galley.clone(), &l.style, l.task, zoom);
             }
+        }
+
+        if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+            let hint = format!(
+                "{}  Drop on a node to add the image – several images become new points",
+                icon::IMAGE
+            );
+            let pos = Pos2::new(area.center().x, area.bottom() - 30.0);
+            let galley = painter.layout_no_wrap(hint, FontId::proportional(15.0), theme.on_accent);
+            let pill = Rect::from_center_size(pos, galley.size() + Vec2::new(28.0, 14.0));
+            painter.rect_filled(pill, pill.height() / 2.0, theme.root);
+            painter.galley(pill.center() - galley.size() / 2.0, galley, theme.on_accent);
+            ctx.request_repaint();
         }
 
         // Tipp-Karte auf einer leeren, unberührten Mindmap
@@ -2501,6 +2759,21 @@ impl eframe::App for MindMapApp {
             ctx.set_visuals(visuals_for(&THEMES[self.theme]));
             self.applied_theme = Some(self.theme);
         }
+        // Hineingezogene Dateien: Bilder an einen Knoten hängen, Mindmaps öffnen
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if !dropped.is_empty() {
+            match self.drop_target(ctx) {
+                Some(target) => self.add_image_files(target, dropped),
+                None => dropped.into_iter().for_each(|p| self.open_path(p)),
+            }
+        }
+
         let theme = &THEMES[self.theme];
         let mode = self.doc().mode;
 

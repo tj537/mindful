@@ -6,7 +6,8 @@
 
 use crate::diagrams::{draw as draw_diagram, layout_menu, Item};
 use crate::document::Document;
-use crate::model::{MindMap, SlideLayout};
+use crate::images::{self, Fit};
+use crate::model::{MindMap, SlideLayout, StoredImage};
 use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
@@ -804,6 +805,22 @@ struct Slide {
     branch: Option<u64>,
     /// Diagramm statt Aufzählung
     layout: Option<SlideLayout>,
+    /// Bilder: das des Zweigs selbst (ohne Beschriftung) und die von Stichpunkten
+    images: Vec<SlideImage>,
+}
+
+struct SlideImage {
+    key: String,
+    caption: Option<String>,
+}
+
+impl Slide {
+    /// Ein einzelnes Bild ohne Stichpunkte (oder auf der Titelfolie) füllt die ganze Folie
+    fn full_bleed(&self) -> bool {
+        !self.images.is_empty()
+            && (self.is_title
+                || (self.layout.is_none() && self.bullets.is_empty() && self.images.len() == 1))
+    }
 }
 
 impl Slide {
@@ -841,6 +858,158 @@ impl Slide {
     }
 }
 
+/// Bild oben (und für die Fortschrittsleiste unten) abdunkeln, damit heller Text lesbar bleibt.
+/// Ein Netz mit gemeinsamen Kanten, das an den Ecken der Rundung der Folie folgt –
+/// so gibt es weder Streifen noch Nähte.
+fn darken_for_text(p: &egui::Painter, card: Rect, s: f32, title_slide: bool, alpha: f32) {
+    let radius = 24.0 * s;
+    if title_slide {
+        // Titelfolie: Text in der Mitte, also gleichmäßig abdunkeln
+        p.rect_filled(
+            card,
+            radius.round() as u8,
+            Color32::from_black_alpha((120.0 * alpha) as u8),
+        );
+    }
+    // Einrückung an den runden Ecken, `d` = Abstand zur Ober- bzw. Unterkante
+    let inset = |d: f32| {
+        if d >= radius {
+            0.0
+        } else {
+            radius - (radius * radius - (radius - d).powi(2)).max(0.0).sqrt()
+        }
+    };
+    // Verlauf von der Kante (`edge`) über `reach` Pixel nach innen; `dir` = +1 oben, -1 unten
+    let gradient = |edge: f32, dir: f32, reach: f32, strength: f32, curve: f32| {
+        let mut ys: Vec<f32> = (0..8).map(|k| radius * k as f32 / 8.0).collect();
+        ys.extend((0..=24).map(|k| radius + (reach - radius) * k as f32 / 24.0));
+        let mut mesh = egui::Mesh::default();
+        for (k, d) in ys.iter().enumerate() {
+            let t = d / reach;
+            let c = Color32::from_black_alpha((strength * (1.0 - t).powf(curve) * alpha) as u8);
+            let y = edge + dir * d;
+            let x = inset(*d);
+            mesh.colored_vertex(Pos2::new(card.left() + x, y), c);
+            mesh.colored_vertex(Pos2::new(card.right() - x, y), c);
+            if k > 0 {
+                let i = 2 * k as u32;
+                mesh.add_triangle(i - 2, i - 1, i);
+                mesh.add_triangle(i - 1, i + 1, i);
+            }
+        }
+        p.add(egui::Shape::mesh(mesh));
+    };
+    let reach = card.height() * if title_slide { 0.35 } else { 0.6 };
+    gradient(card.top(), 1.0, reach, 190.0, 1.6);
+    // Unten ein schmaler Schatten für die Fortschrittsleiste
+    gradient(card.bottom(), -1.0, 100.0 * s, 120.0, 1.0);
+}
+
+/// Bilder im Raster: ein einzelnes ganz sichtbar, mehrere bildfüllend mit Beschriftung
+#[allow(clippy::too_many_arguments)]
+fn picture_grid(
+    p: &egui::Painter,
+    ctx: &egui::Context,
+    stored: &std::collections::BTreeMap<String, std::sync::Arc<StoredImage>>,
+    pictures: &[SlideImage],
+    rect: Rect,
+    s: f32,
+    appear: f32,
+    theme: &Theme,
+) {
+    let pictures = &pictures[..pictures.len().min(6)];
+    let n = pictures.len();
+    if n == 0 || !rect.is_positive() {
+        return;
+    }
+    let gap = 18.0 * s;
+    let caption_h = if pictures.iter().any(|pic| pic.caption.is_some()) {
+        34.0 * s
+    } else {
+        0.0
+    };
+    // Spaltenzahl so wählen, dass die Bilder möglichst groß werden
+    let cell_for = |cols: usize| {
+        let rows = n.div_ceil(cols);
+        let w = (rect.width() - gap * (cols - 1) as f32) / cols as f32;
+        let h = (rect.height() - gap * (rows - 1) as f32) / rows as f32 - caption_h;
+        // Nicht breiter als 16:9 und nicht höher als 3:4
+        Vec2::new(w.min(h * 16.0 / 9.0), h.min(w * 4.0 / 3.0))
+    };
+    let cols = (1..=n)
+        .max_by(|a, b| {
+            let (ca, cb) = (cell_for(*a), cell_for(*b));
+            (ca.x * ca.y).total_cmp(&(cb.x * cb.y))
+        })
+        .unwrap_or(1);
+    let rows = n.div_ceil(cols);
+    let cell = cell_for(cols);
+    if cell.x <= 0.0 || cell.y <= 0.0 {
+        return;
+    }
+    let total = Vec2::new(
+        cell.x * cols as f32 + gap * (cols - 1) as f32,
+        (cell.y + caption_h) * rows as f32 + gap * (rows - 1) as f32,
+    );
+    let origin = rect.center() - total / 2.0;
+    for (i, pic) in pictures.iter().enumerate() {
+        let (col, row) = (i % cols, i / cols);
+        // Unvollständige letzte Reihe mittig
+        let in_row = if row + 1 == rows {
+            n - row * cols
+        } else {
+            cols
+        };
+        let indent = (cols - in_row) as f32 * (cell.x + gap) / 2.0;
+        // Nacheinander einblenden, mit leichtem Aufsteigen
+        let e = ((appear * (1.0 + 0.25 * n as f32)) - 0.25 * i as f32).clamp(0.0, 1.0);
+        let frame = Rect::from_min_size(
+            origin
+                + Vec2::new(
+                    indent + col as f32 * (cell.x + gap),
+                    row as f32 * (cell.y + caption_h + gap) + (1.0 - e) * 16.0 * s,
+                ),
+            cell,
+        );
+        let tint = Color32::WHITE.gamma_multiply(e);
+        let fit = if n == 1 { Fit::Contain } else { Fit::Cover };
+        let shown = match stored.get(&pic.key) {
+            Some(img) => {
+                let shown = images::contain(frame, img.aspect());
+                let target = if fit == Fit::Contain { shown } else { frame };
+                // Weicher Schatten unter dem Bild
+                p.rect_filled(
+                    target.translate(Vec2::new(0.0, 6.0 * s)),
+                    14.0 * s,
+                    Color32::from_black_alpha((60.0 * e) as u8),
+                );
+                images::paint(p, ctx, &pic.key, img, frame, fit, 14.0 * s, tint, 1.0)
+            }
+            None => {
+                images::placeholder(p, frame, 14.0 * s);
+                frame
+            }
+        };
+        if let Some(caption) = &pic.caption {
+            let galley = p.layout(
+                caption.clone(),
+                FontId::proportional(18.0 * s),
+                theme.text.gamma_multiply(0.8 * e),
+                frame.width(),
+            );
+            let pos = Pos2::new(
+                shown.center().x - galley.size().x / 2.0,
+                shown.bottom() + 8.0 * s,
+            );
+            p.with_clip_rect(Rect::from_min_size(
+                Pos2::new(frame.left(), shown.bottom()),
+                Vec2::new(frame.width(), caption_h),
+            ))
+            .galley(pos, galley, theme.text);
+        }
+    }
+}
+
 fn collect(map: &MindMap, id: u64, depth: usize, color: Color32, out: &mut Vec<Bullet>) {
     for child in map.children(id) {
         out.push((depth, child.text.clone(), color, child.task, child.id));
@@ -865,12 +1034,43 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
         is_title: true,
         branch: None,
         layout: None,
+        images: root
+            .image
+            .iter()
+            .map(|key| SlideImage {
+                key: key.clone(),
+                caption: None,
+            })
+            .collect(),
     }];
     for branch in map.children(root.id) {
         let color = color_of(map, theme, branch.id);
         let mut bullets = Vec::new();
         collect(map, branch.id, 0, color, &mut bullets);
+        let mut images: Vec<SlideImage> = branch
+            .image
+            .iter()
+            .map(|key| SlideImage {
+                key: key.clone(),
+                caption: None,
+            })
+            .collect();
+        // Stichpunkte mit Bild werden zu beschrifteten Bildern. Ohne eigene
+        // Unterpunkte verschwinden sie dabei aus der Aufzählung.
+        if branch.layout.is_none() {
+            bullets.retain(|(_, text, _, _, id)| {
+                let Some(key) = map.get(*id).and_then(|n| n.image.clone()) else {
+                    return true;
+                };
+                images.push(SlideImage {
+                    key,
+                    caption: Some(text.clone()),
+                });
+                map.has_children(*id)
+            });
+        }
         out.push(Slide {
+            images,
             title: branch.text.clone(),
             note: branch.note.clone(),
             bullets,
@@ -1015,6 +1215,34 @@ pub fn show(
         Color32::from_black_alpha(if theme.dark { 110 } else { 35 }),
     );
     painter.rect_filled(card, 24.0 * s, theme.card);
+    let full_bleed = slide.full_bleed();
+    // Bilder blenden mit der Folie ein
+    let pictures_in = ease_out_cubic(progress(now, doc.slide_time + 0.1, 0.8));
+    if full_bleed {
+        let picture = &slide.images[0];
+        let zoom = if fx.ken_burns {
+            1.0 + 0.07 * ease_in_out_cubic(progress(now, doc.slide_time, 16.0))
+        } else {
+            1.0
+        };
+        match doc.map.images.get(&picture.key) {
+            Some(img) => {
+                images::paint(
+                    &painter,
+                    &ctx,
+                    &picture.key,
+                    img,
+                    card,
+                    Fit::Cover,
+                    24.0 * s,
+                    Color32::WHITE.gamma_multiply(appear * pictures_in),
+                    zoom,
+                );
+            }
+            None => images::placeholder(&painter, card, 24.0 * s),
+        }
+        darken_for_text(&painter, card, s, slide.is_title, appear);
+    }
     if fx.accent_bar {
         let accent_bar = Rect::from_min_max(
             card.left_top() + Vec2::new(44.0, 80.0) * s,
@@ -1065,14 +1293,19 @@ pub fn show(
         ui.style_mut().interaction.selectable_labels = false;
         ui.spacing_mut().item_spacing.y = 10.0 * s;
 
+        // Auf einem Vollbild steht der Text hell auf abgedunkeltem Bild
+        let ink = if full_bleed {
+            Color32::WHITE
+        } else {
+            theme.text
+        };
         let title = |ui: &mut egui::Ui, text: &str, size: f32| {
             ui.add_space((1.0 - title_in) * 26.0 * s);
             let rect = ui
                 .scope(|ui| {
                     ui.multiply_opacity(title_in);
                     ui.add(
-                        egui::Label::new(RichText::new(text).size(size).strong().color(theme.text))
-                            .wrap(),
+                        egui::Label::new(RichText::new(text).size(size).strong().color(ink)).wrap(),
                     )
                     .rect
                 })
@@ -1109,7 +1342,7 @@ pub fn show(
                         egui::Label::new(
                             RichText::new(slide.note.trim())
                                 .size(28.0 * s)
-                                .color(theme.text.gamma_multiply(0.7)),
+                                .color(ink.gamma_multiply(0.8)),
                         )
                         .wrap(),
                     );
@@ -1164,7 +1397,7 @@ pub fn show(
                         egui::Label::new(
                             RichText::new(slide.note.trim())
                                 .size(24.0 * s)
-                                .color(theme.text.gamma_multiply(0.75)),
+                                .color(ink.gamma_multiply(0.85)),
                         )
                         .wrap(),
                     );
@@ -1209,6 +1442,47 @@ pub fn show(
                 // Stichpunkte: noch verdeckte nehmen schon ihren Platz ein, damit nichts
                 // verrutscht. Jede Gruppe erscheint mit dem gewählten Effekt; beim
                 // schrittweisen Aufbau werden ältere Gruppen blasser.
+                // Bilder neben den Stichpunkten, oder als Galerie, wenn es keine gibt
+                let mut side_ui;
+                let ui = if full_bleed || slide.images.is_empty() {
+                    &mut ui
+                } else {
+                    let rect = ui.available_rect_before_wrap();
+                    let (text_rect, picture_rect) = if slide.bullets.is_empty() {
+                        (None, rect)
+                    } else {
+                        let split = rect.left() + rect.width() * 0.55;
+                        (
+                            Some(Rect::from_min_max(
+                                rect.min,
+                                Pos2::new(split, rect.bottom()),
+                            )),
+                            Rect::from_min_max(Pos2::new(split + 30.0 * s, rect.top()), rect.max),
+                        )
+                    };
+                    picture_grid(
+                        ui.painter(),
+                        &ctx,
+                        &doc.map.images,
+                        &slide.images,
+                        picture_rect.shrink2(Vec2::new(0.0, 4.0 * s)),
+                        s,
+                        pictures_in,
+                        theme,
+                    );
+                    animating |= pictures_in < 1.0;
+                    match text_rect {
+                        Some(text_rect) => {
+                            side_ui = ui.new_child(
+                                UiBuilder::new()
+                                    .max_rect(text_rect)
+                                    .layout(Layout::top_down(Align::Min)),
+                            );
+                            &mut side_ui
+                        }
+                        None => &mut ui,
+                    }
+                };
                 let building = build_bullets && slide.groups() > 0;
                 let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
                 let mut group = 0;
@@ -1303,6 +1577,7 @@ pub fn show(
             }
         }
     }
+    animating |= full_bleed && (pictures_in < 1.0 || fx.ken_burns);
     if animating {
         ctx.request_repaint();
     }

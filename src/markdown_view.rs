@@ -2,7 +2,8 @@
 //! Jede Änderung im Text wird sofort in die Mindmap übernommen.
 
 use crate::document::Document;
-use crate::model::MindMap;
+use crate::images;
+use crate::model::{MindMap, Node};
 use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
@@ -67,6 +68,9 @@ fn highlight(text: &str, theme: &Theme) -> LayoutJob {
                 }
                 None => job.append(rest, 0.0, fmt(size, theme.text)),
             }
+        } else if trimmed.starts_with("![") {
+            // Bildzeile gedimmt, wie ein Kommentar
+            job.append(line, 0.0, fmt(BODY, theme.grid.gamma_multiply(1.6)));
         } else if let Some(len) = bullet_len(trimmed) {
             let split = indent + len;
             // Erledigte Aufgaben blasser
@@ -141,6 +145,34 @@ fn branch_color(map: &MindMap, theme: &Theme, id: u64) -> Color32 {
         .unwrap_or(theme.root)
 }
 
+/// Kleines Vorschaubild unter einem Eintrag
+fn thumb(ui: &mut egui::Ui, map: &MindMap, node: &Node, indent: f32) {
+    let Some(key) = &node.image else { return };
+    ui.horizontal_top(|ui| {
+        ui.add_space(indent);
+        let aspect = map.images.get(key).map_or(1.3, |img| img.aspect());
+        let height = 72.0;
+        let size = Vec2::new((height * aspect).min(ui.available_width()), height);
+        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        match map.images.get(key) {
+            Some(img) => {
+                images::paint(
+                    ui.painter(),
+                    ui.ctx(),
+                    key,
+                    img,
+                    rect,
+                    images::Fit::Cover,
+                    8.0,
+                    Color32::WHITE,
+                    1.0,
+                );
+            }
+            None => images::placeholder(ui.painter(), rect, 8.0),
+        }
+    });
+}
+
 fn note(ui: &mut egui::Ui, note: &str, indent: f32) {
     if note.trim().is_empty() {
         return;
@@ -162,6 +194,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
     );
     ui.add_space(6.0);
     ui.add(egui::Label::new(RichText::new(root.text.as_str()).size(26.0).strong()).wrap());
+    thumb(ui, map, root, 0.0);
     note(ui, &root.note, 0.0);
 
     for branch in map.children(root.id) {
@@ -181,6 +214,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
                 );
             }
         });
+        thumb(ui, map, branch, 12.0);
         note(ui, &branch.note, 12.0);
         bullets(ui, map, branch.id, 0, color);
     }
@@ -209,6 +243,7 @@ fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color
                 }
             }
         });
+        thumb(ui, map, child, indent + 16.0);
         note(ui, &child.note, indent + 16.0);
         bullets(ui, map, child.id, depth + 1, color);
     }

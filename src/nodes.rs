@@ -1,6 +1,7 @@
 //! Aussehen und Zeichnen der Mindmap-Knoten – gemeinsam genutzt von der
 //! Mindmap-Fläche (app.rs), der Kamerafahrt (tour.rs) und dem Export.
 
+use crate::images::{self, Fit};
 use crate::model::{MindMap, Node};
 use crate::theme::Theme;
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke, Vec2};
@@ -70,9 +71,74 @@ pub fn node_size(ctx: &egui::Context, map: &MindMap, theme: &Theme, node: &Node)
     } else {
         Vec2::ZERO
     };
-    (galley.size() + style.padding + task).max(MIN_NODE)
+    let size = (galley.size() + style.padding + task).max(MIN_NODE);
+    match thumb_size(map, node) {
+        Some(thumb) => with_thumb(size, thumb),
+        None => size,
+    }
 }
 
+/// Abstand des Vorschaubilds zum Kartenrand (bei Zoom 1)
+const THUMB_PAD: f32 = 8.0;
+
+/// Größe des Vorschaubilds eines Knotens bei Zoom 1 (`None` ohne Bild)
+pub fn thumb_size(map: &MindMap, node: &Node) -> Option<Vec2> {
+    let key = node.image.as_ref()?;
+    let height = if node.parent.is_none() { 130.0 } else { 100.0 };
+    let aspect = map.images.get(key).map(|img| img.aspect()).unwrap_or(1.3);
+    Some(Vec2::new((height * aspect).clamp(80.0, 240.0), height))
+}
+
+/// Kartengröße: Bild oben, Text darunter
+pub fn with_thumb(label: Vec2, thumb: Vec2) -> Vec2 {
+    Vec2::new(
+        label.x.max(thumb.x + 2.0 * THUMB_PAD),
+        label.y + thumb.y + THUMB_PAD,
+    )
+}
+
+/// Vorschaubild oben in die Karte malen. Gibt den Bereich für Text und Checkbox zurück
+/// (ohne Bild das ganze Rechteck).
+pub fn paint_thumb(
+    painter: &egui::Painter,
+    map: &MindMap,
+    node: &Node,
+    rect: Rect,
+    zoom: f32,
+) -> Rect {
+    let Some(thumb) = thumb_size(map, node) else {
+        return rect;
+    };
+    let pad = THUMB_PAD * zoom;
+    let frame = Rect::from_min_max(
+        rect.min + Vec2::splat(pad),
+        Pos2::new(rect.right() - pad, rect.top() + pad + thumb.y * zoom),
+    );
+    let radius = 9.0 * zoom;
+    match node
+        .image
+        .as_ref()
+        .and_then(|k| map.images.get(k).map(|img| (k, img)))
+    {
+        Some((key, img)) => {
+            images::paint(
+                painter,
+                painter.ctx(),
+                key,
+                img,
+                frame,
+                Fit::Cover,
+                radius,
+                Color32::WHITE.gamma_multiply(painter.opacity()),
+                1.0,
+            );
+        }
+        None => images::placeholder(painter, frame, radius),
+    }
+    Rect::from_min_max(Pos2::new(rect.left(), frame.bottom()), rect.max)
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn paint_node(
     painter: &egui::Painter,
     theme: &Theme,
@@ -81,8 +147,14 @@ pub fn paint_node(
     zoom: f32,
     selected: bool,
     hit: bool,
+    card: bool,
 ) {
-    let radius = rect.height() / 2.0;
+    // Mit Bild eine Karte mit runden Ecken, sonst eine Pille
+    let radius = if card {
+        (16.0 * zoom).min(rect.height() / 2.0)
+    } else {
+        rect.height() / 2.0
+    };
     painter.rect_filled(
         rect.translate(Vec2::new(0.0, 3.0 * zoom)).expand(zoom),
         radius,

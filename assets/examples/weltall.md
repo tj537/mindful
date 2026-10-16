@@ -23,6 +23,17 @@ Acht Planeten und unzählige kleinere Körper kreisen um einen gewöhnlichen Ste
   - Zu klein, um ihre Bahn freizuräumen
   - Pluto verlor 2006 den Planetenstatus
 
+## Planeten-Porträts
+
+Drei Arten von Welten – vom Computer gemalt, nicht fotografiert.
+
+- Ein Gesteinsplanet
+  ![](rocky-planet.jpg)
+- Ein Gasriese
+  ![](gas-giant.jpg)
+- Ein Riese mit Ringen
+  ![](ringed-planet.jpg)
+
 ## Wie groß ist das All? <!-- pyramid -->
 
 Jede Stufe ist tausendfach größer als die vorige.
@@ -37,6 +48,12 @@ Jede Stufe ist tausendfach größer als die vorige.
   - Mehr als 80 Galaxien
 - Beobachtbares Universum
   - 93 Milliarden Lichtjahre Durchmesser
+
+## Wo Sterne geboren werden
+
+![](nebula.jpg)
+
+In riesigen Wolken aus Gas und Staub zündet die Schwerkraft langsam neue Sonnen.
 
 ## Das Leben eines Sterns <!-- cycle -->
 
@@ -75,6 +92,8 @@ Sterne leben nicht allein – sie sammeln sich in riesigen Sternsystemen mit vie
   - Oft durch Zusammenstöße geformt
 
 ## Schwarze Löcher
+
+![](black-hole.jpg)
 
 Orte, an denen die Schwerkraft so stark ist, dass nicht einmal Licht entkommt.
 

@@ -1,6 +1,8 @@
+use base64::Engine;
 use eframe::egui::Vec2;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
 
 pub const DEFAULT_TEXT: &str = "New idea";
 
@@ -80,7 +82,46 @@ pub struct Node {
     /// Folien-Layout (nur bei Hauptzweigen wirksam)
     #[serde(default)]
     pub layout: Option<SlideLayout>,
+    /// Bild zum Knoten: Schlüssel in `MindMap::images`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
 }
+
+/// Ein eingefügtes Bild, fertig verkleinert und kodiert (JPEG oder PNG).
+/// Es wird mit in der Datei gespeichert, damit sie ohne Bilderordner auskommt.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct StoredImage {
+    pub width: u32,
+    pub height: u32,
+    #[serde(with = "base64_bytes")]
+    pub data: Vec<u8>,
+}
+
+impl StoredImage {
+    pub fn aspect(&self) -> f32 {
+        self.width.max(1) as f32 / self.height.max(1) as f32
+    }
+}
+
+/// Bilddaten als Base64-Text statt als Zahlenliste speichern
+mod base64_bytes {
+    use base64::Engine;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&base64::engine::general_purpose::STANDARD.encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+        let text = String::deserialize(d)?;
+        base64::engine::general_purpose::STANDARD
+            .decode(text.as_bytes())
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+/// Anfang des Blocks mit den Bilddaten am Ende einer Markdown-Datei
+const IMAGES_START: &str = "<!-- mindful-images";
 
 impl Node {
     fn new(id: u64, text: &str, pos: Vec2, parent: Option<u64>) -> Self {
@@ -94,6 +135,7 @@ impl Node {
             color: None,
             task: None,
             layout: None,
+            image: None,
         }
     }
 }
@@ -102,12 +144,17 @@ impl Node {
 pub struct MindMap {
     pub nodes: Vec<Node>,
     pub next_id: u64,
+    /// Bilder der Knoten. `Arc`, damit die Rückgängig-Schnappschüsse sie nicht kopieren.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub images: BTreeMap<String, Arc<StoredImage>>,
 }
 
 /// Inhalt der Zwischenablage beim Kopieren eines Teilbaums
 #[derive(Serialize, Deserialize)]
 pub struct Clip {
     pub mindmap_clip: Vec<Node>,
+    #[serde(default)]
+    pub images: BTreeMap<String, Arc<StoredImage>>,
 }
 
 /// Ein Eintrag einer Gliederung (aus Markdown oder eingerücktem Text)
@@ -118,6 +165,7 @@ pub struct OutlineItem {
     pub note: String,
     pub task: Option<bool>,
     pub layout: Option<SlideLayout>,
+    pub image: Option<String>,
 }
 
 impl MindMap {
@@ -125,7 +173,29 @@ impl MindMap {
         Self {
             nodes: vec![Node::new(0, title, Vec2::ZERO, None)],
             next_id: 1,
+            images: BTreeMap::new(),
         }
+    }
+
+    /// Bild eines Knotens, falls vorhanden und geladen
+    #[cfg(test)]
+    pub fn image_of(&self, id: u64) -> Option<(&str, &StoredImage)> {
+        let key = self.get(id)?.image.as_deref()?;
+        self.images.get(key).map(|img| (key, img.as_ref()))
+    }
+
+    /// Bilder, auf die noch ein Knoten verweist
+    fn used_images(&self, nodes: &[Node]) -> BTreeMap<String, Arc<StoredImage>> {
+        nodes
+            .iter()
+            .filter_map(|n| n.image.as_ref())
+            .filter_map(|k| self.images.get(k).map(|img| (k.clone(), img.clone())))
+            .collect()
+    }
+
+    /// Bilder entfernen, die kein Knoten mehr benutzt (vor dem Speichern)
+    pub fn prune_images(&mut self) {
+        self.images = self.used_images(&self.nodes);
     }
 
     pub fn root(&self) -> Option<u64> {
@@ -345,8 +415,10 @@ impl MindMap {
     }
 
     pub fn clip_json(&self, id: u64) -> String {
+        let nodes = self.extract(id);
         serde_json::to_string(&Clip {
-            mindmap_clip: self.extract(id),
+            images: self.used_images(&nodes),
+            mindmap_clip: nodes,
         })
         .unwrap_or_default()
     }
@@ -380,19 +452,24 @@ impl MindMap {
 
     // -- Automatisch anordnen -------------------------------------------------
 
-    fn subtree_height(&self, id: u64) -> f32 {
+    fn subtree_height(&self, id: u64, sizes: &HashMap<u64, Vec2>) -> f32 {
+        // Knoten mit Bild sind höher als eine Zeile
+        let own = sizes.get(&id).map_or(ROW, |s| (s.y + 20.0).max(ROW));
         if self.get(id).is_some_and(|n| n.collapsed) {
-            return ROW;
+            return own;
         }
-        let sum: f32 = self.children(id).map(|c| self.subtree_height(c.id)).sum();
-        sum.max(ROW)
+        let sum: f32 = self
+            .children(id)
+            .map(|c| self.subtree_height(c.id, sizes))
+            .sum();
+        sum.max(own)
     }
 
     /// Klassisches Mindmap-Layout: Hauptzweige rechts und links der Mitte,
-    /// Unterpunkte untereinander. `widths` sind die Knotenbreiten.
-    pub fn auto_layout(&mut self, widths: &HashMap<u64, f32>) {
+    /// Unterpunkte untereinander. `sizes` sind die Knotengrößen.
+    pub fn auto_layout(&mut self, sizes: &HashMap<u64, Vec2>) {
         let Some(root) = self.root() else { return };
-        let width = |id: u64| widths.get(&id).copied().unwrap_or(90.0);
+        let width = |id: u64| sizes.get(&id).map_or(90.0, |s| s.x);
         let root_pos = self.pos(root);
         let mut out = HashMap::new();
         out.insert(root, root_pos);
@@ -400,12 +477,12 @@ impl MindMap {
         let kids: Vec<u64> = self.children(root).map(|n| n.id).collect();
         let right = kids.len().div_ceil(2);
         for (side, group) in [(1.0, &kids[..right]), (-1.0, &kids[right..])] {
-            let total: f32 = group.iter().map(|k| self.subtree_height(*k)).sum();
+            let total: f32 = group.iter().map(|k| self.subtree_height(*k, sizes)).sum();
             let mut y = root_pos.y - total / 2.0;
             for &k in group {
-                let h = self.subtree_height(k);
+                let h = self.subtree_height(k, sizes);
                 let x = root_pos.x + side * (width(root) / 2.0 + GAP_X * 1.5 + width(k) / 2.0);
-                self.place(k, Vec2::new(x, y + h / 2.0), side, widths, &mut out);
+                self.place(k, Vec2::new(x, y + h / 2.0), side, sizes, &mut out);
                 y += h;
             }
         }
@@ -422,10 +499,10 @@ impl MindMap {
         id: u64,
         pos: Vec2,
         side: f32,
-        widths: &HashMap<u64, f32>,
+        sizes: &HashMap<u64, Vec2>,
         out: &mut HashMap<u64, Vec2>,
     ) {
-        let width = |id: u64| widths.get(&id).copied().unwrap_or(90.0);
+        let width = |id: u64| sizes.get(&id).map_or(90.0, |s| s.x);
         let old = self.pos(id);
         out.insert(id, pos);
 
@@ -438,12 +515,12 @@ impl MindMap {
         }
 
         let kids: Vec<u64> = self.children(id).map(|n| n.id).collect();
-        let total: f32 = kids.iter().map(|k| self.subtree_height(*k)).sum();
+        let total: f32 = kids.iter().map(|k| self.subtree_height(*k, sizes)).sum();
         let mut y = pos.y - total / 2.0;
         for k in kids {
-            let h = self.subtree_height(k);
+            let h = self.subtree_height(k, sizes);
             let x = pos.x + side * (width(id) / 2.0 + GAP_X + width(k) / 2.0);
-            self.place(k, Vec2::new(x, y + h / 2.0), side, widths, out);
+            self.place(k, Vec2::new(x, y + h / 2.0), side, sizes, out);
             y += h;
         }
     }
@@ -458,6 +535,7 @@ impl MindMap {
             return out;
         };
         out.push_str(&format!("# {}{}\n", task_box(root.task), root.text));
+        push_image(root, None, &mut out);
         push_note(&root.note, None, &mut out);
         for branch in self.children(root.id) {
             out.push_str(&format!(
@@ -466,6 +544,7 @@ impl MindMap {
                 branch.text,
                 layout_comment(branch.layout)
             ));
+            push_image(branch, None, &mut out);
             push_note(&branch.note, None, &mut out);
             if self.has_children(branch.id) {
                 out.push('\n');
@@ -483,9 +562,65 @@ impl MindMap {
                 task_box(child.task),
                 child.text
             ));
+            push_image(child, Some(&format!("{indent}  ")), out);
             push_note(&child.note, Some(&format!("{indent}  ")), out);
             self.markdown_bullets(child.id, level + 1, out);
         }
+    }
+
+    /// Markdown samt Bilddaten in einem Kommentarblock am Ende – so bleibt eine
+    /// exportierte Datei vollständig, und andere Programme zeigen den Block nicht an.
+    pub fn to_markdown_with_images(&self) -> String {
+        let mut out = self.to_markdown();
+        let used = self.used_images(&self.nodes);
+        if !used.is_empty() {
+            out.push_str(&format!("\n{IMAGES_START}\n"));
+            for (key, img) in used {
+                out.push_str(&format!(
+                    "{key} {}x{} {}\n",
+                    img.width,
+                    img.height,
+                    base64::engine::general_purpose::STANDARD.encode(&img.data)
+                ));
+            }
+            out.push_str("-->\n");
+        }
+        out
+    }
+
+    /// Gegenstück zu `to_markdown_with_images`
+    pub fn from_markdown_with_images(text: &str) -> Option<MindMap> {
+        let (outline, images) = match text.find(IMAGES_START) {
+            Some(start) => (&text[..start], &text[start + IMAGES_START.len()..]),
+            None => (text, ""),
+        };
+        let mut map = MindMap::from_outline(outline)?;
+        for line in images.lines() {
+            let mut parts = line.split_whitespace();
+            let (Some(key), Some(size), Some(data)) = (parts.next(), parts.next(), parts.next())
+            else {
+                continue;
+            };
+            let Some((w, h)) = size.split_once('x') else {
+                continue;
+            };
+            let (Ok(width), Ok(height), Ok(data)) = (
+                w.parse(),
+                h.parse(),
+                base64::engine::general_purpose::STANDARD.decode(data),
+            ) else {
+                continue;
+            };
+            map.images.insert(
+                key.to_string(),
+                Arc::new(StoredImage {
+                    width,
+                    height,
+                    data,
+                }),
+            );
+        }
+        Some(map)
     }
 
     /// Hängt eine Gliederung unter `parent`.
@@ -505,6 +640,7 @@ impl MindMap {
                 n.note = item.note.clone();
                 n.task = item.task;
                 n.layout = item.layout;
+                n.image = item.image.clone();
             }
             if stack.is_empty() {
                 top.push(id);
@@ -530,22 +666,31 @@ impl MindMap {
         let min = items.iter().map(|i| i.level).min().unwrap_or(0);
         let single_root = items.first().is_some_and(|i| i.level == min)
             && items.iter().filter(|i| i.level == min).count() == 1;
-        let (root_text, root_note, root_task, rest) = match items.first() {
+        let (root_text, root_note, root_task, root_image, rest) = match items.first() {
             Some(first) if single_root => (
                 first.text.clone(),
                 first.note.clone(),
                 first.task,
+                first.image.clone(),
                 &items[1..],
             ),
-            Some(_) => ("Mind map".to_string(), String::new(), None, &items[..]),
-            None => (String::new(), String::new(), None, &items[..]),
+            Some(_) => (
+                "Mind map".to_string(),
+                String::new(),
+                None,
+                None,
+                &items[..],
+            ),
+            None => (String::new(), String::new(), None, None, &items[..]),
         };
 
+        let images = std::mem::take(&mut self.images);
         let old = std::mem::replace(
             self,
             MindMap {
                 nodes: Vec::new(),
                 next_id: self.next_id,
+                images,
             },
         );
         let mut used = HashSet::new();
@@ -555,6 +700,7 @@ impl MindMap {
                 text: root_text,
                 note: root_note,
                 task: root_task,
+                image: root_image,
                 ..r.clone()
             },
             None => {
@@ -562,6 +708,7 @@ impl MindMap {
                 self.next_id += 1;
                 n.note = root_note;
                 n.task = root_task;
+                n.image = root_image;
                 n
             }
         };
@@ -596,6 +743,7 @@ impl MindMap {
                         note: item.note.clone(),
                         task: item.task,
                         layout: item.layout,
+                        image: item.image.clone(),
                         parent: Some(parent),
                         ..n
                     });
@@ -607,6 +755,7 @@ impl MindMap {
                         n.note = item.note.clone();
                         n.task = item.task;
                         n.layout = item.layout;
+                        n.image = item.image.clone();
                     }
                     id
                 }
@@ -634,6 +783,24 @@ fn push_note(note: &str, indent: Option<&str>, out: &mut String) {
             out.push('\n');
         }
     }
+}
+
+/// Bild als eigene Zeile `![](schlüssel)` direkt unter dem Eintrag
+fn push_image(node: &Node, indent: Option<&str>, out: &mut String) {
+    let Some(key) = &node.image else { return };
+    if indent.is_none() {
+        out.push('\n');
+    }
+    out.push_str(indent.unwrap_or(""));
+    out.push_str(&format!("![]({key})\n"));
+}
+
+/// Erkennt eine Bildzeile `![Beschreibung](pfad)` und gibt den Pfad zurück
+fn split_image(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("![")?.strip_suffix(')')?;
+    let (_, target) = rest.split_once("](")?;
+    let target = target.trim().trim_matches(['<', '>']);
+    (!target.is_empty()).then(|| target.to_string())
 }
 
 /// Markdown-Schreibweise einer Checkbox
@@ -681,6 +848,7 @@ enum Line {
     Heading(usize, String, Option<bool>, Option<SlideLayout>),
     Bullet(usize, String, Option<bool>),
     Plain(usize, String),
+    Image(String),
     Blank,
 }
 
@@ -688,6 +856,9 @@ fn classify(line: &str) -> Line {
     let trimmed = line.trim();
     if trimmed.is_empty() {
         return Line::Blank;
+    }
+    if let Some(target) = split_image(trimmed) {
+        return Line::Image(target);
     }
     let hashes = trimmed.chars().take_while(|&c| c == '#').count();
     if hashes > 0 && trimmed[hashes..].starts_with(' ') {
@@ -747,6 +918,7 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
         note: String::new(),
         task,
         layout: None,
+        image: None,
     };
     let mut items: Vec<OutlineItem> = Vec::new();
     let mut heading_level = 0;
@@ -774,6 +946,11 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
                 }
                 None => items.push(item(0, t, None)),
             },
+            Line::Image(target) => {
+                if let Some(last) = items.last_mut() {
+                    last.image.get_or_insert(target);
+                }
+            }
             Line::Blank => {}
         }
         after_blank = blank;
@@ -784,6 +961,42 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn images_round_trip_and_travel_with_the_file() {
+        let md = "# Trip\n\n![](map-1.jpg)\n\n## Beach\n\n![](beach.jpg)\n\nSunny.\n\n- Shell\n  ![](shell.png)\n  Found it here.\n";
+        let mut map = MindMap::from_outline(md).unwrap();
+        assert_eq!(map.to_markdown(), md);
+        let beach = map.children(map.root().unwrap()).next().unwrap().id;
+        assert_eq!(map.get(beach).unwrap().image.as_deref(), Some("beach.jpg"));
+        assert_eq!(map.get(beach).unwrap().note, "Sunny.");
+
+        // Bilddaten wandern im Kommentarblock am Ende mit
+        let img = Arc::new(StoredImage {
+            width: 4,
+            height: 3,
+            data: vec![1, 2, 3, 250],
+        });
+        map.images.insert("beach.jpg".into(), img.clone());
+        map.images.insert("unused.jpg".into(), img.clone());
+        let file = map.to_markdown_with_images();
+        assert!(file.starts_with(md));
+        assert!(!file.contains("unused.jpg"));
+        let back = MindMap::from_markdown_with_images(&file).unwrap();
+        assert_eq!(back.to_markdown(), md);
+        assert_eq!(back.images.get("beach.jpg"), Some(&img));
+
+        // … und in der .mindmap-Datei (JSON) als Base64-Text
+        map.prune_images();
+        let json = serde_json::to_string(&map).unwrap();
+        assert!(json.contains("\"AQID+g==\""));
+        let back: MindMap = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.images.len(), 1);
+
+        // Kopieren nimmt die Bilder mit
+        let clip: Clip = serde_json::from_str(&map.clip_json(beach)).unwrap();
+        assert!(clip.images.contains_key("beach.jpg"));
+    }
 
     #[test]
     fn markdown_round_trip() {
@@ -927,7 +1140,9 @@ mod example_tests {
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "The Universe");
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 11);
+        assert_eq!(branches.len(), 13);
+        // Bilder: Galerie, Vollbild und Bild neben dem Text
+        assert_eq!(map.nodes.iter().filter(|n| n.image.is_some()).count(), 5);
         // Jedes Folienlayout kommt genau einmal vor, dazu normale Aufzählungen
         for layout in SlideLayout::ALL {
             assert_eq!(
@@ -945,7 +1160,7 @@ mod example_tests {
         assert_eq!(map.task_progress(checklist.id), Some((2, 6)));
         assert!(branches
             .iter()
-            .all(|b| !b.note.is_empty() && map.has_children(b.id)));
+            .all(|b| !b.note.is_empty() && (map.has_children(b.id) || b.image.is_some())));
         assert_eq!(map.to_markdown(), md);
     }
 
@@ -956,14 +1171,15 @@ mod example_tests {
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "Das Weltall");
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 11);
+        assert_eq!(branches.len(), 13);
+        assert_eq!(map.nodes.iter().filter(|n| n.image.is_some()).count(), 5);
         assert_eq!(
             branches.iter().filter(|b| b.layout.is_some()).count(),
             SlideLayout::ALL.len()
         );
         assert!(branches
             .iter()
-            .all(|b| !b.note.is_empty() && map.has_children(b.id)));
+            .all(|b| !b.note.is_empty() && (map.has_children(b.id) || b.image.is_some())));
         // Beim Öffnen im Markdown-Editor kommt exakt derselbe Text heraus
         assert_eq!(map.to_markdown(), md);
     }

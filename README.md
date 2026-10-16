@@ -36,6 +36,7 @@ Also:
 - Save and open as `.mindmap` files, import Markdown and plain-text outlines
 - Export as PNG image, SVG graphic or Markdown
 - **Slide layouts** like SmartArt, made from the same bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (counts up) and quote – chosen by right-clicking a slide or main branch, or as `<!-- timeline -->` after a heading in Markdown
+- **Images** from your computer: drag them onto a node or a slide, use **Image → Insert image…** in the node's right-click menu, or paste a screenshot with ⌘V. One image beside the bullet points, a single image without bullet points fills the whole slide (with a slow zoom), several images become a gallery with captions. Images are scaled down and stored **inside the `.mindmap` file** – you only ever share one file
 - **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; they appear on slides, in the tour and in exports, and can be ticked off right during a presentation
 - **AI prompt**: describe topic, language, details and scope, copy a ready-made prompt for ChatGPT, Claude & co., and paste the AI's Markdown answer into a new tab – it becomes a mind map instantly. The prompt explains every slide layout, so the AI picks a fitting diagram for each section by itself (can be switched off)
 - **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
@@ -45,7 +46,7 @@ Also:
 - Optional extras (⚙︎ while presenting): a light sweep over titles, slow zoom on slides, the colored bar on the left of slides, vignette
 - Tour effects: a ripple on arrival and optionally glow, light pulses, orbiting sparks, depth of field, warp streaks while flying, camera bounce and drift – and revealing the levels below a branch one by one
 - 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
-- Ready-made examples to try: **File → Open example → The Universe** (also available in German) – eleven slides that show every slide layout
+- Ready-made examples to try: **File → Open example → The Universe** (also available in German) – thirteen slides that show every slide layout plus a gallery, a full-screen image and an image beside text (the space pictures are drawn by `examples/make_space_images.rs` and built into the app)
 
 ---
 
@@ -94,7 +95,7 @@ There is no ready-made package yet. Until then, [build it yourself](#windows-2) 
 | What | macOS | Windows | Linux |
 |---|---|---|---|
 | Your mind maps | wherever you save them (`.mindmap`) | wherever you save them | wherever you save them |
-| Open tabs, theme, window size | `~/Library/Application Support/Mindful/` | `%APPDATA%\Mindful\data\` | `~/.local/share/mindful/` |
+| Open tabs (including unsaved changes and their images), theme, window size, presentation effects, the AI prompt form | `~/Library/Application Support/Mindful/` | `%APPDATA%\Mindful\data\` | `~/.local/share/mindful/` |
 
 Deleting the app folder from this table resets Mindful to a fresh install.
 
@@ -302,7 +303,11 @@ Note on the branch (shown on the slide below the heading). The optional comment 
   - deeper
 - [ ] Open task
 - [x] Done task
+- Photo of the beach
+  ![](beach-3fa2c19d.jpg)
 ```
+
+An image belongs to the line above it: `![](…)` directly under a heading or bullet point. When Mindful exports Markdown, the image data travels along in a comment block at the end of the file (`<!-- mindful-images … -->`), so the file stays complete. When importing Markdown, `![](photo.jpg)` paths relative to the file (or absolute, or `~/…`) are read in automatically – also when you type such a path in the Markdown editor and switch views.
 
 #### What each slide layout expects
 
@@ -336,14 +341,16 @@ mindful/
 │   ├── diagrams.rs        slide layouts: timeline, cycle, pyramid, matrix …
 │   ├── tour.rs            camera tour through the mind map
 │   ├── ai_prompt.rs       "AI prompt" form and the generated prompt
+│   ├── images.rs          inserting images (file, drag & drop, clipboard), scaling, drawing
 │   ├── nodes.rs           how nodes look and are drawn (shared)
 │   ├── export.rs          SVG and PNG export
 │   └── theme.rs           themes, fonts, widget style
 ├── assets/
 │   ├── icon.svg / icon.png    app icon (source / for the window)
-│   ├── examples/              bundled examples (English and German)
+│   ├── examples/              bundled examples (English and German) and their images
 │   └── templates/             templates for new mind maps
 ├── examples/make_icon.rs  renders the icon for the Mac bundle
+├── examples/make_space_images.rs  draws the space pictures for the examples
 ├── packaging/macos/       Info.plist for Mindful.app
 ├── scripts/build-mac.sh   builds dist/Mindful.app
 └── docs/                  architecture and images
@@ -360,6 +367,9 @@ mindful/
 | `rfd` | native file and message dialogs |
 | `resvg` | rendering SVG to PNG (export, icon) |
 | `serde` / `serde_json` | saving and loading |
+| `image` | reading, scaling and encoding inserted images (JPEG, PNG, GIF, WebP) |
+| `base64` | image data as text inside `.mindmap` and Markdown files |
+| `arboard` | reading images from the clipboard |
 
 ---
 
@@ -370,6 +380,7 @@ mindful/
 - Double-clicking a `.mindmap` file in Finder doesn't open Mindful yet.
 - Windows and Linux use egui's built-in font; the Mac uses the system font (SF).
 - Slides show children down to the third level. Notes on children don't appear on slides.
+- Slides with a diagram layout don't show images. Animated GIFs show their first frame. PNG/SVG export of the mind map leaves images out.
 - Updating egui requires code changes because its API changes frequently.
 - Code comments are still in German.
 

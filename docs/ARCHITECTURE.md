@@ -133,6 +133,8 @@ Menus, buttons and shortcuts only return a `Command` or an `Action`. They are ex
 | `collapsed` | `bool` | children hidden |
 | `color` | `Option<usize>` | custom color as an index into the branch colors, inherited by descendants |
 | `task` | `Option<bool>` | checkbox: `None` = none, `Some(false)` = open, `Some(true)` = done |
+| `layout` | `Option<SlideLayout>` | slide layout (main branches only) |
+| `image` | `Option<String>` | key of the node's image in `MindMap::images` |
 
 ### `MindMap`
 
@@ -140,8 +142,11 @@ Menus, buttons and shortcuts only return a `Command` or an `Action`. They are ex
 pub struct MindMap {
     pub nodes: Vec<Node>,
     pub next_id: u64,
+    pub images: BTreeMap<String, Arc<StoredImage>>,
 }
 ```
+
+`images` holds every inserted picture as `StoredImage { width, height, data }`, where `data` is the encoded JPEG or PNG. They are kept **inside the mind map** so a `.mindmap` file is complete on its own. The `Arc` matters: undo takes a full snapshot of the `MindMap` on every change, and with `Arc` those snapshots share the image bytes instead of copying megabytes. `prune_images` drops pictures no node uses any more; it runs before saving (snapshots still hold their own `Arc`s, so undo keeps working).
 
 The tree is a **flat list with parent references**, not a nested structure. That keeps saving, copying and undo simple. `children(id)` finds children by filtering, and the order in `nodes` defines the order of siblings. For mind maps with a few hundred nodes this is fast enough.
 
@@ -157,6 +162,7 @@ Key functions:
 | `auto_layout` | automatic layout, see below |
 | `task_progress` | done / total checkboxes below a node (for the progress ring) |
 | `to_markdown`, `apply_outline`, `parse_outline` | Markdown, see [Markdown sync](#markdown-sync) |
+| `to_markdown_with_images`, `from_markdown_with_images` | Markdown plus the image data in a trailing `<!-- mindful-images … -->` block (Markdown export and import) |
 
 ---
 
@@ -235,11 +241,22 @@ Node size and look come from `node_style()` in `nodes.rs` (shared with the camer
 `MindMap::auto_layout` produces the classic mind map picture:
 
 - The first half of the main branches goes to the right, the second half to the left.
-- Each subtree gets as much height as its leaves need (`subtree_height`, 54 px per row).
+- Each subtree gets as much height as its leaves need (`subtree_height`, 54 px per row, more for nodes with a picture).
 - Horizontal spacing uses the real node widths, which the UI measures and passes in.
 - Collapsed subtrees move as a whole.
 
 After auto layout the nodes **glide** from their old to their new positions: `canvas()` stores the old positions in `doc.layout_anim` and draws interpolated positions for 0.7 s, while the data already holds the final ones. *Fit to window* (and the fit after auto layout) moves the view smoothly via `doc.view_anim`; any zoom, scroll or drag by the user cancels it.
+
+### Images
+
+Everything about pictures lives in `images.rs`:
+
+- **Importing** (`import`, `import_file`, `from_clipboard`): decode with the `image` crate (SVG via resvg), scale to at most 1920 px, store small JPEGs/PNGs unchanged and re-encode the rest as JPEG (PNG if there is transparency). The key is the file name plus a hash, e.g. `nebula-3fa2c19d.jpg`.
+- **Inserting**: dropped files arrive in `ctx.input(|i| i.raw.dropped_files)`; `MindMapApp::drop_target` picks the node under the pointer (from the node rectangles of the last frame), the current slide's branch while presenting, or the selected node. One picture goes onto that node, several become new children. The node menu has *Image → Insert / Paste / Remove*. ⌘V with only an image on the clipboard produces no `Event::Paste` in egui, so `node_keys` watches for the release of V with ⌘ held and then tries `from_clipboard`.
+- **Resolving** (`resolve`): `![](…)` references that aren't in `images` yet are looked up among the built-in example pictures (`BUILTIN`, compiled in with `include_bytes!`), then as files relative to the document. This runs on opening Markdown, opening an example and when leaving the Markdown editor.
+- **Drawing** (`texture`, `paint`): the first draw decodes the picture into an egui texture (with mipmaps) and caches it in egui's temp data by key. `paint` handles *contain* / *cover* fitting, rounded corners, opacity and a zoomed-in crop for the slow zoom.
+
+Nodes with a picture are drawn as a card: `nodes::thumb_size` / `with_thumb` add the thumbnail to the node size, `paint_thumb` draws it and returns the area left for text and checkbox.
 
 ### Checkboxes
 
@@ -292,6 +309,8 @@ There is no network access: Mindful never talks to an AI itself, the user copies
 
 - **Title slide:** the central topic, its note as a subtitle, the main branches as colored chips
 - **One slide per main branch:** heading, note, children down to the third level, in the branch's color
+
+**Pictures on slides** (`Slide::images`): the branch's own picture plus every bullet with a picture (its text becomes the caption; a bullet without children of its own then leaves the bullet list). A single picture with no bullets left – or any picture on the title slide – is *full-bleed* (`Slide::full_bleed`): it covers the card, `darken_for_text` lays a gradient mesh over it and the title turns white; with the slow-zoom effect the picture zooms in gently. Otherwise `picture_grid` places the pictures to the right of the bullets (55 / 45 split) or, without bullets, as a gallery: it tries every column count and keeps the one with the largest pictures. Slides with a diagram layout ignore pictures.
 
 All measurements are relative to a slide 1280 px wide (`s = width / 1280`) and scale with the window. Changing slides is animated with `animate_value_with_time`: the slide glides briefly to the side and fades in or out. With more than eight bullet points the font shrinks.
 
@@ -399,12 +418,18 @@ A `.mindmap` file is the `MindMap` as JSON:
       "pos": [312.0, -180.0],
       "parent": 0,
       "collapsed": false,
-      "color": null
+      "color": null,
+      "image": "nebula.jpg"
     }
   ],
-  "next_id": 2
+  "next_id": 2,
+  "images": {
+    "nebula.jpg": { "width": 1600, "height": 900, "data": "/9j/4AAQSkZJRg…" }
+  }
 }
 ```
+
+Image data is stored as Base64 text (`model::base64_bytes`), not as a list of numbers.
 
 New fields are introduced with `#[serde(default)]` so that older files without the field still open. Please keep it that way.
 
@@ -479,6 +504,7 @@ It shows up in every menu automatically.
 
 1. Put a Markdown file into `assets/examples/`.
 2. Add it to the `EXAMPLES` constant in `app.rs` (adjust the length).
+3. Pictures: put them into `assets/examples/images/`, add them to `BUILTIN` in `images.rs` and reference them by file name, e.g. `![](nebula.jpg)`. The space pictures are generated by `cargo run --release --example make_space_images`.
 
 ### … a new menu command with a shortcut
 
@@ -519,14 +545,17 @@ cargo test
 | `collapse_hides_descendants` | collapsing and expanding |
 | `slide_layouts_in_markdown` | layout comments are read and written back |
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
-| `render_slides` (ignored, run on demand) | renders every slide to PNG for a visual check |
+| `render_slides` (ignored, run on demand) | renders every slide of both examples plus a tour overview to PNG for a visual check |
+| `images_round_trip_and_travel_with_the_file` | image lines survive Markdown; image data travels in the Markdown block, the JSON file and the clipboard; unused images are dropped |
+| `large_images_are_scaled_and_stored_as_jpeg` | big pictures are scaled to 1920 px and re-encoded |
+| `builtin_example_images_resolve` | example pictures are found inside the app |
 | `checkboxes_round_trip_and_progress` | checkboxes survive Markdown and progress is counted |
 | `templates_parse_and_round_trip` | every template parses and comes back unchanged |
 | `old_settings_switch_to_fade_once` | older saved effect settings switch to *Fade* and the starfield once |
 | `quick_jump_keys` | ← → Enter Esc in the quick-jump strip |
 | `prompt_contains_the_inputs` | the AI prompt contains topic, language, description, scope |
 | `example_in_the_prompt_is_valid_mindful_markdown` | the format example in the prompt parses and round-trips |
-| `universe_example_is_complete` | the English example is complete and uses every slide layout once |
+| `universe_example_is_complete` | the English example is complete, uses every slide layout once and has its five pictures |
 | `weltall_example_is_complete` | the German example is complete |
 | `svg_and_png_export` | SVG is escaped correctly, PNG is created |
 | `stops_are_overview_branches_finale` | tour stops are in the right order |

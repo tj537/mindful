@@ -9,7 +9,7 @@
 
 use crate::document::{Camera, Document, TourState};
 use crate::model::MindMap;
-use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task};
+use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task, paint_thumb};
 use crate::present::{
     backdrop, color_of, confetti_burst, confetti_draw, corner_buttons, ease_in_out_cubic,
     ease_out_back, ease_out_cubic, filmstrip, laser, read_nav, strip_keys, vignette, Backdrop,
@@ -557,7 +557,11 @@ pub fn show(
         // Glühen um den Zweig im Scheinwerfer
         if fx.glow && in_spotlight.contains(&d.id) {
             // Viele feine Schichten statt weniger dicker: weicher Verlauf ohne Stufen
-            let radius = rect.height() / 2.0;
+            let radius = if node_has_image(map, d.id) {
+                16.0 * scale
+            } else {
+                rect.height() / 2.0
+            };
             for k in 1..=12 {
                 let grow = k as f32 * 2.2 * scale;
                 painter.rect_filled(
@@ -572,10 +576,24 @@ pub fn show(
 
         let mut p = painter.clone();
         p.set_opacity(d.alpha);
-        paint_node(&p, theme, rect, &style, scale, false, false);
-        let task = map.get(d.id).and_then(|n| n.task);
+        let node = map.get(d.id);
+        paint_node(
+            &p,
+            theme,
+            rect,
+            &style,
+            scale,
+            false,
+            false,
+            node.is_some_and(|n| n.image.is_some()),
+        );
+        let label = match node {
+            Some(n) => paint_thumb(&p, map, n, rect, scale),
+            None => rect,
+        };
+        let task = node.and_then(|n| n.task);
         if let Some(done) = task {
-            let r = paint_task(&p, rect, &style, done, scale);
+            let r = paint_task(&p, label, &style, done, scale);
             if d.alpha > 0.5 {
                 let click = ui
                     .interact(
@@ -593,7 +611,7 @@ pub fn show(
         if font >= 3.0 {
             let text = map.get(d.id).map(|n| n.text.clone()).unwrap_or_default();
             let galley = p.layout_no_wrap(text, FontId::proportional(font), style.text);
-            paint_label(&p, rect, galley, &style, task, scale);
+            paint_label(&p, label, galley, &style, task, scale);
         }
     }
 
@@ -732,6 +750,11 @@ pub fn show(
     }
 
     event
+}
+
+/// Knoten mit Bild werden als Karte gezeichnet
+fn node_has_image(map: &MindMap, id: u64) -> bool {
+    map.get(id).is_some_and(|n| n.image.is_some())
 }
 
 #[cfg(test)]

@@ -23,6 +23,17 @@ Eight planets and countless smaller bodies circle an ordinary star: the Sun.
   - Too small to clear their orbit
   - Pluto was reclassified in 2006
 
+## Planet Portraits
+
+Three kinds of worlds – painted by the computer, not photographed.
+
+- A rocky world
+  ![](rocky-planet.jpg)
+- A gas giant
+  ![](gas-giant.jpg)
+- A giant with rings
+  ![](ringed-planet.jpg)
+
 ## How Big Is Space? <!-- pyramid -->
 
 Each step up the ladder is thousands of times larger than the one before.
@@ -37,6 +48,12 @@ Each step up the ladder is thousands of times larger than the one before.
   - More than 80 galaxies
 - Observable universe
   - 93 billion light-years across
+
+## Where Stars Are Born
+
+![](nebula.jpg)
+
+In vast clouds of gas and dust, gravity slowly lights up new suns.
 
 ## The Life of a Star <!-- cycle -->
 
@@ -75,6 +92,8 @@ Stars don't live alone – they gather in vast star systems of four main shapes.
   - Often shaped by collisions
 
 ## Black Holes
+
+![](black-hole.jpg)
 
 Regions where gravity is so strong that not even light can escape.
 

@@ -179,7 +179,9 @@ mod tests {
             ("universe", include_str!("../assets/examples/universe.md")),
             ("weltall", include_str!("../assets/examples/weltall.md")),
         ] {
-            render(name, MindMap::from_outline(md).unwrap());
+            let mut map = MindMap::from_outline(md).unwrap();
+            crate::images::resolve(&mut map, None);
+            render(name, map);
         }
     }
 
@@ -213,5 +215,27 @@ mod tests {
                 Path::new(&format!("target/snapshots/{name}_{slide:02}.png")),
             );
         }
+
+        // Kamerafahrt, Übersicht: zeigt die Knoten samt Vorschaubildern
+        let sizes = doc
+            .map
+            .nodes
+            .iter()
+            .map(|n| (n.id, crate::nodes::node_size(&snap.ctx, &doc.map, theme, n)))
+            .collect();
+        doc.map.auto_layout(&sizes);
+        doc.set_mode(Mode::Tour);
+        let mut shapes = Vec::new();
+        for t in [1000.0, 1001.0, 1030.0] {
+            shapes = snap.frame(t, |ctx| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::default().fill(theme.background))
+                    .show(ctx, |ui| crate::tour::show(ui, &mut doc, theme, &mut fx));
+            });
+        }
+        snap.save(
+            &shapes,
+            Path::new(&format!("target/snapshots/{name}_tour.png")),
+        );
     }
 }
