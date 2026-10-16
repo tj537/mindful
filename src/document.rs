@@ -143,6 +143,12 @@ pub struct Document {
     pub strip_cursor: usize,
     #[serde(skip)]
     pub tour: TourState,
+    /// Referentenansicht im zweiten Fenster offen
+    #[serde(skip)]
+    pub presenter: bool,
+    /// Start der Stoppuhr in der Referentenansicht
+    #[serde(skip)]
+    pub presenter_start: Option<f64>,
 }
 
 impl Document {
@@ -175,6 +181,8 @@ impl Document {
             strip: false,
             strip_cursor: 0,
             tour: TourState::default(),
+            presenter: false,
+            presenter_start: None,
         }
     }
 
@@ -259,6 +267,8 @@ impl Document {
                 // NaN = „gerade gestartet“: der erste Frame setzt die echte Zeit,
                 // damit der Titel-Effekt auch auf der ersten Folie läuft
                 self.slide_time = f64::NAN;
+                // Stoppuhr der Referentenansicht startet neu
+                self.presenter_start = None;
             }
             Mode::Tour => {
                 self.tour = TourState {

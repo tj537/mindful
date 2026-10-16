@@ -1,6 +1,6 @@
 [package]
 name = "mindful"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Mind maps, Markdown and presentations in one small desktop app"
 license = "MIT"
@@ -16,6 +16,7 @@ egui-phosphor = "0.9"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 base64 = "0.22"
 arboard = "3"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # Kleinere, schnellere Programmdatei für die fertige App
 [profile.release]

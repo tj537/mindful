@@ -10,6 +10,8 @@ mod images;
 mod markdown_view;
 mod model;
 mod nodes;
+mod offscreen;
+mod pdf;
 mod present;
 #[cfg(test)]
 mod snapshot;

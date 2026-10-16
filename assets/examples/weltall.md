@@ -34,6 +34,19 @@ Drei Arten von Welten – vom Computer gemalt, nicht fotografiert.
 - Ein Riese mit Ringen
   ![](ringed-planet.jpg)
 
+## Größe der Planeten <!-- bars -->
+
+Durchmesser in tausend Kilometern – Jupiter ist elfmal so breit wie die Erde.
+
+- Merkur: 4,9
+- Venus: 12,1
+- Erde: 12,7
+- Mars: 6,8
+- Jupiter: 139,8
+- Saturn: 116,5
+- Uranus: 50,7
+- Neptun: 49,2
+
 ## Wie groß ist das All? <!-- pyramid -->
 
 Jede Stufe ist tausendfach größer als die vorige.
@@ -117,6 +130,14 @@ Das Universum hatte einen Anfang – und dehnt sich bis heute aus.
 - Seit 1998 bekannt: die Ausdehnung wird schneller
   Angetrieben wohl von der Dunklen Energie, die noch niemand ganz versteht.
 
+## Woraus das Universum besteht <!-- pie -->
+
+Alles, was wir sehen können – Sterne, Planeten, wir –, ist nur ein kleiner Teil davon.
+
+- Dunkle Energie: 68 %
+- Dunkle Materie: 27 %
+- Normale Materie: 5 %
+
 ## Raumfahrt <!-- timeline -->
 
 In wenigen Jahrzehnten vom ersten Satelliten bis zum Blick ins frühe Universum.
@@ -145,6 +166,17 @@ Leben, wie wir es kennen, braucht drei Zutaten zugleich.
 - Bausteine
   Kohlenstoff, Wasserstoff, Stickstoff, Sauerstoff und ein paar weitere Elemente.
 - Zusammen: eine Welt, auf der Leben möglich ist
+
+## Entdeckte Exoplaneten <!-- line -->
+
+Bestätigte Planeten um andere Sterne, ungefähr – und es werden immer mehr.
+
+- 2000: 30
+- 2005: 170
+- 2010: 500
+- 2015: 1.950
+- 2020: 4.300
+- 2025: 5.900
 
 ## Die Suche nach einer zweiten Erde <!-- funnel -->
 

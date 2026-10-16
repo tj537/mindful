@@ -10,9 +10,11 @@ Write an outline, see it as a mind map, and present it as slides or as a camera 
 
 ![Mindful showing the example mind map “The Universe”](docs/screenshot-mindmap.png)
 
-| Slides with diagram layouts | Pictures on slides |
+| Diagram layouts | Pictures on slides |
 |---|---|
 | ![A cycle diagram slide](docs/slide-cycle.png) | ![A gallery slide with three planets](docs/slide-gallery.png) |
+| **Charts from bullet points** | **Presenter view** |
+| ![A bar chart slide](docs/slide-chart.png) | ![The presenter view with current slide, next slide, notes and timer](docs/presenter.png) |
 
 ## Features
 
@@ -26,7 +28,9 @@ Write an outline, see it as a mind map, and present it as slides or as a camera 
 | **Tour** | Present on the mind map itself: the camera flies from branch to branch and reveals what's below |
 
 **Slides that look like slides**
-- Nine diagram layouts built from your bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (it counts up) and quote. Pick one with a right-click on the slide.
+- Twelve slide layouts built from your bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (it counts up), quote – and **bar, pie and line charts** from points like `Solar: 42 %`, animated as they build up. Pick one with a right-click on the slide.
+- **Presenter view** (P): a second window with the current and next slide, your notes, a timer and the clock, while the audience sees only the slides.
+- **Export the slides as PDF** to send or print them.
 - Pictures from your computer: drag them onto a node or a slide, or paste a screenshot. One picture sits beside the text, a single picture fills the slide, several become a gallery.
 - Checkboxes you can tick off during the talk, with confetti if you like.
 - Transitions, bullet effects, animated backgrounds (a starfield by default), a laser pointer and a quick-jump strip. Everything is optional under ⚙︎.
@@ -35,7 +39,7 @@ Write an outline, see it as a mind map, and present it as slides or as a camera 
 - Tabs, undo/redo, search, copy & paste, notes on every node, 8 color themes.
 - Templates (brainstorming, project plan, SWOT, weekly plan, meeting notes, book summary) and a complete example to explore: **File → Open example → The Universe** (also in German).
 - **AI prompt:** describe a topic, copy the generated prompt into ChatGPT, Claude or any other assistant and paste the answer into a new tab. The prompt teaches the AI Mindful's format, including when to use which slide layout.
-- Save as `.mindmap` (one file, pictures included), import Markdown and plain-text outlines, export PNG, SVG or Markdown.
+- Save as `.mindmap` (one file, pictures included), import Markdown and plain-text outlines, export the mind map as PNG, SVG or Markdown and the slides as PDF.
 - Your open tabs, including unsaved changes, are restored on the next start.
 
 ## Download
@@ -97,6 +101,7 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | Space · → · ← | Next · back |
 | G | Quick jump to any slide |
 | L | Laser pointer |
+| P | Presenter view (notes, next slide, timer) |
 | F · Esc | Full screen · end |
 
 Navigation while presenting is keyboard-only, so clicking a checkbox never skips a slide.
@@ -137,6 +142,11 @@ A picture belongs to the line directly above it. Mindful stores the picture data
 | `venn` | overlapping ideas | 2–3 short labels plus one point saying what they share |
 | `number` | one striking figure | first point starts with the number; up to 3 more facts |
 | `quote` | a quotation | one point with the quote, one sub-point with the author |
+| `bars` | comparing amounts | 3–8 points like `Solar: 42 %` or `Germany: 83 million` |
+| `pie` | parts of a whole | 2–6 points like `Dark energy: 68 %` |
+| `line` | a trend over time | 3–8 points like `2015: 1,950`, in order |
+
+Notes on a node (right-click → *Note …*) appear in the presenter view.
 
 ## Building from source
 
@@ -185,6 +195,8 @@ src/
 ├── nodes.rs           how nodes are drawn
 ├── ai_prompt.rs       the AI prompt form
 ├── export.rs          SVG and PNG export
+├── pdf.rs             slides as PDF
+├── offscreen.rs       renders egui without a window (PDF, tests)
 ├── theme.rs           color themes and fonts
 └── snapshot.rs        offscreen rendering for tests
 ```

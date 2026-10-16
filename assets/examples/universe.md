@@ -34,6 +34,19 @@ Three kinds of worlds – painted by the computer, not photographed.
 - A giant with rings
   ![](ringed-planet.jpg)
 
+## Planet Sizes <!-- bars -->
+
+Diameter in thousand kilometres – Jupiter is eleven times as wide as Earth.
+
+- Mercury: 4.9
+- Venus: 12.1
+- Earth: 12.7
+- Mars: 6.8
+- Jupiter: 139.8
+- Saturn: 116.5
+- Uranus: 50.7
+- Neptune: 49.2
+
 ## How Big Is Space? <!-- pyramid -->
 
 Each step up the ladder is thousands of times larger than the one before.
@@ -117,6 +130,14 @@ The universe had a beginning – and it is still expanding today.
 - Since 1998 we know the expansion is speeding up
   Dark energy, which nobody fully understands yet, is thought to drive it.
 
+## What the Universe Is Made Of <!-- pie -->
+
+Everything we can see – stars, planets, us – is only a small part of it.
+
+- Dark energy: 68 %
+- Dark matter: 27 %
+- Ordinary matter: 5 %
+
 ## Spaceflight <!-- timeline -->
 
 Within a few decades, from the first satellite to a view of the early universe.
@@ -145,6 +166,17 @@ Life as we know it depends on three ingredients coming together.
 - Building blocks
   Carbon, hydrogen, nitrogen, oxygen and a few other elements.
 - Together: a world where life could exist
+
+## Exoplanets Found <!-- line -->
+
+Confirmed planets around other stars, roughly – and the count keeps climbing.
+
+- 2000: 30
+- 2005: 170
+- 2010: 500
+- 2015: 1,950
+- 2020: 4,300
+- 2025: 5,900
 
 ## Searching for Another Earth <!-- funnel -->
 

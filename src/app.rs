@@ -117,6 +117,16 @@ enum ExportKind {
     Png,
     Svg,
     Markdown,
+    /// Alle Folien als PDF
+    Pdf,
+}
+
+/// PDF-Export, der im Hintergrund läuft
+struct PdfJob {
+    done: Arc<std::sync::atomic::AtomicUsize>,
+    total: usize,
+    result: Arc<std::sync::Mutex<Option<Result<(), String>>>>,
+    path: PathBuf,
 }
 
 /// Befehle aus Menü, Tableiste und Tastenkürzeln
@@ -398,6 +408,15 @@ fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
         &l(icon::MARKDOWN_LOGO, "Outline (Markdown) …"),
         None,
         Command::Export(ExportKind::Markdown),
+        out,
+    );
+    ui.separator();
+    cmd_item(
+        ui,
+        true,
+        &l(icon::FILE_PDF, "Slides as PDF …"),
+        None,
+        Command::Export(ExportKind::Pdf),
         out,
     );
 }
@@ -697,6 +716,8 @@ pub struct MindMapApp {
     status_shown: (String, f64),
     /// Tab unter dem Mauszeiger im letzten Frame
     hovered_tab: Option<usize>,
+    /// Läuft gerade ein PDF-Export?
+    pdf_job: Option<PdfJob>,
     /// Für Bildschirmfotos in Tests: das „AI prompt“-Fenster öffnen
     #[cfg(test)]
     pub open_ai_popup: bool,
@@ -757,6 +778,7 @@ impl MindMapApp {
             status: "Ready".into(),
             status_shown: (String::new(), 0.0),
             hovered_tab: None,
+            pdf_job: None,
             #[cfg(test)]
             open_ai_popup: false,
             window_title: String::new(),
@@ -814,6 +836,7 @@ impl MindMapApp {
 
     /// Ein Frame der ganzen Oberfläche
     pub fn show(&mut self, ctx: &egui::Context) {
+        self.poll_pdf_export(ctx);
         if self.applied_theme != Some(self.theme) {
             ctx.set_visuals(visuals_for(&THEMES[self.theme]));
             self.applied_theme = Some(self.theme);
@@ -1104,6 +1127,52 @@ impl MindMapApp {
         })
     }
 
+    /// Folien im Hintergrund als PDF schreiben; der Fortschritt steht unten
+    fn start_pdf_export(&mut self, path: PathBuf) {
+        if self.pdf_job.is_some() {
+            self.status = "A PDF export is already running".into();
+            return;
+        }
+        let map = self.doc().map.clone();
+        let theme = self.theme;
+        let fx = self.effects;
+        let job = PdfJob {
+            done: Arc::default(),
+            total: present::slide_count(&map, &THEMES[theme]),
+            result: Arc::default(),
+            path: path.clone(),
+        };
+        let (done, result) = (job.done.clone(), job.result.clone());
+        std::thread::spawn(move || {
+            let outcome = crate::pdf::export(&map, &THEMES[theme], &fx, &path, &done);
+            if let Ok(mut slot) = result.lock() {
+                *slot = Some(outcome);
+            }
+        });
+        self.pdf_job = Some(job);
+    }
+
+    /// Fortschritt des PDF-Exports in der Statuszeile
+    fn poll_pdf_export(&mut self, ctx: &egui::Context) {
+        let Some(job) = &self.pdf_job else { return };
+        let finished = job.result.lock().ok().and_then(|mut r| r.take());
+        match finished {
+            Some(Ok(())) => {
+                self.status = format!("Exported {} slides: {}", job.total, job.path.display());
+                self.pdf_job = None;
+            }
+            Some(Err(e)) => {
+                self.status = format!("PDF export failed: {e}");
+                self.pdf_job = None;
+            }
+            None => {
+                let done = job.done.load(std::sync::atomic::Ordering::Relaxed);
+                self.status = format!("Exporting PDF … slide {} of {}", done + 1, job.total);
+                ctx.request_repaint_after(std::time::Duration::from_millis(150));
+            }
+        }
+    }
+
     /// Bilddateien einlesen und einfügen; andere Dateien (.mindmap, .md) öffnen
     fn add_image_files(&mut self, target: u64, paths: Vec<PathBuf>) {
         let (pictures, others): (Vec<PathBuf>, Vec<PathBuf>) =
@@ -1243,6 +1312,7 @@ impl MindMapApp {
             ExportKind::Png => ("png", "PNG image"),
             ExportKind::Svg => ("svg", "SVG graphic"),
             ExportKind::Markdown => ("md", "Markdown"),
+            ExportKind::Pdf => ("pdf", "PDF document"),
         };
         let Some(path) = rfd::FileDialog::new()
             .add_filter(filter, &[ext])
@@ -1252,7 +1322,12 @@ impl MindMapApp {
             return;
         };
         let theme = &THEMES[self.theme];
+        if let ExportKind::Pdf = kind {
+            self.start_pdf_export(path);
+            return;
+        }
         let result = match kind {
+            ExportKind::Pdf => unreachable!(),
             ExportKind::Markdown => std::fs::write(&path, self.doc().map.to_markdown_with_images())
                 .map_err(|e| e.to_string()),
             ExportKind::Svg => {
@@ -2501,13 +2576,11 @@ impl MindMapApp {
             (f(&SC_MARKDOWN), "Toggle Markdown editor"),
             (f(&SC_PRESENT), "Start presentation"),
             (f(&SC_TOUR), "Start camera tour"),
-            (
-                "G".into(),
-                "Slide strip (also: move the mouse to the bottom edge)",
-            ),
+            ("G".into(), "Quick jump to any slide"),
             ("L".into(), "Laser pointer on/off"),
-            ("→ · Space · click".into(), "Next slide"),
-            ("← · right-click".into(), "Previous slide"),
+            ("P".into(), "Presenter view: notes, next slide, timer"),
+            ("→ · Space".into(), "Next bullet point / slide"),
+            ("←".into(), "Back"),
             ("F · Esc".into(), "Full screen · end presentation"),
         ];
         egui::Window::new("Keyboard shortcuts")

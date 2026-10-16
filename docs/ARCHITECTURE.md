@@ -360,10 +360,31 @@ A main branch can have a `layout` (`SlideLayout`). Its slide then shows a diagra
 | `venn` | two or three overlapping circles; a further item becomes a caption below (what they share) |
 | `number` | the first number in the first item, very large, counting up (`split_number`, `format_like` keep decimals and thousands separators of the original), further items as small fact cards |
 | `quote` | the first item in italics with a large quotation mark, its first child or the second item as author |
+| `bars` | a column chart; values grow and count up item by item, with “nice” grid lines (1, 2 or 5 × 10ⁿ) |
+| `pie` | a donut chart whose segments close one after another; the largest share in the middle, a legend with values and percentages beside it |
+| `line` | a line that grows from point to point with a light area below, values above the points |
+
+The three charts read their numbers with `parse_datum`: the **last** number in a bullet is the value, the text before it (without a trailing `:`, `–` or `=`) the label, the rest the unit – `Solar: 42 %`, `2015: 1,950`, `Jupiter – 139.8 thousand km`. Values keep the writing of the original while counting up (`Datum::shown`, via `format_like`), and the axis uses the same thousands separator as the data.
 
 `Slide::groups()` asks `SlideLayout::steps()` how many reveal steps a layout has, so diagrams build up exactly like bullet points (`reveal(i)` is the appear progress of item *i*). Choosing a layout: right-click the slide while presenting, right-click a main branch in the mind map (`Action::SetLayout`), or write `<!-- name -->` after the `##` heading – `split_layout()` reads it, `to_markdown()` writes it back.
 
-**Checking how slides look:** `snapshot.rs` (tests only) runs egui without a window and rasterizes its triangles in software into PNG files. `cargo test --release render_ -- --ignored` renders every slide of both examples (the examples use every layout once), a tour overview and the whole app window – mind map, Markdown editor, a light theme with an empty map – into `target/snapshots/`. `Snapshot::retina` rasterizes at 2× for sharp screenshots; `MindMapApp::for_snapshot` builds the app without eframe.
+**Checking how slides look:** `offscreen.rs` runs egui without a window and rasterizes its triangles in software (`Offscreen::frame`, `Offscreen::rgba`). The tests in `snapshot.rs` use it to write PNG files. `cargo test --release render_ -- --ignored` renders every slide of both examples (the examples use every layout once), a tour overview and the whole app window – mind map, Markdown editor, a light theme with an empty map – into `target/snapshots/`. `Offscreen::retina` rasterizes at 2× for sharp screenshots; `MindMapApp::for_snapshot` builds the app without eframe.
+
+### One slide, three places (`render_slide`)
+
+`present::render_slide(ui, card, &SlideView, …)` draws a single slide into a rectangle and returns what was clicked (`SlideOutput`: ticked checkbox, chosen layout, still animating). `SlideView` carries everything that changes between uses – which slide, how many bullet groups are visible, the time stamps for the animations, whether it is clickable (`interactive`) and whether it fills a whole page (`page`, no shadow or rounded corners). It is used by
+
+- the presentation itself (`show`, with the transition and slow zoom applied to the card),
+- the **presenter view** (current slide exactly as the audience sees it, next slide fully built),
+- the **PDF export** (`draw_static`: fully built, no animation, as a page).
+
+### Presenter view
+
+**P** (or the projector button at the top right while presenting) toggles `doc.presenter`. `presenter_window` then opens a second native window with `ctx.show_viewport_immediate`: a timer (`doc.presenter_start`, reset with the button and on every start), the time of day (`chrono`), the position (“slide 5 of 16 · point 2 of 4”), the current and the next slide, and the notes of the branch and its bullets (`speaker_notes`). Keys pressed in that window come back as a `Nav` and are merged with the main window's (`Nav::merge`), so you can drive the talk from either window. Closing the window (or P again) turns it off. Where a platform can't open a second window, egui reports `ViewportClass::Embedded` and the view appears as a window inside Mindful instead.
+
+## PDF export (`pdf.rs`)
+
+*Export → Slides as PDF* runs in a background thread (`MindMapApp::start_pdf_export`; the status bar shows “slide 3 of 16”, polled by `poll_pdf_export`). `pdf::export` creates its own egui context with the app's fonts and theme, renders each slide with `draw_static` at 1280 × 720 points × 1.5 (1920 × 1080 pixels) through `Offscreen`, encodes it as JPEG and writes the pages with a tiny PDF writer of its own (`write_pdf`: catalog, page tree, info, and per page a JPEG image object plus one drawing command). Pages are 960 × 540 pt, like PowerPoint's widescreen format. The text in the PDF is part of the image, so it isn't selectable.
 
 ## Camera tour (`tour.rs`)
 
@@ -545,7 +566,9 @@ cargo test
 | `collapse_hides_descendants` | collapsing and expanding |
 | `slide_layouts_in_markdown` | layout comments are read and written back |
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
-| `render_slides` (ignored, run on demand) | renders every slide of both examples plus a tour overview to PNG for a visual check |
+| `render_slides` (ignored, run on demand) | renders every slide of both examples, the presenter view and a tour overview to PNG for a visual check |
+| `chart_points_are_read_from_bullets` | “Solar: 42 %” etc. give label, value and unit |
+| `slides_become_pdf_pages` | the PDF has one image page per slide and a correct cross-reference table |
 | `render_app` (ignored, run on demand) | renders the whole window (mind map, Markdown, light theme, empty map) to PNG |
 | `images_round_trip_and_travel_with_the_file` | image lines survive Markdown; image data travels in the Markdown block, the JSON file and the clipboard; unused images are dropped |
 | `large_images_are_scaled_and_stored_as_jpeg` | big pictures are scaled to 1920 px and re-encoded |

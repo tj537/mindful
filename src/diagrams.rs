@@ -1,6 +1,7 @@
 //! Folien-Layouts im Stil von SmartArt: Die Stichpunkte einer Folie werden
 //! als Zeitstrahl, Kreislauf, Pyramide, Trichter, Vergleich, Matrix,
-//! Venn-Diagramm, große Zahl oder Zitat gezeichnet.
+//! Venn-Diagramm, große Zahl, Zitat oder als Balken-, Kreis- und
+//! Liniendiagramm aus Punkten wie „Solar: 42 %“ gezeichnet.
 //!
 //! `reveal(i)` liefert für Punkt `i` den Fortschritt seines Erscheinens
 //! (0 = noch verborgen, 1 = ganz da) – so bauen sich die Diagramme genauso
@@ -35,6 +36,9 @@ impl SlideLayout {
             SlideLayout::Venn => "Venn diagram",
             SlideLayout::Number => "Big number",
             SlideLayout::Quote => "Quote",
+            SlideLayout::Bars => "Bar chart",
+            SlideLayout::Pie => "Pie chart",
+            SlideLayout::Line => "Line chart",
         }
     }
 
@@ -49,6 +53,9 @@ impl SlideLayout {
             SlideLayout::Venn => icon::INTERSECT,
             SlideLayout::Number => icon::HASH,
             SlideLayout::Quote => icon::QUOTES,
+            SlideLayout::Bars => icon::CHART_BAR,
+            SlideLayout::Pie => icon::CHART_DONUT,
+            SlideLayout::Line => icon::CHART_LINE_UP,
         }
     }
 
@@ -196,6 +203,9 @@ pub fn draw(
         SlideLayout::Venn => venn(p, rect, items, theme, s, reveal),
         SlideLayout::Number => number(p, rect, items, theme, color, s, reveal, count_up),
         SlideLayout::Quote => quote(p, rect, items, note, theme, color, s, count_up),
+        SlideLayout::Bars => bars(p, rect, items, theme, s, reveal),
+        SlideLayout::Pie => pie(p, rect, items, theme, s, reveal),
+        SlideLayout::Line => line(p, rect, items, theme, color, s, reveal),
     }
 }
 
@@ -953,9 +963,409 @@ fn quote(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Diagramme mit Zahlen
+// ---------------------------------------------------------------------------
+
+/// Ein Datenpunkt aus einem Stichpunkt wie „Solar: 42 %“
+#[derive(Debug, PartialEq)]
+pub struct Datum {
+    pub label: String,
+    pub value: f64,
+    /// Die Zahl, wie sie geschrieben wurde („42“, „1,250.5“)
+    pub number: String,
+    /// Was danach kommt („ %“, „ km“)
+    pub unit: String,
+}
+
+impl Datum {
+    /// Wert schreiben wie im Original, beim Hochzählen mit `share` (0…1) des Werts
+    fn shown(&self, share: f32) -> String {
+        format!(
+            "{}{}",
+            format_like(&self.number, self.value * share as f64),
+            self.unit
+        )
+    }
+}
+
+/// Die letzte Zahl im Text ist der Wert, davor steht die Beschriftung
+pub fn parse_datum(text: &str) -> Option<Datum> {
+    let bytes: Vec<(usize, char)> = text.char_indices().collect();
+    let last_digit = bytes.iter().rposition(|(_, c)| c.is_ascii_digit())?;
+    let mut first = last_digit;
+    while first > 0 {
+        let (_, c) = bytes[first - 1];
+        let separator = (c == '.' || c == ',') && first >= 2 && bytes[first - 2].1.is_ascii_digit();
+        if c.is_ascii_digit() || separator {
+            first -= 1;
+        } else {
+            break;
+        }
+    }
+    let start = bytes[first].0;
+    let end = bytes[last_digit].0 + 1;
+    let number = &text[start..end];
+    let value = parse_number(number)?;
+    let label = text[..start]
+        .trim_end()
+        .trim_end_matches([':', '=', '–', '-'])
+        .trim()
+        .to_string();
+    Some(Datum {
+        label,
+        value,
+        number: number.to_string(),
+        unit: text[end..].trim_end().to_string(),
+    })
+}
+
+fn data(items: &[Item]) -> Vec<Datum> {
+    items.iter().filter_map(|i| parse_datum(&i.text)).collect()
+}
+
+/// Hinweis, wenn keine Zahlen gefunden wurden
+fn no_data(p: &Painter, r: Rect, theme: &Theme, s: f32) {
+    text_centered(
+        p,
+        "Add points with numbers, e.g. “Solar: 42 %”",
+        20.0 * s,
+        theme.text.gamma_multiply(0.5),
+        r.width(),
+        Pos2::new(r.center().x, r.center().y - 12.0 * s),
+    );
+}
+
+/// Feine Hilfslinien mit „runden“ Werten; gibt den Höchstwert der Skala zurück
+fn grid_lines(p: &Painter, plot: Rect, data: &[Datum], theme: &Theme, s: f32) -> f64 {
+    let max = data
+        .iter()
+        .map(|d| d.value)
+        .fold(0.0, f64::max)
+        .max(f64::EPSILON);
+    // Tausendertrenner wie in den Daten (Komma oder Punkt)
+    let sep = data.iter().find_map(|d| {
+        let i = d.number.rfind([',', '.'])?;
+        (d.number.len() - i - 1 == 3).then(|| d.number[i..=i].to_string())
+    });
+    // Schöne Schrittweite: 1, 2 oder 5 mal einer Zehnerpotenz
+    let raw = (max / 4.0).max(f64::EPSILON);
+    let pow = 10f64.powf(raw.log10().floor());
+    let step = [1.0, 2.0, 5.0, 10.0]
+        .iter()
+        .map(|m| m * pow)
+        .find(|st| *st >= raw)
+        .unwrap_or(raw);
+    let top = (max / step).ceil() * step;
+    let mut v = step;
+    while v <= top + step * 0.01 {
+        let y = plot.bottom() - (v / top) as f32 * plot.height();
+        p.line_segment(
+            [Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)],
+            Stroke::new(1.0 * s, theme.grid.gamma_multiply(0.7)),
+        );
+        p.text(
+            Pos2::new(plot.left() - 10.0 * s, y),
+            egui::Align2::RIGHT_CENTER,
+            match (&sep, step.fract() == 0.0) {
+                (Some(sep), true) if v >= 1000.0 => format_like(&format!("1{sep}000"), v),
+                (_, true) => format_like("1", v),
+                _ => format_like("1.0", v),
+            },
+            FontId::proportional(14.0 * s),
+            theme.text.gamma_multiply(0.45),
+        );
+        v += step;
+    }
+    p.line_segment(
+        [
+            Pos2::new(plot.left(), plot.bottom()),
+            Pos2::new(plot.right(), plot.bottom()),
+        ],
+        Stroke::new(2.0 * s, theme.grid),
+    );
+    top
+}
+
+/// Säulen, die nacheinander hochwachsen; Werte zählen dabei hoch
+fn bars(
+    p: &Painter,
+    r: Rect,
+    items: &[Item],
+    theme: &Theme,
+    s: f32,
+    reveal: &dyn Fn(usize) -> f32,
+) {
+    let data = data(items);
+    if data.is_empty() {
+        return no_data(p, r, theme, s);
+    }
+    let n = data.len();
+    let f = fit(n, 6);
+    let label_h = 48.0 * s;
+    let plot = Rect::from_min_max(
+        r.min + Vec2::new(56.0 * s, 34.0 * s),
+        r.max - Vec2::new(0.0, label_h),
+    );
+    let top = grid_lines(p, plot, &data, theme, s);
+    let slot = plot.width() / n as f32;
+    let bar_w = (slot * 0.62).min(120.0 * s);
+    for (i, d) in data.iter().enumerate() {
+        let e = reveal(i);
+        if e <= 0.0 {
+            continue;
+        }
+        let grow = ease_out_cubic(e);
+        let q = faded(p, (e * 2.0).min(1.0));
+        let cx = plot.left() + slot * (i as f32 + 0.5);
+        let h = (d.value.max(0.0) / top) as f32 * plot.height() * grow;
+        let bar = Rect::from_min_max(
+            Pos2::new(cx - bar_w / 2.0, plot.bottom() - h),
+            Pos2::new(cx + bar_w / 2.0, plot.bottom()),
+        );
+        let col = palette(theme, i);
+        q.rect_filled(
+            bar,
+            egui::CornerRadius {
+                nw: (8.0 * s) as u8,
+                ne: (8.0 * s) as u8,
+                sw: 0,
+                se: 0,
+            },
+            col,
+        );
+        q.text(
+            Pos2::new(cx, bar.top() - 6.0 * s),
+            egui::Align2::CENTER_BOTTOM,
+            d.shown(grow),
+            FontId::proportional(20.0 * s * f),
+            theme.text,
+        );
+        text_centered(
+            &q,
+            &d.label,
+            17.0 * s * f,
+            theme.text.gamma_multiply(0.75),
+            slot * 0.95,
+            Pos2::new(cx, plot.bottom() + 10.0 * s),
+        );
+    }
+}
+
+/// Ring aus Segmenten, die sich nacheinander schließen; Legende rechts
+fn pie(p: &Painter, r: Rect, items: &[Item], theme: &Theme, s: f32, reveal: &dyn Fn(usize) -> f32) {
+    let data = data(items);
+    if data.is_empty() {
+        return no_data(p, r, theme, s);
+    }
+    let total: f64 = data.iter().map(|d| d.value.max(0.0)).sum();
+    if total <= 0.0 {
+        return no_data(p, r, theme, s);
+    }
+    let radius = (r.height() / 2.0 - 8.0 * s).min(r.width() * 0.22);
+    let inner = radius * 0.6;
+    let center = Pos2::new(r.left() + r.width() * 0.3, r.center().y);
+    let gap = if data.len() > 1 { 0.012 } else { 0.0 };
+    let mut angle = -PI / 2.0;
+    let mut largest: Option<(usize, f32)> = None;
+    for (i, d) in data.iter().enumerate() {
+        let sweep = (d.value.max(0.0) / total) as f32 * TAU;
+        let e = ease_out_cubic(reveal(i));
+        if e > 0.0 && sweep > 0.0 {
+            let shown = (sweep - gap).max(0.0) * e;
+            let a0 = angle + gap / 2.0;
+            let steps = ((shown / TAU) * 120.0).ceil().max(2.0) as usize;
+            let col = palette(theme, i);
+            let mut mesh = egui::Mesh::default();
+            for k in 0..=steps {
+                let a = a0 + shown * k as f32 / steps as f32;
+                let dir = Vec2::new(a.cos(), a.sin());
+                mesh.colored_vertex(center + dir * inner, col);
+                mesh.colored_vertex(center + dir * radius, col);
+                if k > 0 {
+                    let j = 2 * k as u32;
+                    mesh.add_triangle(j - 2, j - 1, j);
+                    mesh.add_triangle(j - 1, j + 1, j);
+                }
+            }
+            p.add(Shape::mesh(mesh));
+            if largest.is_none_or(|(_, w)| sweep > w) {
+                largest = Some((i, sweep));
+            }
+        }
+        angle += sweep;
+    }
+    // In der Mitte der größte Anteil
+    if let Some((i, _)) = largest {
+        let d = &data[i];
+        let e = reveal(i);
+        let q = faded(p, e);
+        let share = d.value / total * 100.0;
+        let big = if d.unit.trim() == "%" {
+            d.shown(1.0)
+        } else {
+            format!("{share:.0} %")
+        };
+        q.text(
+            center - Vec2::new(0.0, 6.0 * s),
+            egui::Align2::CENTER_BOTTOM,
+            big,
+            FontId::proportional(40.0 * s),
+            palette(theme, i),
+        );
+        text_centered(
+            &q,
+            &d.label,
+            17.0 * s,
+            theme.text.gamma_multiply(0.75),
+            inner * 1.6,
+            center + Vec2::new(0.0, 2.0 * s),
+        );
+    }
+    // Legende
+    let x = center.x + radius + 60.0 * s;
+    let row = (r.height() / data.len() as f32).min(54.0 * s);
+    let top = r.center().y - row * data.len() as f32 / 2.0;
+    for (i, d) in data.iter().enumerate() {
+        let e = reveal(i);
+        if e <= 0.0 {
+            continue;
+        }
+        let q = faded(p, e);
+        let y = top + row * (i as f32 + 0.5) + (1.0 - e) * 10.0 * s;
+        q.circle_filled(Pos2::new(x, y), 8.0 * s, palette(theme, i));
+        let value = if d.unit.trim() == "%" {
+            d.shown(1.0)
+        } else {
+            format!("{}  ·  {:.0} %", d.shown(1.0), d.value / total * 100.0)
+        };
+        let g = galley(
+            &q,
+            &d.label,
+            21.0 * s,
+            theme.text,
+            r.right() - x - 160.0 * s,
+            false,
+        );
+        let h = g.size().y;
+        q.galley(Pos2::new(x + 22.0 * s, y - h / 2.0), g, theme.text);
+        q.text(
+            Pos2::new(r.right(), y),
+            egui::Align2::RIGHT_CENTER,
+            value,
+            FontId::proportional(20.0 * s),
+            theme.text.gamma_multiply(0.7),
+        );
+    }
+}
+
+/// Linie, die von Punkt zu Punkt weiterwächst, mit leichter Fläche darunter
+#[allow(clippy::too_many_arguments)]
+fn line(
+    p: &Painter,
+    r: Rect,
+    items: &[Item],
+    theme: &Theme,
+    color: Color32,
+    s: f32,
+    reveal: &dyn Fn(usize) -> f32,
+) {
+    let data = data(items);
+    if data.is_empty() {
+        return no_data(p, r, theme, s);
+    }
+    let n = data.len();
+    let f = fit(n, 7);
+    let plot = Rect::from_min_max(
+        r.min + Vec2::new(64.0 * s, 40.0 * s),
+        r.max - Vec2::new(20.0 * s, 44.0 * s),
+    );
+    let top = grid_lines(p, plot, &data, theme, s);
+    let step = if n > 1 {
+        plot.width() / (n - 1) as f32
+    } else {
+        0.0
+    };
+    let at = |i: usize| {
+        let x = if n > 1 {
+            plot.left() + step * i as f32
+        } else {
+            plot.center().x
+        };
+        Pos2::new(
+            x,
+            plot.bottom() - (data[i].value.max(0.0) / top) as f32 * plot.height(),
+        )
+    };
+    // Linie und Fläche, Abschnitt für Abschnitt
+    for i in 1..n {
+        let e = ease_out_cubic(reveal(i));
+        if e <= 0.0 {
+            continue;
+        }
+        let (a, b) = (at(i - 1), at(i));
+        let end = a + (b - a) * e;
+        p.add(Shape::convex_polygon(
+            vec![
+                a,
+                end,
+                Pos2::new(end.x, plot.bottom()),
+                Pos2::new(a.x, plot.bottom()),
+            ],
+            color.gamma_multiply(0.14),
+            Stroke::NONE,
+        ));
+        p.line_segment([a, end], Stroke::new(4.0 * s, color));
+    }
+    for (i, d) in data.iter().enumerate() {
+        let e = reveal(i);
+        if e <= 0.0 {
+            continue;
+        }
+        let q = faded(p, e);
+        let pt = at(i);
+        let size = 7.0 * s * ease_out_back(e).max(0.0);
+        q.circle_filled(pt, size + 3.0 * s, theme.card);
+        q.circle_filled(pt, size, color);
+        q.text(
+            pt - Vec2::new(0.0, 14.0 * s),
+            egui::Align2::CENTER_BOTTOM,
+            d.shown(ease_out_cubic(e)),
+            FontId::proportional(18.0 * s * f),
+            theme.text,
+        );
+        text_centered(
+            &q,
+            &d.label,
+            16.0 * s * f,
+            theme.text.gamma_multiply(0.7),
+            (step * 0.95).max(80.0 * s),
+            Pos2::new(pt.x, plot.bottom() + 10.0 * s),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chart_points_are_read_from_bullets() {
+        let d = parse_datum("Solar: 42 %").unwrap();
+        assert_eq!(
+            (d.label.as_str(), d.value, d.unit.as_str()),
+            ("Solar", 42.0, " %")
+        );
+        assert_eq!(d.shown(0.5), "21 %");
+        let d = parse_datum("2010: 1,250").unwrap();
+        assert_eq!((d.label.as_str(), d.value), ("2010", 1250.0));
+        let d = parse_datum("Jupiter – 139.8 thousand km").unwrap();
+        assert_eq!(
+            (d.label.as_str(), d.value, d.unit.as_str()),
+            ("Jupiter", 139.8, " thousand km")
+        );
+        assert!(parse_datum("No number").is_none());
+    }
 
     #[test]
     fn numbers_are_split_and_formatted_like_the_original() {

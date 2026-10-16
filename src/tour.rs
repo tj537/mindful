@@ -694,7 +694,7 @@ pub fn show(
         vignette(&painter, area);
     }
 
-    let (corner_event, strip_clicked) = corner_buttons(ui, area, "End tour (Esc)", fx, true);
+    let (corner_event, strip_clicked, _) = corner_buttons(ui, area, "End tour (Esc)", fx, true);
     if corner_event.is_some() {
         event = corner_event;
     }

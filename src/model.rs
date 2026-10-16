@@ -24,10 +24,16 @@ pub enum SlideLayout {
     Venn,
     Number,
     Quote,
+    /// Balkendiagramm aus Punkten wie „Solar: 42 %“
+    Bars,
+    /// Kreis- bzw. Ringdiagramm
+    Pie,
+    /// Liniendiagramm
+    Line,
 }
 
 impl SlideLayout {
-    pub const ALL: [SlideLayout; 9] = [
+    pub const ALL: [SlideLayout; 12] = [
         SlideLayout::Timeline,
         SlideLayout::Cycle,
         SlideLayout::Pyramid,
@@ -37,6 +43,9 @@ impl SlideLayout {
         SlideLayout::Venn,
         SlideLayout::Number,
         SlideLayout::Quote,
+        SlideLayout::Bars,
+        SlideLayout::Pie,
+        SlideLayout::Line,
     ];
 
     /// Name im Markdown-Kommentar, z. B. `<!-- timeline -->`
@@ -51,6 +60,9 @@ impl SlideLayout {
             SlideLayout::Venn => "venn",
             SlideLayout::Number => "number",
             SlideLayout::Quote => "quote",
+            SlideLayout::Bars => "bars",
+            SlideLayout::Pie => "pie",
+            SlideLayout::Line => "line",
         }
     }
 
@@ -1140,7 +1152,7 @@ mod example_tests {
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "The Universe");
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 13);
+        assert_eq!(branches.len(), 16);
         // Bilder: Galerie, Vollbild und Bild neben dem Text
         assert_eq!(map.nodes.iter().filter(|n| n.image.is_some()).count(), 5);
         // Jedes Folienlayout kommt genau einmal vor, dazu normale Aufzählungen
@@ -1171,7 +1183,7 @@ mod example_tests {
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "Das Weltall");
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 13);
+        assert_eq!(branches.len(), 16);
         assert_eq!(map.nodes.iter().filter(|n| n.image.is_some()).count(), 5);
         assert_eq!(
             branches.iter().filter(|b| b.layout.is_some()).count(),

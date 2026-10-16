@@ -226,6 +226,7 @@ fn shortcuts_list(ui: &mut egui::Ui, tour: bool) {
                 ("Home  End", "First / last"),
                 ("G", "Quick jump (← → Enter)"),
                 ("L", "Laser pointer"),
+                ("P", "Presenter view (slides only)"),
                 ("F", "Full screen"),
                 ("Esc", "End"),
             ] {
@@ -286,6 +287,8 @@ pub struct Nav {
     pub fullscreen: bool,
     pub strip: bool,
     pub laser: bool,
+    /// P: Referentenansicht ein/aus
+    pub presenter: bool,
 }
 
 pub fn read_nav(ui: &mut egui::Ui) -> Nav {
@@ -302,6 +305,7 @@ pub fn read_nav(ui: &mut egui::Ui) -> Nav {
             fullscreen: any(&[Key::F]),
             strip: any(&[Key::G]),
             laser: any(&[Key::L]),
+            presenter: any(&[Key::P]),
         }
     })
 }
@@ -309,6 +313,23 @@ pub fn read_nav(ui: &mut egui::Ui) -> Nav {
 impl Nav {
     pub fn next(&self) -> bool {
         self.right || self.space || self.enter
+    }
+
+    /// Tasten aus zwei Fenstern zusammenführen
+    fn merge(self, o: Nav) -> Nav {
+        Nav {
+            right: self.right || o.right,
+            left: self.left || o.left,
+            space: self.space || o.space,
+            enter: self.enter || o.enter,
+            home: self.home || o.home,
+            end: self.end || o.end,
+            escape: self.escape || o.escape,
+            fullscreen: self.fullscreen || o.fullscreen,
+            strip: self.strip || o.strip,
+            laser: self.laser || o.laser,
+            presenter: self.presenter || o.presenter,
+        }
     }
 }
 
@@ -350,12 +371,12 @@ pub fn corner_buttons(
     exit_tip: &str,
     fx: &mut Effects,
     tour: bool,
-) -> (Option<Event>, bool) {
+) -> (Option<Event>, bool, bool) {
     let mut corner = ui.new_child(
         UiBuilder::new()
             .max_rect(Rect::from_min_size(
-                area.right_top() + Vec2::new(-200.0, 10.0),
-                Vec2::new(190.0, 36.0),
+                area.right_top() + Vec2::new(-250.0, 10.0),
+                Vec2::new(240.0, 36.0),
             ))
             .layout(Layout::right_to_left(Align::Center)),
     );
@@ -379,6 +400,11 @@ pub fn corner_buttons(
         .button(big(icon::FILM_STRIP))
         .on_hover_text("Quick jump (G)")
         .clicked();
+    let presenter = !tour
+        && corner
+            .button(big(icon::PROJECTOR_SCREEN))
+            .on_hover_text("Presenter view: notes, next slide and timer in a second window (P)")
+            .clicked();
     corner
         .menu_button(big(icon::GEAR), |ui| {
             effects_menu(ui, fx, !tour, tour);
@@ -387,7 +413,7 @@ pub fn corner_buttons(
         })
         .response
         .on_hover_text("Settings and shortcuts");
-    (event, strip)
+    (event, strip, presenter)
 }
 
 /// Animierter Hintergrund hinter Folie bzw. Mindmap.
@@ -1083,6 +1109,749 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
     out
 }
 
+/// Was zum Zeichnen einer Folie gebraucht wird – im Vortrag, in der
+/// Referentenansicht und beim PDF-Export
+pub struct SlideView<'a> {
+    slides: &'a [Slide],
+    pub index: usize,
+    /// Sichtbare Stichpunkt-Gruppen
+    pub build: usize,
+    pub build_time: f64,
+    pub slide_time: f64,
+    pub now: f64,
+    /// Deckkraft während des Übergangs
+    pub appear: f32,
+    /// Fortschrittsleiste unten (0…1)
+    pub progress: f32,
+    /// Checkboxen und Rechtsklick-Menü bedienbar
+    pub interactive: bool,
+    /// Als ganze Seite (PDF): ohne Schatten und runde Ecken
+    pub page: bool,
+}
+
+/// Was beim Zeichnen angeklickt wurde
+pub struct SlideOutput {
+    pub ticked: Option<(u64, Pos2)>,
+    pub new_layout: Option<Option<SlideLayout>>,
+    pub animating: bool,
+}
+
+/// Eine Folie in `card` zeichnen
+pub fn render_slide(
+    ui: &mut egui::Ui,
+    card: Rect,
+    view: &SlideView,
+    map: &MindMap,
+    theme: &Theme,
+    fx: &Effects,
+    build_bullets: bool,
+) -> SlideOutput {
+    let painter = ui.painter().clone();
+    let ctx = ui.ctx().clone();
+    let slide = &view.slides[view.index];
+    let last = view.slides.len() - 1;
+    let now = view.now;
+    let appear = view.appear;
+    // Alle Maße relativ zu einer 1280 px breiten Folie
+    let s = card.width() / 1280.0;
+
+    let radius = if view.page { 0.0 } else { 24.0 * s };
+    if !view.page {
+        painter.rect_filled(
+            card.translate(Vec2::new(0.0, 10.0 * s)).expand(2.0 * s),
+            radius,
+            Color32::from_black_alpha(if theme.dark { 110 } else { 35 }),
+        );
+    }
+    painter.rect_filled(card, radius, theme.card);
+    let full_bleed = slide.full_bleed();
+    // Bilder blenden mit der Folie ein
+    let pictures_in = ease_out_cubic(progress(now, view.slide_time + 0.1, 0.8));
+    if full_bleed {
+        let picture = &slide.images[0];
+        let zoom = if fx.ken_burns {
+            1.0 + 0.07 * ease_in_out_cubic(progress(now, view.slide_time, 16.0))
+        } else {
+            1.0
+        };
+        match map.images.get(&picture.key) {
+            Some(img) => {
+                images::paint(
+                    &painter,
+                    &ctx,
+                    &picture.key,
+                    img,
+                    card,
+                    Fit::Cover,
+                    radius,
+                    Color32::WHITE.gamma_multiply(appear * pictures_in),
+                    zoom,
+                );
+            }
+            None => images::placeholder(&painter, card, 24.0 * s),
+        }
+        darken_for_text(&painter, card, s, slide.is_title, appear);
+    }
+    if fx.accent_bar {
+        let accent_bar = Rect::from_min_max(
+            card.left_top() + Vec2::new(44.0, 80.0) * s,
+            card.left_bottom() + Vec2::new(52.0, -80.0) * s,
+        );
+        painter.rect_filled(accent_bar, 4.0 * s, slide.color.gamma_multiply(appear));
+    }
+
+    // Rechtsklick auf die Folie: Layout wählen (vor dem Inhalt, damit Checkboxen Vorrang haben)
+    let mut new_layout: Option<Option<SlideLayout>> = None;
+    if view.interactive && slide.branch.is_some() {
+        ui.interact(card, ui.id().with("slide_card"), Sense::click())
+            .context_menu(|ui| {
+                ui.label(RichText::new("Slide layout").strong());
+                new_layout = layout_menu(ui, slide.layout);
+            });
+    }
+
+    // Wie viele Checkboxen dieses Zweigs schon erledigt sind
+    let tasks = slide.branch.and_then(|b| map.task_progress(b));
+    // Angeklickte Checkbox, wird nach dem Zeichnen umgeschaltet
+    let mut ticked: Option<(u64, Pos2)> = None;
+
+    // Titel steigt auf und blendet ein, die Linie darunter zieht sich auf
+    let title_in = ease_out_cubic(progress(now, view.slide_time, 0.55));
+    let line_in = ease_out_cubic(progress(now, view.slide_time + 0.2, 0.5));
+    let mut animating = title_in < 1.0 || line_in < 1.0 || appear < 1.0;
+
+    // Inhalt der Folie in eigenem Bereich, der mit dem Übergang ein- und ausblendet
+    {
+        let content = card.shrink2(Vec2::new(100.0, 70.0) * s);
+        let mut ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(content)
+                .layout(Layout::top_down(Align::Min)),
+        );
+        ui.multiply_opacity(appear);
+        ui.style_mut().interaction.selectable_labels = false;
+        ui.spacing_mut().item_spacing.y = 10.0 * s;
+
+        // Auf einem Vollbild steht der Text hell auf abgedunkeltem Bild
+        let ink = if full_bleed {
+            Color32::WHITE
+        } else {
+            theme.text
+        };
+        let title = |ui: &mut egui::Ui, text: &str, size: f32| {
+            ui.add_space((1.0 - title_in) * 26.0 * s);
+            let rect = ui
+                .scope(|ui| {
+                    ui.multiply_opacity(title_in);
+                    ui.add(
+                        egui::Label::new(RichText::new(text).size(size).strong().color(ink)).wrap(),
+                    )
+                    .rect
+                })
+                .inner;
+            // Lichtschimmer: ein heller, schräger Streifen zieht einmal über den Titel
+            let sweep = progress(now, view.slide_time + 0.45, 0.9);
+            if fx.shine && sweep > 0.0 && sweep < 1.0 {
+                let clip = ui.painter().with_clip_rect(rect.expand(4.0));
+                let band = rect.height() * 0.9;
+                let x = rect.left() - band + (rect.width() + 2.0 * band) * sweep;
+                let tilt = rect.height() * 0.4;
+                let glow =
+                    Color32::WHITE.gamma_multiply(0.35 * (std::f32::consts::PI * sweep).sin());
+                clip.add(egui::Shape::convex_polygon(
+                    vec![
+                        Pos2::new(x + tilt, rect.top()),
+                        Pos2::new(x + tilt + band * 0.5, rect.top()),
+                        Pos2::new(x + band * 0.5, rect.bottom()),
+                        Pos2::new(x, rect.bottom()),
+                    ],
+                    glow,
+                    Stroke::NONE,
+                ));
+            }
+        };
+
+        if slide.is_title {
+            ui.add_space(content.height() * 0.22);
+            title(&mut ui, &slide.title, 76.0 * s);
+            if !slide.note.trim().is_empty() {
+                ui.scope(|ui| {
+                    ui.multiply_opacity(line_in);
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(slide.note.trim())
+                                .size(28.0 * s)
+                                .color(ink.gamma_multiply(0.8)),
+                        )
+                        .wrap(),
+                    );
+                });
+            }
+            ui.add_space(36.0 * s);
+            // Kapitel-Marken ploppen nacheinander auf
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0) * s;
+                for (i, (_, text, color, _, _)) in slide.bullets.iter().enumerate() {
+                    let pop = progress(now, view.slide_time + 0.35 + i as f64 * 0.09, 0.4);
+                    animating |= pop < 1.0;
+                    // Feste Größe vorab, damit eine Marke als Ganzes in die nächste Zeile rutscht
+                    let galley = ui.painter().layout_no_wrap(
+                        text.clone(),
+                        FontId::proportional(20.0 * s),
+                        theme.on_accent,
+                    );
+                    let size = galley.size() + Vec2::new(36.0, 16.0) * s;
+                    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+                    if pop > 0.0 {
+                        let mut p = ui.painter().clone();
+                        p.multiply_opacity(pop.min(1.0));
+                        let r =
+                            Rect::from_center_size(rect.center(), rect.size() * ease_out_back(pop));
+                        p.rect_filled(r, r.height() / 2.0, *color);
+                        if pop > 0.5 {
+                            p.galley(rect.center() - galley.size() / 2.0, galley, theme.on_accent);
+                        }
+                    }
+                }
+            });
+        } else {
+            ui.scope(|ui| {
+                ui.multiply_opacity(title_in);
+                let mut counter = format!("{} / {}", view.index, last);
+                if let Some((done, total)) = tasks {
+                    counter.push_str(&format!("   ·   {done} of {total} done"));
+                }
+                ui.label(RichText::new(counter).size(18.0 * s).color(slide.color));
+            });
+            title(&mut ui, &slide.title, 54.0 * s);
+            let (line, _) = ui.allocate_exact_size(Vec2::new(90.0, 6.0) * s, Sense::hover());
+            let drawn =
+                Rect::from_min_size(line.min, Vec2::new(line.width() * line_in, line.height()));
+            ui.painter().rect_filled(drawn, 3.0 * s, slide.color);
+            ui.add_space(14.0 * s);
+            if !slide.note.trim().is_empty() {
+                ui.scope(|ui| {
+                    ui.multiply_opacity(line_in);
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(slide.note.trim())
+                                .size(24.0 * s)
+                                .color(ink.gamma_multiply(0.85)),
+                        )
+                        .wrap(),
+                    );
+                });
+                ui.add_space(10.0 * s);
+            }
+
+            if let Some(layout) = slide.layout {
+                // Diagramm statt Aufzählung, baut sich genauso schrittweise auf
+                let building = build_bullets && slide.groups() > 0;
+                let reveal = |g: usize| {
+                    let start = if building {
+                        if g >= view.build {
+                            f64::INFINITY
+                        } else if g + 1 == view.build {
+                            view.build_time
+                        } else {
+                            f64::NEG_INFINITY
+                        }
+                    } else {
+                        view.slide_time + 0.4 + g as f64 * 0.18
+                    };
+                    progress(now, start, 0.55)
+                };
+                let count_up = progress(now, view.slide_time + 0.3, 1.4);
+                animating |= now - view.slide_time.max(view.build_time) < 3.0;
+                let rect = ui.available_rect_before_wrap();
+                ui.allocate_rect(rect, Sense::hover());
+                draw_diagram(
+                    ui.painter(),
+                    rect.shrink2(Vec2::new(0.0, 6.0 * s)),
+                    layout,
+                    &slide.items(),
+                    &slide.note,
+                    theme,
+                    slide.color,
+                    s,
+                    &reveal,
+                    count_up,
+                );
+            } else {
+                // Stichpunkte: noch verdeckte nehmen schon ihren Platz ein, damit nichts
+                // verrutscht. Jede Gruppe erscheint mit dem gewählten Effekt; beim
+                // schrittweisen Aufbau werden ältere Gruppen blasser.
+                // Bilder neben den Stichpunkten, oder als Galerie, wenn es keine gibt
+                let mut side_ui;
+                let ui = if full_bleed || slide.images.is_empty() {
+                    &mut ui
+                } else {
+                    let rect = ui.available_rect_before_wrap();
+                    let (text_rect, picture_rect) = if slide.bullets.is_empty() {
+                        (None, rect)
+                    } else {
+                        let split = rect.left() + rect.width() * 0.55;
+                        (
+                            Some(Rect::from_min_max(
+                                rect.min,
+                                Pos2::new(split, rect.bottom()),
+                            )),
+                            Rect::from_min_max(Pos2::new(split + 30.0 * s, rect.top()), rect.max),
+                        )
+                    };
+                    picture_grid(
+                        ui.painter(),
+                        &ctx,
+                        &map.images,
+                        &slide.images,
+                        picture_rect.shrink2(Vec2::new(0.0, 4.0 * s)),
+                        s,
+                        pictures_in,
+                        theme,
+                    );
+                    animating |= pictures_in < 1.0;
+                    match text_rect {
+                        Some(text_rect) => {
+                            side_ui = ui.new_child(
+                                UiBuilder::new()
+                                    .max_rect(text_rect)
+                                    .layout(Layout::top_down(Align::Min)),
+                            );
+                            &mut side_ui
+                        }
+                        None => &mut ui,
+                    }
+                };
+                let building = build_bullets && slide.groups() > 0;
+                let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
+                let mut group = 0;
+                for (i, (depth, text, color, task, node)) in slide.bullets.iter().enumerate() {
+                    if *depth == 0 && i > 0 {
+                        group += 1;
+                    }
+                    let start = if building {
+                        if group >= view.build {
+                            f64::INFINITY
+                        } else if group + 1 == view.build {
+                            view.build_time
+                        } else {
+                            f64::NEG_INFINITY
+                        }
+                    } else {
+                        view.slide_time + 0.35 + group as f64 * 0.12
+                    };
+                    let duration = match fx.bullets {
+                        BulletFx::Typewriter => (text.chars().count() as f64 * 0.025).max(0.35),
+                        _ => 0.35,
+                    };
+                    let raw = progress(now, start, duration);
+                    animating |= raw < 1.0 && start.is_finite();
+                    let e = ease_out_cubic(raw);
+                    let dim = if building && group + 1 < view.build {
+                        0.4
+                    } else {
+                        1.0
+                    };
+                    let base_size = (30.0 - *depth as f32 * 4.0) * s * shrink;
+                    let (alpha, shift, size, shown) = match fx.bullets {
+                        BulletFx::SlideIn => (e, (1.0 - e) * 36.0 * s, base_size, text.clone()),
+                        BulletFx::Fade => (e, 0.0, base_size, text.clone()),
+                        BulletFx::Pop => (
+                            e,
+                            0.0,
+                            base_size * (0.55 + 0.45 * ease_out_back(raw)),
+                            text.clone(),
+                        ),
+                        BulletFx::Typewriter => {
+                            let n = (text.chars().count() as f32 * raw).ceil() as usize;
+                            let alpha = if raw > 0.0 { 1.0 } else { 0.0 };
+                            (alpha, 0.0, base_size, text.chars().take(n).collect())
+                        }
+                    };
+                    ui.scope(|ui| {
+                        ui.multiply_opacity(alpha * dim);
+                        ui.horizontal_top(|ui| {
+                            ui.add_space(*depth as f32 * 40.0 * s + shift);
+                            let (dot, _) = ui.allocate_exact_size(
+                                Vec2::new(base_size * 0.8, base_size * 1.2),
+                                Sense::hover(),
+                            );
+                            let mut label = RichText::new(shown).size(size).color(theme.text);
+                            if let Some(done) = *task {
+                                // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen.
+                                // Sichtbare Checkboxen lassen sich anklicken.
+                                let r =
+                                    Rect::from_center_size(dot.center(), Vec2::splat(size * 0.62));
+                                paint_checkbox(
+                                    ui.painter(),
+                                    r,
+                                    done,
+                                    *color,
+                                    theme.text.gamma_multiply(0.7),
+                                );
+                                if alpha > 0.0 {
+                                    let click = ui
+                                        .interact(
+                                            r.expand(6.0 * s),
+                                            ui.id().with(("slide_task", node)),
+                                            Sense::click(),
+                                        )
+                                        .on_hover_cursor(CursorIcon::PointingHand);
+                                    if click.clicked() {
+                                        ticked = Some((*node, r.center()));
+                                    }
+                                }
+                                if done {
+                                    label =
+                                        label.strikethrough().color(theme.text.gamma_multiply(0.5));
+                                }
+                            } else {
+                                let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
+                                ui.painter().circle_filled(dot.center(), radius, *color);
+                            }
+                            ui.add(egui::Label::new(label).wrap());
+                        });
+                    });
+                }
+            }
+        }
+    }
+    animating |= full_bleed && (pictures_in < 1.0 || fx.ken_burns);
+
+    // Fortschritt unten auf der Folie
+    let track = Rect::from_min_size(
+        card.left_bottom() + Vec2::new(44.0, -34.0) * s,
+        Vec2::new(card.width() - 88.0 * s, 4.0 * s),
+    );
+    painter.rect_filled(track, 2.0 * s, theme.grid);
+    painter.rect_filled(
+        Rect::from_min_size(
+            track.min,
+            Vec2::new(
+                track.width() * view.progress.clamp(0.0, 1.0),
+                track.height(),
+            ),
+        ),
+        2.0 * s,
+        slide.color,
+    );
+    SlideOutput {
+        ticked,
+        new_layout,
+        animating,
+    }
+}
+
+/// Notizen zur Folie: die des Zweigs und die seiner Stichpunkte
+fn speaker_notes(map: &MindMap, slide: &Slide) -> Vec<(String, String)> {
+    let mut notes = Vec::new();
+    let node = slide.branch.or_else(|| map.root());
+    let Some(node) = node.and_then(|id| map.get(id)) else {
+        return notes;
+    };
+    if !node.note.trim().is_empty() {
+        notes.push((String::new(), node.note.trim().to_string()));
+    }
+    if slide.branch.is_some() {
+        for id in map.subtree(node.id).into_iter().skip(1) {
+            if let Some(n) = map.get(id).filter(|n| !n.note.trim().is_empty()) {
+                notes.push((n.text.clone(), n.note.trim().to_string()));
+            }
+        }
+    }
+    notes
+}
+
+/// Inhalt der Referentenansicht; gibt die gedrückten Tasten zurück
+#[allow(clippy::too_many_arguments)]
+fn presenter_body(
+    ui: &mut egui::Ui,
+    doc: &mut Document,
+    slides: &[Slide],
+    theme: &Theme,
+    fx: &Effects,
+    build_bullets: bool,
+    now: f64,
+    start: f64,
+) -> Nav {
+    let weak = theme.text.gamma_multiply(0.55);
+    let nav = read_nav(ui);
+    let last = slides.len() - 1;
+    let slide = &slides[doc.slide.min(last)];
+
+    // Kopfzeile: Stoppuhr, Uhrzeit, Position
+    ui.horizontal(|ui| {
+        let secs = (now - start).max(0.0) as u64;
+        ui.label(
+            RichText::new(format!("{:02}:{:02}", secs / 60, secs % 60))
+                .size(34.0)
+                .strong()
+                .color(theme.text),
+        );
+        if ui
+            .button(format!("{}  Reset", icon::ARROW_COUNTER_CLOCKWISE))
+            .on_hover_text("Start the timer again")
+            .clicked()
+        {
+            doc.presenter_start = Some(now);
+        }
+        ui.separator();
+        ui.label(
+            RichText::new(format!(
+                "{}  {}",
+                icon::CLOCK,
+                chrono::Local::now().format("%H:%M")
+            ))
+            .size(20.0)
+            .color(weak),
+        );
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let mut position = if slide.is_title {
+                format!("Title slide · {} slides", last)
+            } else {
+                format!("Slide {} of {}", doc.slide, last)
+            };
+            let groups = slide.groups();
+            if build_bullets && groups > 0 {
+                position.push_str(&format!("  ·  point {} of {groups}", doc.build));
+            }
+            ui.label(RichText::new(position).size(18.0).color(weak));
+        });
+    });
+    ui.add_space(12.0);
+
+    // Unten Platz für die Tastenhinweise lassen
+    let full = ui.available_rect_before_wrap();
+    let rest = Rect::from_min_max(full.min, full.max - Vec2::new(0.0, 28.0));
+    let gap = 20.0;
+    let left_w = (rest.width() - gap) * 0.62;
+    let right_w = rest.width() - gap - left_w;
+    let label = |ui: &egui::Ui, pos: Pos2, text: &str| {
+        ui.painter().text(
+            pos,
+            Align2::LEFT_BOTTOM,
+            text,
+            FontId::proportional(13.0),
+            weak,
+        );
+    };
+
+    // Aktuelle Folie, so wie das Publikum sie sieht
+    let current = Rect::from_min_size(
+        rest.min + Vec2::new(0.0, 20.0),
+        Vec2::new(left_w, (left_w * 9.0 / 16.0).min(rest.height() - 20.0)),
+    );
+    label(ui, current.left_top() - Vec2::new(0.0, 4.0), "NOW");
+    let view = SlideView {
+        slides,
+        index: doc.slide.min(last),
+        build: doc.build,
+        build_time: doc.build_time,
+        slide_time: doc.slide_time,
+        now,
+        appear: 1.0,
+        progress: (doc.slide + 1) as f32 / slides.len() as f32,
+        interactive: false,
+        page: false,
+    };
+    let mut child = ui.new_child(UiBuilder::new().max_rect(current).id_salt("presenter_now"));
+    let out = render_slide(
+        &mut child,
+        current,
+        &view,
+        &doc.map,
+        theme,
+        fx,
+        build_bullets,
+    );
+    if out.animating {
+        ui.ctx().request_repaint();
+    }
+
+    // Nächste Folie, fertig aufgebaut
+    let right = Rect::from_min_max(
+        Pos2::new(current.right() + gap, rest.top() + 20.0),
+        rest.max,
+    );
+    let next = Rect::from_min_size(right.min, Vec2::new(right_w, right_w * 9.0 / 16.0));
+    label(ui, next.left_top() - Vec2::new(0.0, 4.0), "NEXT");
+    if doc.slide < last {
+        let index = doc.slide + 1;
+        let view = SlideView {
+            slides,
+            index,
+            build: slides[index].groups(),
+            build_time: f64::NEG_INFINITY,
+            slide_time: now - 1000.0,
+            now,
+            appear: 1.0,
+            progress: (index + 1) as f32 / slides.len() as f32,
+            interactive: false,
+            page: false,
+        };
+        let mut child = ui.new_child(UiBuilder::new().max_rect(next).id_salt("presenter_next"));
+        render_slide(&mut child, next, &view, &doc.map, theme, fx, build_bullets);
+    } else {
+        ui.painter().rect_filled(next, 14.0, theme.card);
+        ui.painter().text(
+            next.center(),
+            Align2::CENTER_CENTER,
+            "End of the presentation",
+            FontId::proportional(18.0),
+            weak,
+        );
+    }
+
+    // Notizen unter der nächsten Folie
+    let notes_rect = Rect::from_min_max(Pos2::new(right.left(), next.bottom() + 28.0), right.max);
+    label(ui, notes_rect.left_top() - Vec2::new(0.0, 6.0), "NOTES");
+    let mut notes_ui = ui.new_child(
+        UiBuilder::new()
+            .max_rect(notes_rect)
+            .layout(Layout::top_down(Align::Min)),
+    );
+    egui::Frame::default()
+                .fill(theme.card)
+                .corner_radius(12.0)
+                .inner_margin(egui::Margin::same(14))
+                .show(&mut notes_ui, |ui| {
+                    let inner = (notes_rect.size() - Vec2::splat(28.0)).max(Vec2::ZERO);
+                    ui.set_min_size(inner);
+                    ui.set_max_size(inner);
+                    egui::ScrollArea::vertical()
+                        .id_salt("presenter_notes")
+                        .max_height(inner.y)
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            let notes = speaker_notes(&doc.map, slide);
+                            if notes.is_empty() {
+                                ui.label(
+                                    RichText::new(
+                                        "No notes on this slide. Add them in the mind map: right-click a node → Note …",
+                                    )
+                                    .size(15.0)
+                                    .color(weak),
+                                );
+                            }
+                            for (title, note) in notes {
+                                if !title.is_empty() {
+                                    ui.label(
+                                        RichText::new(title)
+                                            .size(15.0)
+                                            .strong()
+                                            .color(slide.color),
+                                    );
+                                }
+                                ui.label(RichText::new(note).size(17.0).color(theme.text));
+                                ui.add_space(8.0);
+                            }
+                        });
+                });
+    // Hinweis unten links
+    ui.painter().text(
+        Pos2::new(full.left(), full.bottom()),
+        Align2::LEFT_BOTTOM,
+        "Space · → next   ← back   G quick jump   P close this window   Esc end",
+        FontId::proportional(13.0),
+        weak,
+    );
+    nav
+}
+
+/// Für Tests: die Referentenansicht direkt in `ui` zeichnen
+#[cfg(test)]
+pub fn presenter_snapshot(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, fx: &Effects) {
+    let slides = slides(&doc.map, theme);
+    let now = ui.input(|i| i.time);
+    let start = doc.presenter_start.unwrap_or(now);
+    presenter_body(ui, doc, &slides, theme, fx, true, now, start);
+}
+
+/// Referentenansicht in einem eigenen Fenster: aktuelle und nächste Folie,
+/// Notizen, Stoppuhr und Uhrzeit. Gibt die dort gedrückten Tasten zurück.
+fn presenter_window(
+    ctx: &egui::Context,
+    doc: &mut Document,
+    slides: &[Slide],
+    theme: &Theme,
+    fx: &Effects,
+    build_bullets: bool,
+    now: f64,
+) -> Nav {
+    let start = *doc.presenter_start.get_or_insert(now);
+    let builder = egui::ViewportBuilder::default()
+        .with_title("Mindful – Presenter view")
+        .with_inner_size([1100.0, 700.0])
+        .with_min_inner_size([640.0, 420.0]);
+    ctx.show_viewport_immediate(
+        egui::ViewportId::from_hash_of("mindful_presenter"),
+        builder,
+        |ctx, class| {
+            if ctx.input(|i| i.viewport().close_requested()) {
+                doc.presenter = false;
+            }
+            // Stoppuhr und Uhr jede Sekunde aktualisieren
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+            let mut nav = Nav::default();
+            let mut body = |ui: &mut egui::Ui| {
+                nav = presenter_body(ui, doc, slides, theme, fx, build_bullets, now, start);
+            };
+            if class == egui::ViewportClass::Embedded {
+                // Kein zweites Fenster möglich: als Fenster in der App
+                let mut open = true;
+                egui::Window::new("Presenter view")
+                    .open(&mut open)
+                    .resizable(false)
+                    .fixed_size([960.0, 600.0])
+                    .frame(egui::Frame::window(&ctx.style()).fill(theme.background))
+                    .show(ctx, |ui| {
+                        body(ui);
+                    });
+                if !open {
+                    doc.presenter = false;
+                }
+            } else {
+                egui::CentralPanel::default()
+                    .frame(
+                        egui::Frame::default()
+                            .fill(theme.background)
+                            .inner_margin(egui::Margin::same(18)),
+                    )
+                    .show(ctx, |ui| body(ui));
+            }
+            nav
+        },
+    )
+}
+
+/// Anzahl der Folien (Titelfolie plus eine je Hauptzweig)
+pub fn slide_count(map: &MindMap, theme: &Theme) -> usize {
+    slides(map, theme).len()
+}
+
+/// Folie `index` fertig aufgebaut und ohne Animation in die ganze Fläche zeichnen
+/// (PDF-Export, Vorschau der nächsten Folie)
+pub fn draw_static(ui: &mut egui::Ui, map: &MindMap, theme: &Theme, fx: &Effects, index: usize) {
+    let slides = slides(map, theme);
+    let Some(slide) = slides.get(index) else {
+        return;
+    };
+    let now = ui.input(|i| i.time);
+    let view = SlideView {
+        slides: &slides,
+        index,
+        build: slide.groups(),
+        build_time: f64::NEG_INFINITY,
+        slide_time: now - 1000.0,
+        now,
+        appear: 1.0,
+        progress: (index + 1) as f32 / slides.len() as f32,
+        interactive: false,
+        page: true,
+    };
+    render_slide(ui, ui.max_rect(), &view, map, theme, fx, true);
+}
+
 /// `build_bullets`: Stichpunkte nacheinander aufdecken
 pub fn show(
     ui: &mut egui::Ui,
@@ -1116,7 +1885,15 @@ pub fn show(
         doc.build = build;
     };
     let mut event = None;
-    let nav = read_nav(ui);
+    let mut nav = read_nav(ui);
+    // Referentenansicht im zweiten Fenster; dort gedrückte Tasten zählen mit
+    if doc.presenter {
+        let keys = presenter_window(ui.ctx(), doc, &slides, theme, fx, build_bullets, now);
+        nav = nav.merge(keys);
+    }
+    if nav.presenter {
+        doc.presenter = !doc.presenter;
+    }
     let area = ui.max_rect();
     let ctx = ui.ctx().clone();
 
@@ -1206,63 +1983,29 @@ pub fn show(
         base.center() + shift * (w / 1280.0),
         base.size() * scale * slow_zoom,
     );
-    // Alle Maße relativ zu einer 1280 px breiten Folie
-    let s = card.width() / 1280.0;
+    let view = SlideView {
+        slides: &slides,
+        index: doc.slide,
+        build: doc.build,
+        build_time: doc.build_time,
+        slide_time: doc.slide_time,
+        now,
+        appear,
+        progress: (anim + 1.0) / slides.len() as f32,
+        interactive: true,
+        page: false,
+    };
+    let SlideOutput {
+        ticked,
+        new_layout,
+        animating,
+    } = render_slide(ui, card, &view, &doc.map, theme, fx, build_bullets);
 
-    painter.rect_filled(
-        card.translate(Vec2::new(0.0, 10.0 * s)).expand(2.0 * s),
-        24.0 * s,
-        Color32::from_black_alpha(if theme.dark { 110 } else { 35 }),
-    );
-    painter.rect_filled(card, 24.0 * s, theme.card);
-    let full_bleed = slide.full_bleed();
-    // Bilder blenden mit der Folie ein
-    let pictures_in = ease_out_cubic(progress(now, doc.slide_time + 0.1, 0.8));
-    if full_bleed {
-        let picture = &slide.images[0];
-        let zoom = if fx.ken_burns {
-            1.0 + 0.07 * ease_in_out_cubic(progress(now, doc.slide_time, 16.0))
-        } else {
-            1.0
-        };
-        match doc.map.images.get(&picture.key) {
-            Some(img) => {
-                images::paint(
-                    &painter,
-                    &ctx,
-                    &picture.key,
-                    img,
-                    card,
-                    Fit::Cover,
-                    24.0 * s,
-                    Color32::WHITE.gamma_multiply(appear * pictures_in),
-                    zoom,
-                );
-            }
-            None => images::placeholder(&painter, card, 24.0 * s),
-        }
-        darken_for_text(&painter, card, s, slide.is_title, appear);
-    }
-    if fx.accent_bar {
-        let accent_bar = Rect::from_min_max(
-            card.left_top() + Vec2::new(44.0, 80.0) * s,
-            card.left_bottom() + Vec2::new(52.0, -80.0) * s,
-        );
-        painter.rect_filled(accent_bar, 4.0 * s, slide.color.gamma_multiply(appear));
-    }
-
-    // Rechtsklick auf die Folie: Layout wählen (vor dem Inhalt, damit Checkboxen Vorrang haben)
-    let mut new_layout: Option<Option<SlideLayout>> = None;
-    if slide.branch.is_some() {
-        ui.interact(card, ui.id().with("slide_card"), Sense::click())
-            .context_menu(|ui| {
-                ui.label(RichText::new("Slide layout").strong());
-                new_layout = layout_menu(ui, slide.layout);
-            });
-    }
-
-    let (corner_event, strip_clicked) =
+    let (corner_event, strip_clicked, presenter_clicked) =
         corner_buttons(ui, area, "End presentation (Esc)", fx, false);
+    if presenter_clicked {
+        doc.presenter = !doc.presenter;
+    }
     if corner_event.is_some() {
         event = corner_event;
     }
@@ -1271,313 +2014,6 @@ pub fn show(
         doc.strip_cursor = doc.slide;
     }
 
-    // Wie viele Checkboxen dieses Zweigs schon erledigt sind
-    let tasks = slide.branch.and_then(|b| doc.map.task_progress(b));
-    // Angeklickte Checkbox, wird nach dem Zeichnen umgeschaltet
-    let mut ticked: Option<(u64, Pos2)> = None;
-
-    // Titel steigt auf und blendet ein, die Linie darunter zieht sich auf
-    let title_in = ease_out_cubic(progress(now, doc.slide_time, 0.55));
-    let line_in = ease_out_cubic(progress(now, doc.slide_time + 0.2, 0.5));
-    let mut animating = title_in < 1.0 || line_in < 1.0 || appear < 1.0;
-
-    // Inhalt der Folie in eigenem Bereich, der mit dem Übergang ein- und ausblendet
-    {
-        let content = card.shrink2(Vec2::new(100.0, 70.0) * s);
-        let mut ui = ui.new_child(
-            UiBuilder::new()
-                .max_rect(content)
-                .layout(Layout::top_down(Align::Min)),
-        );
-        ui.multiply_opacity(appear);
-        ui.style_mut().interaction.selectable_labels = false;
-        ui.spacing_mut().item_spacing.y = 10.0 * s;
-
-        // Auf einem Vollbild steht der Text hell auf abgedunkeltem Bild
-        let ink = if full_bleed {
-            Color32::WHITE
-        } else {
-            theme.text
-        };
-        let title = |ui: &mut egui::Ui, text: &str, size: f32| {
-            ui.add_space((1.0 - title_in) * 26.0 * s);
-            let rect = ui
-                .scope(|ui| {
-                    ui.multiply_opacity(title_in);
-                    ui.add(
-                        egui::Label::new(RichText::new(text).size(size).strong().color(ink)).wrap(),
-                    )
-                    .rect
-                })
-                .inner;
-            // Lichtschimmer: ein heller, schräger Streifen zieht einmal über den Titel
-            let sweep = progress(now, doc.slide_time + 0.45, 0.9);
-            if fx.shine && sweep > 0.0 && sweep < 1.0 {
-                let clip = ui.painter().with_clip_rect(rect.expand(4.0));
-                let band = rect.height() * 0.9;
-                let x = rect.left() - band + (rect.width() + 2.0 * band) * sweep;
-                let tilt = rect.height() * 0.4;
-                let glow =
-                    Color32::WHITE.gamma_multiply(0.35 * (std::f32::consts::PI * sweep).sin());
-                clip.add(egui::Shape::convex_polygon(
-                    vec![
-                        Pos2::new(x + tilt, rect.top()),
-                        Pos2::new(x + tilt + band * 0.5, rect.top()),
-                        Pos2::new(x + band * 0.5, rect.bottom()),
-                        Pos2::new(x, rect.bottom()),
-                    ],
-                    glow,
-                    Stroke::NONE,
-                ));
-            }
-        };
-
-        if slide.is_title {
-            ui.add_space(content.height() * 0.22);
-            title(&mut ui, &slide.title, 76.0 * s);
-            if !slide.note.trim().is_empty() {
-                ui.scope(|ui| {
-                    ui.multiply_opacity(line_in);
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(slide.note.trim())
-                                .size(28.0 * s)
-                                .color(ink.gamma_multiply(0.8)),
-                        )
-                        .wrap(),
-                    );
-                });
-            }
-            ui.add_space(36.0 * s);
-            // Kapitel-Marken ploppen nacheinander auf
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0) * s;
-                for (i, (_, text, color, _, _)) in slide.bullets.iter().enumerate() {
-                    let pop = progress(now, doc.slide_time + 0.35 + i as f64 * 0.09, 0.4);
-                    animating |= pop < 1.0;
-                    // Feste Größe vorab, damit eine Marke als Ganzes in die nächste Zeile rutscht
-                    let galley = ui.painter().layout_no_wrap(
-                        text.clone(),
-                        FontId::proportional(20.0 * s),
-                        theme.on_accent,
-                    );
-                    let size = galley.size() + Vec2::new(36.0, 16.0) * s;
-                    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-                    if pop > 0.0 {
-                        let mut p = ui.painter().clone();
-                        p.multiply_opacity(pop.min(1.0));
-                        let r =
-                            Rect::from_center_size(rect.center(), rect.size() * ease_out_back(pop));
-                        p.rect_filled(r, r.height() / 2.0, *color);
-                        if pop > 0.5 {
-                            p.galley(rect.center() - galley.size() / 2.0, galley, theme.on_accent);
-                        }
-                    }
-                }
-            });
-        } else {
-            ui.scope(|ui| {
-                ui.multiply_opacity(title_in);
-                let mut counter = format!("{} / {}", doc.slide, last);
-                if let Some((done, total)) = tasks {
-                    counter.push_str(&format!("   ·   {done} of {total} done"));
-                }
-                ui.label(RichText::new(counter).size(18.0 * s).color(slide.color));
-            });
-            title(&mut ui, &slide.title, 54.0 * s);
-            let (line, _) = ui.allocate_exact_size(Vec2::new(90.0, 6.0) * s, Sense::hover());
-            let drawn =
-                Rect::from_min_size(line.min, Vec2::new(line.width() * line_in, line.height()));
-            ui.painter().rect_filled(drawn, 3.0 * s, slide.color);
-            ui.add_space(14.0 * s);
-            if !slide.note.trim().is_empty() {
-                ui.scope(|ui| {
-                    ui.multiply_opacity(line_in);
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(slide.note.trim())
-                                .size(24.0 * s)
-                                .color(ink.gamma_multiply(0.85)),
-                        )
-                        .wrap(),
-                    );
-                });
-                ui.add_space(10.0 * s);
-            }
-
-            if let Some(layout) = slide.layout {
-                // Diagramm statt Aufzählung, baut sich genauso schrittweise auf
-                let building = build_bullets && slide.groups() > 0;
-                let reveal = |g: usize| {
-                    let start = if building {
-                        if g >= doc.build {
-                            f64::INFINITY
-                        } else if g + 1 == doc.build {
-                            doc.build_time
-                        } else {
-                            f64::NEG_INFINITY
-                        }
-                    } else {
-                        doc.slide_time + 0.4 + g as f64 * 0.18
-                    };
-                    progress(now, start, 0.55)
-                };
-                let count_up = progress(now, doc.slide_time + 0.3, 1.4);
-                animating |= now - doc.slide_time.max(doc.build_time) < 3.0;
-                let rect = ui.available_rect_before_wrap();
-                ui.allocate_rect(rect, Sense::hover());
-                draw_diagram(
-                    ui.painter(),
-                    rect.shrink2(Vec2::new(0.0, 6.0 * s)),
-                    layout,
-                    &slide.items(),
-                    &slide.note,
-                    theme,
-                    slide.color,
-                    s,
-                    &reveal,
-                    count_up,
-                );
-            } else {
-                // Stichpunkte: noch verdeckte nehmen schon ihren Platz ein, damit nichts
-                // verrutscht. Jede Gruppe erscheint mit dem gewählten Effekt; beim
-                // schrittweisen Aufbau werden ältere Gruppen blasser.
-                // Bilder neben den Stichpunkten, oder als Galerie, wenn es keine gibt
-                let mut side_ui;
-                let ui = if full_bleed || slide.images.is_empty() {
-                    &mut ui
-                } else {
-                    let rect = ui.available_rect_before_wrap();
-                    let (text_rect, picture_rect) = if slide.bullets.is_empty() {
-                        (None, rect)
-                    } else {
-                        let split = rect.left() + rect.width() * 0.55;
-                        (
-                            Some(Rect::from_min_max(
-                                rect.min,
-                                Pos2::new(split, rect.bottom()),
-                            )),
-                            Rect::from_min_max(Pos2::new(split + 30.0 * s, rect.top()), rect.max),
-                        )
-                    };
-                    picture_grid(
-                        ui.painter(),
-                        &ctx,
-                        &doc.map.images,
-                        &slide.images,
-                        picture_rect.shrink2(Vec2::new(0.0, 4.0 * s)),
-                        s,
-                        pictures_in,
-                        theme,
-                    );
-                    animating |= pictures_in < 1.0;
-                    match text_rect {
-                        Some(text_rect) => {
-                            side_ui = ui.new_child(
-                                UiBuilder::new()
-                                    .max_rect(text_rect)
-                                    .layout(Layout::top_down(Align::Min)),
-                            );
-                            &mut side_ui
-                        }
-                        None => &mut ui,
-                    }
-                };
-                let building = build_bullets && slide.groups() > 0;
-                let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
-                let mut group = 0;
-                for (i, (depth, text, color, task, node)) in slide.bullets.iter().enumerate() {
-                    if *depth == 0 && i > 0 {
-                        group += 1;
-                    }
-                    let start = if building {
-                        if group >= doc.build {
-                            f64::INFINITY
-                        } else if group + 1 == doc.build {
-                            doc.build_time
-                        } else {
-                            f64::NEG_INFINITY
-                        }
-                    } else {
-                        doc.slide_time + 0.35 + group as f64 * 0.12
-                    };
-                    let duration = match fx.bullets {
-                        BulletFx::Typewriter => (text.chars().count() as f64 * 0.025).max(0.35),
-                        _ => 0.35,
-                    };
-                    let raw = progress(now, start, duration);
-                    animating |= raw < 1.0 && start.is_finite();
-                    let e = ease_out_cubic(raw);
-                    let dim = if building && group + 1 < doc.build {
-                        0.4
-                    } else {
-                        1.0
-                    };
-                    let base_size = (30.0 - *depth as f32 * 4.0) * s * shrink;
-                    let (alpha, shift, size, shown) = match fx.bullets {
-                        BulletFx::SlideIn => (e, (1.0 - e) * 36.0 * s, base_size, text.clone()),
-                        BulletFx::Fade => (e, 0.0, base_size, text.clone()),
-                        BulletFx::Pop => (
-                            e,
-                            0.0,
-                            base_size * (0.55 + 0.45 * ease_out_back(raw)),
-                            text.clone(),
-                        ),
-                        BulletFx::Typewriter => {
-                            let n = (text.chars().count() as f32 * raw).ceil() as usize;
-                            let alpha = if raw > 0.0 { 1.0 } else { 0.0 };
-                            (alpha, 0.0, base_size, text.chars().take(n).collect())
-                        }
-                    };
-                    ui.scope(|ui| {
-                        ui.multiply_opacity(alpha * dim);
-                        ui.horizontal_top(|ui| {
-                            ui.add_space(*depth as f32 * 40.0 * s + shift);
-                            let (dot, _) = ui.allocate_exact_size(
-                                Vec2::new(base_size * 0.8, base_size * 1.2),
-                                Sense::hover(),
-                            );
-                            let mut label = RichText::new(shown).size(size).color(theme.text);
-                            if let Some(done) = *task {
-                                // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen.
-                                // Sichtbare Checkboxen lassen sich anklicken.
-                                let r =
-                                    Rect::from_center_size(dot.center(), Vec2::splat(size * 0.62));
-                                paint_checkbox(
-                                    ui.painter(),
-                                    r,
-                                    done,
-                                    *color,
-                                    theme.text.gamma_multiply(0.7),
-                                );
-                                if alpha > 0.0 {
-                                    let click = ui
-                                        .interact(
-                                            r.expand(6.0 * s),
-                                            ui.id().with(("slide_task", node)),
-                                            Sense::click(),
-                                        )
-                                        .on_hover_cursor(CursorIcon::PointingHand);
-                                    if click.clicked() {
-                                        ticked = Some((*node, r.center()));
-                                    }
-                                }
-                                if done {
-                                    label =
-                                        label.strikethrough().color(theme.text.gamma_multiply(0.5));
-                                }
-                            } else {
-                                let radius = if *depth == 0 { size * 0.2 } else { size * 0.14 };
-                                ui.painter().circle_filled(dot.center(), radius, *color);
-                            }
-                            ui.add(egui::Label::new(label).wrap());
-                        });
-                    });
-                }
-            }
-        }
-    }
-    animating |= full_bleed && (pictures_in < 1.0 || fx.ken_burns);
     if animating {
         ctx.request_repaint();
     }
@@ -1599,19 +2035,6 @@ pub fn show(
             }
         }
     }
-
-    // Fortschritt unten auf der Folie
-    let track = Rect::from_min_size(
-        card.left_bottom() + Vec2::new(44.0, -34.0) * s,
-        Vec2::new(card.width() - 88.0 * s, 4.0 * s),
-    );
-    painter.rect_filled(track, 2.0 * s, theme.grid);
-    let done = ((anim + 1.0) / slides.len() as f32).clamp(0.0, 1.0);
-    painter.rect_filled(
-        Rect::from_min_size(track.min, Vec2::new(track.width() * done, track.height())),
-        2.0 * s,
-        slide.color,
-    );
 
     if fx.vignette {
         vignette(&painter, area);

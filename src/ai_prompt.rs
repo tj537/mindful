@@ -92,6 +92,10 @@ Every "## " section also becomes a slide in Mindful's presentation mode. By defa
 - <!-- venn --> for 2 or 3 ideas that overlap. Give each idea as a short label of at most 3 words, then one more point saying what they have in common. No sub-points.
 - <!-- number --> for one striking figure. The first point must start with the number, e.g. "13.8 billion years ago: the Big Bang" or "$4.2 million in sales"; up to 3 sub-points or further points become small facts below it.
 - <!-- quote --> for a famous quotation. A single point holding the quote, with exactly one sub-point naming who said it. Only use real, well-known quotes and never invent who said them.
+- <!-- bars --> for comparing amounts. 3–8 points, each written as "Label: number" with an optional unit, e.g. "Solar: 42 %" or "Germany: 83 million". No sub-points.
+- <!-- pie --> for the parts of a whole. 2–6 points written as "Label: number", ideally percentages that add up to 100 %. No sub-points.
+- <!-- line --> for a trend over time. 3–8 points written as "Year or period: number", in chronological order. No sub-points.
+For the three charts, only use figures you are confident are correct; if you are unsure, choose a different layout.
 Use a mix: about half of the sections should get a layout, each layout at most once or twice, and the rest stay plain bullet lists. Never put a layout tag on the "# " heading or on bullet points.
 "###;
 
