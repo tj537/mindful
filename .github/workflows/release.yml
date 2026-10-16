@@ -1,0 +1,88 @@
+# Beim Pushen eines Versions-Tags (z. B. v0.4.0): die Mac-App und die
+# Windows-Version bauen und an das GitHub-Release hängen. Die Beschreibung
+# kommt aus .github/release-notes/<tag>.md, sonst erzeugt GitHub sie.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build, e.g. v0.4.0"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  macos:
+    name: Build for macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Mindful.app and zip it
+        run: ./scripts/build-mac.sh --zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/Mindful-macos-arm64.zip
+          if-no-files-found: error
+
+  windows:
+    name: Build for Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build mindful.exe
+        run: cargo build --release
+      - name: Zip Mindful.exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/mindful.exe dist/Mindful.exe
+          Compress-Archive -Path dist/Mindful.exe -DestinationPath dist/Mindful-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/Mindful-windows-x64.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release or update its files
+        run: |
+          cd dist
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          notes="../.github/release-notes/$TAG.md"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" *.zip SHA256SUMS.txt --clobber
+          elif [ -f "$notes" ]; then
+            gh release create "$TAG" *.zip SHA256SUMS.txt --title "Mindful ${TAG#v}" --notes-file "$notes"
+          else
+            gh release create "$TAG" *.zip SHA256SUMS.txt --title "Mindful ${TAG#v}" --generate-notes
+          fi

@@ -519,6 +519,11 @@ Icons are inserted into text as characters: `format!("{}  Save", icon::FLOPPY_DI
 | Console window | hidden on Windows in release builds | `main.rs`, `windows_subsystem` |
 | Data folder | chosen by eframe per system | README |
 | Mac bundle | `Info.plist`, `.icns`, `codesign` | `packaging/`, `scripts/build-mac.sh` |
+| Windows icon | `assets/icon.ico` embedded into the `.exe` with `winresource` (only when building on Windows) | `build.rs` |
+| Child processes | `curl` and `cmd /C start` run with `CREATE_NO_WINDOW`, so no console window flashes up | `update.rs` |
+| Phone remote | the firewall may ask once whether Mindful may accept connections | `remote.rs` |
+
+**Builds on GitHub:** `.github/workflows/ci.yml` checks formatting (macOS), runs clippy and the tests on macOS, Windows and Linux for every push and pull request. `.github/workflows/release.yml` runs when a `v*` tag is pushed (or by hand with a tag): the macOS job runs `scripts/build-mac.sh --zip`, the Windows job builds `mindful.exe` and zips it as `Mindful.exe`, and the publish job adds `SHA256SUMS.txt` and creates the release – with the notes from `.github/release-notes/<tag>.md` if that file exists – or uploads the files to an existing release. The asset names stay the same in every version, so `releases/latest/download/…` links in the README always point to the newest build.
 
 **The Tab key:** egui normally uses Tab to jump from button to button. In the mind map, Tab should add a child instead. So `raw_input_hook` intercepts Tab **before** egui sees it. In the Markdown editor Tab is passed through, where it indents. Ctrl+Tab always switches tabs.
 

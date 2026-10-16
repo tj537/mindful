@@ -5,8 +5,10 @@ Write an outline, see it as a mind map, and present it as slides or as a camera 
 
 <p align="center">
   <a href="https://github.com/tj537/mindful/releases/latest/download/Mindful-macos-arm64.zip"><img src="https://img.shields.io/badge/Download_for_macOS-Apple_silicon-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download Mindful for macOS (Apple silicon)" height="44"></a>
+  &nbsp;
+  <a href="https://github.com/tj537/mindful/releases/latest/download/Mindful-windows-x64.zip"><img src="https://img.shields.io/badge/Download_for_Windows-10_%26_11-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download Mindful for Windows 10 and 11" height="44"></a>
 </p>
-<p align="center"><sub>macOS 11 or newer · M1 and newer · <a href="#download">install notes</a> · <a href="https://github.com/tj537/mindful/releases">all releases</a></sub></p>
+<p align="center"><sub><a href="#download">install notes</a> · <a href="https://github.com/tj537/mindful/releases">all releases</a> · <a href="https://github.com/tj537/mindful/actions/workflows/ci.yml"><img src="https://github.com/tj537/mindful/actions/workflows/ci.yml/badge.svg" alt="Tests" align="center"></a></sub></p>
 
 ![Mindful showing the example mind map “The Universe”](docs/screenshot-mindmap.png)
 
@@ -76,14 +78,13 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 
 ## Download
 
-**[⬇ Download Mindful for macOS (Apple silicon)](https://github.com/tj537/mindful/releases/latest/download/Mindful-macos-arm64.zip)**. Older versions are on the [Releases page](https://github.com/tj537/mindful/releases).
-
-| System | Status |
+| System | Download |
 |---|---|
-| macOS 11+ on Apple silicon (M1 and newer) | ✅ ready-made app |
-| macOS on Intel | builds from source, untested |
-| Windows 10/11 | builds from source, untested; a ready-made package is planned |
-| Linux | builds from source, untested |
+| macOS 11+ on Apple silicon (M1 and newer) | **[⬇ Mindful for macOS](https://github.com/tj537/mindful/releases/latest/download/Mindful-macos-arm64.zip)** |
+| Windows 10 and 11 (64-bit) | **[⬇ Mindful for Windows](https://github.com/tj537/mindful/releases/latest/download/Mindful-windows-x64.zip)** |
+| macOS on Intel, Linux | build from source (see below) |
+
+Older versions are on the [Releases page](https://github.com/tj537/mindful/releases). Every release is built automatically by GitHub from the published source code; `SHA256SUMS.txt` next to the downloads lets you check them.
 
 **Installing on macOS:** unzip, then drag `Mindful.app` into *Applications*.
 Mindful isn't notarized by Apple yet, so macOS blocks the first launch. Open it anyway like this:
@@ -96,6 +97,11 @@ After that it opens normally. If you prefer the terminal, you can remove the dow
 ```bash
 xattr -dr com.apple.quarantine /Applications/Mindful.app
 ```
+
+**Installing on Windows:** unzip and start `Mindful.exe` – it is a single file, no installer and no admin rights needed. Move it wherever you like, e.g. into *Documents*, and right-click it → *Pin to taskbar*.
+Windows SmartScreen warns about unsigned apps on the first start: click **More info → Run anyway**. When you first use the phone remote, allow Mindful on private networks.
+
+Mindful keeps open tabs and settings in `~/Library/Application Support/Mindful/` (macOS) or `%APPDATA%\Mindful\` (Windows). Your mind maps are wherever you save them.
 
 ## Getting started
 
@@ -204,6 +210,26 @@ The first build takes a few minutes. Platform prerequisites:
 
 **Mac app bundle:** `./scripts/build-mac.sh` builds `dist/Mindful.app`. With `--install` it also copies the app into `/Applications`, with `--zip` it packs the release download. The bundle runs on Macs with the same processor type as the build machine.
 
+**Windows:** `cargo build --release` gives `target\release\mindful.exe` with the app icon embedded (`build.rs`).
+
+### Automatic builds and releases
+
+GitHub Actions does the routine work:
+
+- **On every push and pull request** ([`ci.yml`](.github/workflows/ci.yml)): formatting check, clippy and all tests on macOS, Windows and Linux.
+- **On every version tag** ([`release.yml`](.github/workflows/release.yml)): builds `Mindful-macos-arm64.zip` and `Mindful-windows-x64.zip`, adds `SHA256SUMS.txt` and publishes the GitHub release.
+
+Releasing a new version:
+
+1. Raise `version` in `Cargo.toml` and commit.
+2. Write the release notes into `.github/release-notes/v0.4.0.md` (optional – without it GitHub lists the commits).
+3. Tag and push:
+   ```bash
+   git tag -a v0.4.0 -m "Mindful 0.4.0" && git push origin v0.4.0
+   ```
+
+A few minutes later both downloads are on the release page, and running copies of Mindful offer the update.
+
 ### Development
 
 | Command | What it does |
@@ -229,6 +255,8 @@ src/
 ├── icons.rs           icons on nodes
 ├── remote.rs          phone remote (small web server)
 ├── update.rs          update check
+build.rs               embeds the icon into the Windows .exe
+.github/workflows/     tests on every push, builds on every release
 ├── nodes.rs           how nodes are drawn
 ├── ai_prompt.rs       the AI prompt form
 ├── export.rs          SVG and PNG export

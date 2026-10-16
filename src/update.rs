@@ -48,7 +48,9 @@ pub fn start(repaint: impl Fn() + Send + 'static) -> Check {
 }
 
 fn fetch() -> Result<Option<Update>, String> {
-    let output = Command::new("curl")
+    let mut command = Command::new("curl");
+    hide_console(&mut command);
+    let output = command
         .args([
             "-fsSL",
             "--max-time",
@@ -74,12 +76,28 @@ fn fetch() -> Result<Option<Update>, String> {
     }))
 }
 
+/// Unter Windows kein schwarzes Konsolenfenster aufblitzen lassen
+fn hide_console(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    let _ = command;
+}
+
 /// Eine Webseite im Standardbrowser öffnen
 pub fn open_url(url: &str) {
     #[cfg(target_os = "macos")]
     let _ = Command::new("open").arg(url).spawn();
     #[cfg(target_os = "windows")]
-    let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    {
+        let mut command = Command::new("cmd");
+        hide_console(&mut command);
+        let _ = command.args(["/C", "start", "", url]).spawn();
+    }
     #[cfg(all(unix, not(target_os = "macos")))]
     let _ = Command::new("xdg-open").arg(url).spawn();
 }
