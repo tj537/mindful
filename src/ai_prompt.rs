@@ -2,7 +2,7 @@
 //! entsteht. Die KI antwortet mit Markdown im Format von Mindful, das man
 //! direkt in den Markdown-Editor einfügen kann.
 
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use egui_phosphor::regular as icon;
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +49,9 @@ pub struct PromptForm {
     pub checklist: bool,
     /// Die KI wählt für passende Abschnitte ein Folienlayout (Zeitstrahl, Kreislauf …)
     pub layouts: bool,
+    /// Wann zuletzt kopiert wurde (für die kurze „Copied“-Rückmeldung)
+    #[serde(skip)]
+    pub copied_at: Option<f64>,
 }
 
 impl Default for PromptForm {
@@ -60,6 +63,7 @@ impl Default for PromptForm {
             scope: Scope::default(),
             checklist: false,
             layouts: true,
+            copied_at: None,
         }
     }
 }
@@ -163,111 +167,304 @@ There are many ways to turn beans into coffee.
     )
 }
 
+/// Kleine Überschrift über einem Feld
+fn field_label(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new(text)
+            .size(12.0)
+            .strong()
+            .color(ui.visuals().text_color().gamma_multiply(0.6)),
+    );
+}
+
+/// Kippschalter statt Häkchen
+fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str, hint: &str) {
+    ui.horizontal(|ui| {
+        let size = Vec2::new(34.0, 20.0);
+        let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click());
+        if resp.clicked() {
+            *on = !*on;
+            resp.mark_changed();
+        }
+        let t = ui.ctx().animate_bool_responsive(resp.id, *on);
+        let accent = ui.visuals().selection.stroke.color;
+        let off = ui.visuals().widgets.inactive.bg_fill;
+        let track = off.lerp_to_gamma(accent, t);
+        ui.painter().rect_filled(rect, rect.height() / 2.0, track);
+        let knob = Pos2::new(
+            rect.left() + rect.height() / 2.0 + t * (rect.width() - rect.height()),
+            rect.center().y,
+        );
+        ui.painter()
+            .circle_filled(knob, rect.height() / 2.0 - 3.0, Color32::WHITE);
+        let label = ui.add(
+            egui::Label::new(text)
+                .selectable(false)
+                .sense(Sense::click()),
+        );
+        if label.clicked() {
+            *on = !*on;
+        }
+        resp.union(label).on_hover_text(hint);
+    });
+}
+
+/// Segmente gleicher Breite, das gewählte farbig
+fn segmented<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)]) {
+    let width = ui.available_width();
+    let height = 30.0;
+    let (outer, _) = ui.allocate_exact_size(Vec2::new(width, height + 6.0), Sense::hover());
+    let visuals = ui.visuals().clone();
+    let accent = visuals.selection.stroke.color;
+    ui.painter()
+        .rect_filled(outer, 9.0, visuals.extreme_bg_color);
+    let w = (outer.width() - 6.0) / options.len() as f32;
+    for (i, (option, label)) in options.iter().enumerate() {
+        let r = Rect::from_min_size(
+            outer.min + Vec2::new(3.0 + i as f32 * w, 3.0),
+            Vec2::new(w, height),
+        );
+        let resp = ui.interact(r, ui.id().with(("segment", i)), Sense::click());
+        let selected = *value == *option;
+        if selected {
+            ui.painter().rect_filled(r, 7.0, accent);
+        } else if resp.hovered() {
+            ui.painter()
+                .rect_filled(r, 7.0, visuals.text_color().gamma_multiply(0.06));
+        }
+        let color = if selected {
+            Color32::WHITE
+        } else {
+            visuals.text_color().gamma_multiply(0.75)
+        };
+        ui.painter().text(
+            r.center(),
+            egui::Align2::CENTER_CENTER,
+            *label,
+            egui::FontId::proportional(14.0),
+            color,
+        );
+        if resp.clicked() {
+            *value = *option;
+        }
+    }
+}
+
+/// Einzeiliges Eingabefeld mit etwas Luft
+fn text_field<'a>(text: &'a mut String, hint: &'a str) -> egui::TextEdit<'a> {
+    egui::TextEdit::singleline(text)
+        .hint_text(hint)
+        .margin(Vec2::new(10.0, 7.0))
+        .desired_width(f32::INFINITY)
+}
+
 /// Inhalt des Aufklappmenüs. Gibt zurück, welcher Knopf gedrückt wurde.
 pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction> {
     let mut action = None;
-    ui.label(
-        RichText::new(format!("{}  Prompt for your AI", icon::MAGIC_WAND))
-            .strong()
-            .size(16.0),
+    let accent = ui.visuals().selection.stroke.color;
+    let weak = ui.visuals().text_color().gamma_multiply(0.6);
+    let now = ui.input(|i| i.time);
+    ui.spacing_mut().item_spacing.y = 6.0;
+
+    // Kopf: Symbol im farbigen Kreis, Titel und Untertitel
+    ui.horizontal(|ui| {
+        let (r, _) = ui.allocate_exact_size(Vec2::splat(38.0), Sense::hover());
+        ui.painter()
+            .circle_filled(r.center(), 19.0, accent.gamma_multiply(0.18));
+        ui.painter().text(
+            r.center(),
+            egui::Align2::CENTER_CENTER,
+            icon::MAGIC_WAND,
+            egui::FontId::proportional(19.0),
+            accent,
+        );
+        ui.add_space(4.0);
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.label(RichText::new("Prompt for your AI").strong().size(17.0));
+            ui.label(
+                RichText::new("Let ChatGPT, Claude & co. write a mind map in Mindful's format.")
+                    .size(12.5)
+                    .color(weak),
+            );
+        });
+    });
+    ui.add_space(8.0);
+
+    field_label(ui, "TOPIC");
+    ui.add(text_field(&mut form.topic, "e.g. Renewable energy"));
+
+    field_label(ui, "LANGUAGE");
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
+        for lang in LANGUAGES {
+            let selected = form.language.trim() == lang;
+            let (fill, color) = if selected {
+                (accent, Color32::WHITE)
+            } else {
+                (Color32::TRANSPARENT, ui.visuals().text_color())
+            };
+            let chip = egui::Button::new(RichText::new(lang).size(13.0).color(color))
+                .fill(fill)
+                .stroke(Stroke::new(
+                    1.0_f32,
+                    if selected {
+                        accent
+                    } else {
+                        ui.visuals().widgets.noninteractive.bg_stroke.color
+                    },
+                ))
+                .corner_radius(14.0)
+                .min_size(Vec2::new(0.0, 26.0));
+            if ui.add(chip).clicked() {
+                form.language = lang.into();
+            }
+        }
+        let custom = !LANGUAGES.contains(&form.language.trim());
+        let mut other = if custom {
+            form.language.clone()
+        } else {
+            String::new()
+        };
+        let field = ui.add(
+            egui::TextEdit::singleline(&mut other)
+                .hint_text("Other …")
+                .margin(Vec2::new(8.0, 4.0))
+                .desired_width(90.0),
+        );
+        if field.changed() {
+            form.language = other;
+        }
+    });
+
+    field_label(ui, "WHAT SHOULD IT COVER?");
+    ui.add(
+        egui::TextEdit::multiline(&mut form.description)
+            .hint_text("Who is it for? Anything to focus on or leave out?")
+            .margin(Vec2::new(10.0, 8.0))
+            .desired_rows(3)
+            .desired_width(f32::INFINITY),
     );
-    ui.weak("Describe your topic. Mindful builds a prompt that makes ChatGPT, Claude & co. answer in the right Markdown format.");
+
+    field_label(ui, "SCOPE");
+    segmented(
+        ui,
+        &mut form.scope,
+        &[
+            (Scope::Short, Scope::Short.label()),
+            (Scope::Medium, Scope::Medium.label()),
+            (Scope::Detailed, Scope::Detailed.label()),
+        ],
+    );
+    ui.label(
+        RichText::new(form.scope.instructions())
+            .size(12.5)
+            .color(weak),
+    );
+
+    ui.add_space(4.0);
+    toggle(
+        ui,
+        &mut form.layouts,
+        "Use slide layouts",
+        "The AI turns suitable sections into timelines, cycles, pyramids, comparisons and other diagrams",
+    );
+    toggle(
+        ui,
+        &mut form.checklist,
+        "Add a checklist at the end",
+        "One more section whose points are checkboxes",
+    );
+
+    ui.add_space(10.0);
+    ui.separator();
     ui.add_space(6.0);
 
-    egui::Grid::new("ai_prompt_form")
-        .num_columns(2)
-        .spacing([12.0, 8.0])
-        .show(ui, |ui| {
-            ui.label("Topic");
-            ui.add(
-                egui::TextEdit::singleline(&mut form.topic)
-                    .hint_text("e.g. Renewable energy")
-                    .desired_width(f32::INFINITY),
-            );
-            ui.end_row();
-
-            ui.label("Language");
-            ui.vertical(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut form.language)
-                        .hint_text("e.g. English")
-                        .desired_width(f32::INFINITY),
-                );
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
-                    for lang in LANGUAGES {
-                        if ui
-                            .selectable_label(form.language.trim() == lang, lang)
-                            .clicked()
-                        {
-                            form.language = lang.into();
-                        }
-                    }
-                });
-            });
-            ui.end_row();
-
-            ui.label("Description");
-            ui.add(
-                egui::TextEdit::multiline(&mut form.description)
-                    .hint_text(
-                        "What should it cover? Who is it for? Anything to focus on or leave out?",
-                    )
-                    .desired_rows(4)
-                    .desired_width(f32::INFINITY),
-            );
-            ui.end_row();
-
-            ui.label("Scope");
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    for scope in [Scope::Short, Scope::Medium, Scope::Detailed] {
-                        ui.selectable_value(&mut form.scope, scope, scope.label());
-                    }
-                });
-                ui.weak(form.scope.instructions());
-            });
-            ui.end_row();
-
-            ui.label("Extras");
-            ui.vertical(|ui| {
-                ui.checkbox(&mut form.layouts, "Use slide layouts")
-                    .on_hover_text("The AI turns suitable sections into timelines, cycles, pyramids, comparisons and other diagrams");
-                ui.checkbox(&mut form.checklist, "Add a checklist at the end");
-            });
-            ui.end_row();
-        });
-
-    ui.add_space(8.0);
+    // Hauptknopf breit und farbig, daneben der zweite Schritt
     let ready = !form.topic.trim().is_empty();
+    let copied = form.copied_at.is_some_and(|t| now - t < 2.0);
+    if copied {
+        ui.ctx().request_repaint();
+    }
     ui.horizontal(|ui| {
+        let label = if copied {
+            format!("{}  Copied", icon::CHECK)
+        } else {
+            format!("{}  Copy prompt", icon::COPY)
+        };
+        let primary = egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
+            .fill(if ready {
+                accent
+            } else {
+                accent.gamma_multiply(0.35)
+            })
+            .corner_radius(9.0)
+            .min_size(Vec2::new(ui.available_width() * 0.5, 36.0));
         let copy = ui
-            .add_enabled(
-                ready,
-                egui::Button::new(RichText::new(format!("{}  Copy prompt", icon::COPY)).strong()),
-            )
+            .add_enabled(ready, primary)
             .on_disabled_hover_text("Enter a topic first");
         if copy.clicked() {
+            form.copied_at = Some(now);
             action = Some(PromptAction::Copy);
         }
+        let secondary = egui::Button::new(format!("{}  New Markdown tab", icon::CLIPBOARD_TEXT))
+            .corner_radius(9.0)
+            .stroke(Stroke::new(
+                1.0_f32,
+                ui.visuals().widgets.noninteractive.bg_stroke.color,
+            ))
+            .min_size(Vec2::new(ui.available_width(), 36.0));
         if ui
-            .button(format!("{}  New Markdown tab", icon::CLIPBOARD_TEXT))
+            .add(secondary)
             .on_hover_text("Opens an empty Markdown editor to paste the AI's answer into")
             .clicked()
         {
             action = Some(PromptAction::NewMarkdownTab);
         }
     });
-    ui.add_space(4.0);
-    ui.weak("1. Copy the prompt   2. Paste it into your AI   3. Paste the answer into a new Markdown tab");
 
-    egui::CollapsingHeader::new("Show prompt")
+    // Die drei Schritte als nummerierte Punkte
+    ui.add_space(8.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        for (i, step) in [
+            "Copy the prompt",
+            "Paste it into your AI",
+            "Paste the answer into a tab",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let (r, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
+            ui.painter()
+                .circle_filled(r.center(), 9.0, accent.gamma_multiply(0.2));
+            ui.painter().text(
+                r.center(),
+                egui::Align2::CENTER_CENTER,
+                (i + 1).to_string(),
+                egui::FontId::proportional(11.0),
+                accent,
+            );
+            ui.label(RichText::new(*step).size(12.5).color(weak));
+            ui.add_space(6.0);
+        }
+    });
+
+    ui.add_space(4.0);
+    egui::CollapsingHeader::new(RichText::new("Show prompt").size(13.0).color(weak))
         .id_salt("ai_prompt_preview")
         .show(ui, |ui| {
-            egui::ScrollArea::vertical()
-                .max_height(220.0)
+            egui::Frame::default()
+                .fill(ui.visuals().extreme_bg_color)
+                .corner_radius(8.0)
+                .inner_margin(egui::Margin::same(10))
                 .show(ui, |ui| {
-                    ui.label(RichText::new(build_prompt(form)).monospace().size(11.0));
+                    egui::ScrollArea::vertical()
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            ui.label(RichText::new(build_prompt(form)).monospace().size(11.0));
+                        });
                 });
         });
     action
@@ -287,6 +484,7 @@ mod tests {
             scope: Scope::Short,
             checklist: true,
             layouts: true,
+            copied_at: None,
         };
         let prompt = build_prompt(&form);
         assert!(prompt.contains("Topic: Bees"));

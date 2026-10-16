@@ -41,7 +41,7 @@ fn migrate_storage() {
 fn main() -> eframe::Result {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([1200.0, 800.0])
-        .with_min_inner_size([900.0, 500.0])
+        .with_min_inner_size([600.0, 420.0])
         .with_title("Mindful");
     // Icon für Fenster, Taskleiste und Dock (wenn ohne .app-Paket gestartet)
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")) {

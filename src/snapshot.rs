@@ -293,6 +293,23 @@ mod tests {
         }
         snap.save(&shapes, Path::new("target/snapshots/app_light_empty.png"));
 
+        // „AI prompt“-Fenster
+        app.set_theme_for_snapshot(1);
+        snap.size = Vec2::new(1400.0, 860.0);
+        app.open_ai_popup = true;
+        let mut shapes = Vec::new();
+        for t in [26.0, 26.5, 27.0] {
+            shapes = snap.frame(t, |ctx| app.show(ctx));
+        }
+        snap.save(&shapes, Path::new("target/snapshots/app_ai_prompt.png"));
+        // schmal: kompakter Knopf
+        snap.ctx.memory_mut(|m| m.close_popup());
+        snap.size = Vec2::new(1000.0, 200.0);
+        for t in [28.0, 28.5] {
+            shapes = snap.frame(t, |ctx| app.show(ctx));
+        }
+        snap.save(&shapes, Path::new("target/snapshots/app_ai_compact.png"));
+
         // Schmale Fenster: nichts darf sich überlappen
         app.set_theme_for_snapshot(1);
         for width in [1180.0, 1050.0, 940.0, 880.0, 800.0, 700.0, 600.0] {

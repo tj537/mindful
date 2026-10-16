@@ -697,6 +697,9 @@ pub struct MindMapApp {
     status_shown: (String, f64),
     /// Tab unter dem Mauszeiger im letzten Frame
     hovered_tab: Option<usize>,
+    /// Für Bildschirmfotos in Tests: das „AI prompt“-Fenster öffnen
+    #[cfg(test)]
+    pub open_ai_popup: bool,
     window_title: String,
     canvas_rect: Rect,
     /// Vorschau neben dem Markdown-Editor
@@ -754,6 +757,8 @@ impl MindMapApp {
             status: "Ready".into(),
             status_shown: (String::new(), 0.0),
             hovered_tab: None,
+            #[cfg(test)]
+            open_ai_popup: false,
             window_title: String::new(),
             canvas_rect: Rect::NOTHING,
             md_preview: true,
@@ -2202,7 +2207,7 @@ impl MindMapApp {
                     .add(
                         egui::Button::new(
                             egui::RichText::new(if ai_compact {
-                                format!("{} {}", icon::MAGIC_WAND, icon::CARET_DOWN)
+                                format!("{}  {}", icon::MAGIC_WAND, icon::CARET_DOWN)
                             } else {
                                 format!("{}  AI prompt  {}", icon::MAGIC_WAND, icon::CARET_DOWN)
                             })
@@ -2210,11 +2215,16 @@ impl MindMapApp {
                         )
                         .fill(accent.gamma_multiply(0.14))
                         .stroke(Stroke::new(1.0_f32, accent.gamma_multiply(0.45)))
-                        .corner_radius(14.0),
+                        .corner_radius(14.0)
+                        .min_size(Vec2::new(if ai_compact { 58.0 } else { 0.0 }, 28.0)),
                     )
                     .on_hover_text("AI prompt: build a prompt that lets your AI write a mind map");
                 if ai.clicked() {
                     ui.memory_mut(|m| m.toggle_popup(popup_id));
+                }
+                #[cfg(test)]
+                if std::mem::take(&mut self.open_ai_popup) {
+                    ui.memory_mut(|m| m.open_popup(popup_id));
                 }
                 egui::popup::popup_below_widget(
                     ui,
@@ -2222,15 +2232,19 @@ impl MindMapApp {
                     &ai,
                     egui::PopupCloseBehavior::CloseOnClickOutside,
                     |ui| {
-                        ui.set_width(460.0);
-                        match ai_prompt::form_ui(ui, &mut self.prompt) {
-                            Some(ai_prompt::PromptAction::Copy) => out = Some(Command::CopyPrompt),
-                            Some(ai_prompt::PromptAction::NewMarkdownTab) => {
-                                out = Some(Command::NewMarkdownTab);
-                                ui.memory_mut(|m| m.close_popup());
-                            }
-                            None => {}
-                        }
+                        ui.set_width(440.0);
+                        egui::Frame::default()
+                            .inner_margin(egui::Margin::same(10))
+                            .show(ui, |ui| match ai_prompt::form_ui(ui, &mut self.prompt) {
+                                Some(ai_prompt::PromptAction::Copy) => {
+                                    out = Some(Command::CopyPrompt)
+                                }
+                                Some(ai_prompt::PromptAction::NewMarkdownTab) => {
+                                    out = Some(Command::NewMarkdownTab);
+                                    ui.memory_mut(|m| m.close_popup());
+                                }
+                                None => {}
+                            });
                     },
                 );
             });
