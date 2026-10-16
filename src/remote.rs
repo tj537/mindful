@@ -156,9 +156,17 @@ fn handle(
     ctx: &egui::Context,
 ) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
-    let mut buf = [0u8; 4096];
-    let n = stream.read(&mut buf)?;
-    let request = String::from_utf8_lossy(&buf[..n]);
+    // Bis zum Ende der Kopfzeilen lesen – eine Anfrage kann in mehreren Teilen ankommen
+    let mut data = Vec::new();
+    let mut buf = [0u8; 2048];
+    while !data.windows(4).any(|w| w == b"\r\n\r\n") && data.len() < 16 * 1024 {
+        let n = stream.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        data.extend_from_slice(&buf[..n]);
+    }
+    let request = String::from_utf8_lossy(&data);
     let target = request.split_whitespace().nth(1).unwrap_or("/");
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     let authorized = query
@@ -316,7 +324,8 @@ mod tests {
         let rest = url.trim_start_matches("http://");
         let (host, path) = rest.split_once('/').unwrap();
         let mut stream = TcpStream::connect(host).unwrap();
-        write!(stream, "POST /{path} HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
+        let request = format!("POST /{path} HTTP/1.1\r\nHost: {host}\r\n\r\n");
+        stream.write_all(request.as_bytes()).unwrap();
         let mut out = String::new();
         stream.read_to_string(&mut out).unwrap();
         out
