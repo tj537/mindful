@@ -292,5 +292,19 @@ mod tests {
             shapes = snap.frame(t, |ctx| app.show(ctx));
         }
         snap.save(&shapes, Path::new("target/snapshots/app_light_empty.png"));
+
+        // Schmale Fenster: nichts darf sich überlappen
+        app.set_theme_for_snapshot(1);
+        for width in [1180.0, 1050.0, 940.0, 880.0, 800.0, 700.0, 600.0] {
+            snap.size = Vec2::new(width, 240.0);
+            let mut shapes = Vec::new();
+            for t in [30.0, 30.5, 31.0] {
+                shapes = snap.frame(t, |ctx| app.show(ctx));
+            }
+            snap.save(
+                &shapes,
+                Path::new(&format!("target/snapshots/app_width_{width}.png")),
+            );
+        }
     }
 }

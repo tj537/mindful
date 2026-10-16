@@ -277,7 +277,7 @@ fn icon_button(
 }
 
 /// Segment-Schalter für die vier Ansichten; die Markierung gleitet zur gewählten
-fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode) -> Option<Mode> {
+fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool) -> Option<Mode> {
     let modes = [
         (
             Mode::Markdown,
@@ -299,8 +299,12 @@ fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode) -> Option<Mode> 
     let galleys: Vec<_> = modes
         .iter()
         .map(|(_, ic, label, _)| {
-            ui.painter()
-                .layout_no_wrap(format!("{ic}  {label}"), font.clone(), theme.text)
+            let text = if icons_only {
+                ic.to_string()
+            } else {
+                format!("{ic}  {label}")
+            };
+            ui.painter().layout_no_wrap(text, font.clone(), theme.text)
         })
         .collect();
     let inner = 3.0;
@@ -1735,9 +1739,28 @@ impl MindMapApp {
         let accent = THEMES[self.theme].branches[0];
         let l = |ic: &str, text: &str| format!("{ic}  {text}");
 
+        // Schmales Fenster: Teile der Leiste nach und nach ausblenden oder verkleinern,
+        // damit sich nichts überlappt (alles bleibt über die Menüs erreichbar)
+        let width = ui.available_width();
+        let ai_compact = width < 1250.0;
+        let search_width = if width >= 1100.0 {
+            170.0
+        } else if width >= 900.0 {
+            120.0
+        } else {
+            80.0
+        };
+        let show_file_tools = width >= 1080.0;
+        let show_view_tools = width >= 960.0;
+        let show_wordmark = width >= 900.0;
+        let show_extra_tools = width >= 860.0;
+        let show_tools = width >= 760.0;
+
         egui::menu::bar(ui, |ui| {
             ui.label(egui::RichText::new(icon::GRAPH).size(20.0).color(accent));
-            ui.label(egui::RichText::new("Mindful").strong().size(15.0));
+            if show_wordmark {
+                ui.label(egui::RichText::new("Mindful").strong().size(15.0));
+            }
             ui.add_space(6.0);
 
             ui.menu_button("File", |ui| {
@@ -2017,7 +2040,6 @@ impl MindMapApp {
             });
 
             // Werkzeugleiste
-            ui.separator();
             let mut tool = |ui: &mut egui::Ui,
                             ic: &str,
                             tip: &str,
@@ -2028,115 +2050,124 @@ impl MindMapApp {
                     out = Some(cmd);
                 }
             };
-            tool(
-                ui,
-                icon::FILE_PLUS,
-                "New tab",
-                Some(&SC_NEW_TAB),
-                true,
-                Command::NewTab,
-            );
-            tool(
-                ui,
-                icon::FOLDER_OPEN,
-                "Open",
-                Some(&SC_OPEN),
-                true,
-                Command::Open,
-            );
-            tool(
-                ui,
-                icon::FLOPPY_DISK,
-                "Save",
-                Some(&SC_SAVE),
-                true,
-                Command::Save,
-            );
-            ui.separator();
-            tool(
-                ui,
-                icon::ARROW_COUNTER_CLOCKWISE,
-                "Undo",
-                Some(&SC_UNDO),
-                can_undo,
-                Command::Undo,
-            );
-            tool(
-                ui,
-                icon::ARROW_CLOCKWISE,
-                "Redo",
-                Some(&SC_REDO),
-                can_redo,
-                Command::Redo,
-            );
-            ui.separator();
-            if mode == Mode::Mindmap {
+            if show_tools {
+                ui.separator();
+                if show_file_tools {
+                    tool(
+                        ui,
+                        icon::FILE_PLUS,
+                        "New tab",
+                        Some(&SC_NEW_TAB),
+                        true,
+                        Command::NewTab,
+                    );
+                    tool(
+                        ui,
+                        icon::FOLDER_OPEN,
+                        "Open",
+                        Some(&SC_OPEN),
+                        true,
+                        Command::Open,
+                    );
+                    tool(
+                        ui,
+                        icon::FLOPPY_DISK,
+                        "Save",
+                        Some(&SC_SAVE),
+                        true,
+                        Command::Save,
+                    );
+                    ui.separator();
+                }
                 tool(
                     ui,
-                    icon::PLUS_CIRCLE,
-                    "New child (Tab)",
-                    None,
-                    true,
-                    Command::AddChild,
+                    icon::ARROW_COUNTER_CLOCKWISE,
+                    "Undo",
+                    Some(&SC_UNDO),
+                    can_undo,
+                    Command::Undo,
                 );
                 tool(
                     ui,
-                    icon::TRASH,
-                    "Delete (Del)",
-                    None,
-                    has_sel,
-                    Command::Delete,
+                    icon::ARROW_CLOCKWISE,
+                    "Redo",
+                    Some(&SC_REDO),
+                    can_redo,
+                    Command::Redo,
                 );
                 ui.separator();
-                tool(
-                    ui,
-                    icon::TREE_STRUCTURE,
-                    "Auto layout",
-                    Some(&SC_LAYOUT),
-                    true,
-                    Command::AutoLayout,
-                );
-                tool(
-                    ui,
-                    icon::ARROWS_OUT,
-                    "Fit to window",
-                    Some(&SC_FIT),
-                    true,
-                    Command::Fit,
-                );
-            } else {
-                let tip = if md_preview {
-                    "Hide preview"
-                } else {
-                    "Show preview"
-                };
-                tool(
-                    ui,
-                    icon::SIDEBAR_SIMPLE,
-                    tip,
-                    None,
-                    true,
-                    Command::TogglePreview,
-                );
+                if mode == Mode::Mindmap {
+                    tool(
+                        ui,
+                        icon::PLUS_CIRCLE,
+                        "New child (Tab)",
+                        None,
+                        true,
+                        Command::AddChild,
+                    );
+                    tool(
+                        ui,
+                        icon::TRASH,
+                        "Delete (Del)",
+                        None,
+                        has_sel,
+                        Command::Delete,
+                    );
+                    if show_view_tools {
+                        ui.separator();
+                        tool(
+                            ui,
+                            icon::TREE_STRUCTURE,
+                            "Auto layout",
+                            Some(&SC_LAYOUT),
+                            true,
+                            Command::AutoLayout,
+                        );
+                        tool(
+                            ui,
+                            icon::ARROWS_OUT,
+                            "Fit to window",
+                            Some(&SC_FIT),
+                            true,
+                            Command::Fit,
+                        );
+                    }
+                } else if show_view_tools {
+                    let tip = if md_preview {
+                        "Hide preview"
+                    } else {
+                        "Show preview"
+                    };
+                    tool(
+                        ui,
+                        icon::SIDEBAR_SIMPLE,
+                        tip,
+                        None,
+                        true,
+                        Command::TogglePreview,
+                    );
+                }
+                if show_extra_tools {
+                    ui.separator();
+                    ui.menu_button(egui::RichText::new(icon::EXPORT).size(17.0), |ui| {
+                        export_menu(ui, &mut out)
+                    })
+                    .response
+                    .on_hover_text("Export");
+                    ui.menu_button(egui::RichText::new(icon::PALETTE).size(17.0), |ui| {
+                        theme_menu(ui, current_theme, &mut out)
+                    })
+                    .response
+                    .on_hover_text("Theme");
+                }
             }
-            ui.separator();
-            ui.menu_button(egui::RichText::new(icon::EXPORT).size(17.0), |ui| {
-                export_menu(ui, &mut out)
-            })
-            .response
-            .on_hover_text("Export");
-            ui.menu_button(egui::RichText::new(icon::PALETTE).size(17.0), |ui| {
-                theme_menu(ui, current_theme, &mut out)
-            })
-            .response
-            .on_hover_text("Theme");
 
             // Suche rechts in der Leiste
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let resp = ui.add(
                     egui::TextEdit::singleline(&mut self.search)
                         .hint_text("Search …")
-                        .desired_width(170.0)
+                        .desired_width(search_width)
                         .margin(Vec2::new(8.0, 4.0)),
                 );
                 if std::mem::take(&mut self.search_focus) {
@@ -2150,7 +2181,9 @@ impl MindMapApp {
                         self.search.clear();
                     }
                 }
-                ui.label(egui::RichText::new(icon::MAGNIFYING_GLASS).size(16.0));
+                if width >= 900.0 {
+                    ui.label(egui::RichText::new(icon::MAGNIFYING_GLASS).size(16.0));
+                }
                 let query = self.search.trim().to_lowercase();
                 if !query.is_empty() {
                     let n = self.docs[active]
@@ -2168,18 +2201,18 @@ impl MindMapApp {
                 let ai = ui
                     .add(
                         egui::Button::new(
-                            egui::RichText::new(format!(
-                                "{}  AI prompt  {}",
-                                icon::MAGIC_WAND,
-                                icon::CARET_DOWN
-                            ))
+                            egui::RichText::new(if ai_compact {
+                                format!("{} {}", icon::MAGIC_WAND, icon::CARET_DOWN)
+                            } else {
+                                format!("{}  AI prompt  {}", icon::MAGIC_WAND, icon::CARET_DOWN)
+                            })
                             .color(accent),
                         )
                         .fill(accent.gamma_multiply(0.14))
                         .stroke(Stroke::new(1.0_f32, accent.gamma_multiply(0.45)))
                         .corner_radius(14.0),
                     )
-                    .on_hover_text("Build a prompt that lets your AI write a mind map");
+                    .on_hover_text("AI prompt: build a prompt that lets your AI write a mind map");
                 if ai.clicked() {
                     ui.memory_mut(|m| m.toggle_popup(popup_id));
                 }
@@ -2208,101 +2241,116 @@ impl MindMapApp {
     fn tab_bar(&mut self, ui: &mut egui::Ui, theme: &Theme) -> Option<Command> {
         let mut out = None;
         let hovered_tab = self.hovered_tab.take();
+        // Schmales Fenster: Ansichten nur als Symbole, Tabs seitlich scrollbar
+        let icons_only = ui.available_width() < 1000.0;
+        let switch_width = if icons_only { 200.0 } else { 450.0 };
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            for (i, doc) in self.docs.iter().enumerate() {
-                let active = i == self.active;
-                let hovered = hovered_tab == Some(i);
-                let (fill, stroke) = if active {
-                    (theme.background, Stroke::new(1.0_f32, theme.grid))
-                } else if hovered {
-                    (theme.background.gamma_multiply(0.5), Stroke::NONE)
-                } else {
-                    (Color32::TRANSPARENT, Stroke::NONE)
-                };
-                let tab = egui::Frame::default()
-                    .fill(fill)
-                    .stroke(stroke)
-                    .corner_radius(8.0)
-                    .inner_margin(egui::Margin {
-                        left: 10,
-                        right: 6,
-                        top: 4,
-                        bottom: 4,
-                    })
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 6.0;
-                            let color = if active {
-                                theme.branches[0]
+            let tabs_width = (ui.available_width() - switch_width).max(80.0);
+            egui::ScrollArea::horizontal()
+                .id_salt("tabs")
+                .max_width(tabs_width)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        for (i, doc) in self.docs.iter().enumerate() {
+                            let active = i == self.active;
+                            let hovered = hovered_tab == Some(i);
+                            let (fill, stroke) = if active {
+                                (theme.background, Stroke::new(1.0_f32, theme.grid))
+                            } else if hovered {
+                                (theme.background.gamma_multiply(0.5), Stroke::NONE)
                             } else {
-                                theme.text.gamma_multiply(0.45)
+                                (Color32::TRANSPARENT, Stroke::NONE)
                             };
-                            let ic = match doc.mode {
-                                Mode::Markdown => icon::TEXT_ALIGN_LEFT,
-                                _ => icon::GRAPH,
-                            };
-                            ui.label(egui::RichText::new(ic).color(color));
-                            let mut text = egui::RichText::new(doc.title());
-                            if active {
-                                text = text.strong();
-                            } else {
-                                text = text.color(theme.text.gamma_multiply(0.7));
+                            let tab = egui::Frame::default()
+                                .fill(fill)
+                                .stroke(stroke)
+                                .corner_radius(8.0)
+                                .inner_margin(egui::Margin {
+                                    left: 10,
+                                    right: 6,
+                                    top: 4,
+                                    bottom: 4,
+                                })
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 6.0;
+                                        let color = if active {
+                                            theme.branches[0]
+                                        } else {
+                                            theme.text.gamma_multiply(0.45)
+                                        };
+                                        let ic = match doc.mode {
+                                            Mode::Markdown => icon::TEXT_ALIGN_LEFT,
+                                            _ => icon::GRAPH,
+                                        };
+                                        ui.label(egui::RichText::new(ic).color(color));
+                                        let mut text = egui::RichText::new(doc.title());
+                                        if active {
+                                            text = text.strong();
+                                        } else {
+                                            text = text.color(theme.text.gamma_multiply(0.7));
+                                        }
+                                        let label = ui.add(
+                                            egui::Label::new(text)
+                                                .selectable(false)
+                                                .sense(Sense::click()),
+                                        );
+                                        if label.clicked() {
+                                            out = Some(Command::SelectTab(i));
+                                        }
+                                        if label.middle_clicked() {
+                                            out = Some(Command::CloseTab(i));
+                                        }
+                                        if let Some(path) = &doc.path {
+                                            label.on_hover_text(path.display().to_string());
+                                        }
+                                        // Ungespeichert: Punkt; beim Drüberfahren (oder im aktiven Tab) das X
+                                        let (r, close) = ui
+                                            .allocate_exact_size(Vec2::splat(18.0), Sense::click());
+                                        if close.hovered() {
+                                            ui.painter().rect_filled(
+                                                r,
+                                                5.0,
+                                                theme.text.gamma_multiply(0.12),
+                                            );
+                                        }
+                                        if doc.dirty && !close.hovered() && !hovered {
+                                            ui.painter().circle_filled(r.center(), 4.0, color);
+                                        } else if active || hovered || close.hovered() {
+                                            ui.painter().text(
+                                                r.center(),
+                                                Align2::CENTER_CENTER,
+                                                icon::X,
+                                                FontId::proportional(12.0),
+                                                theme.text.gamma_multiply(0.75),
+                                            );
+                                        }
+                                        let tip = if doc.dirty {
+                                            "Close tab (unsaved changes)"
+                                        } else {
+                                            "Close tab"
+                                        };
+                                        if close.on_hover_text(tip).clicked() {
+                                            out = Some(Command::CloseTab(i));
+                                        }
+                                    });
+                                });
+                            if ui.rect_contains_pointer(tab.response.rect) {
+                                self.hovered_tab = Some(i);
                             }
-                            let label = ui.add(
-                                egui::Label::new(text)
-                                    .selectable(false)
-                                    .sense(Sense::click()),
-                            );
-                            if label.clicked() {
-                                out = Some(Command::SelectTab(i));
-                            }
-                            if label.middle_clicked() {
-                                out = Some(Command::CloseTab(i));
-                            }
-                            if let Some(path) = &doc.path {
-                                label.on_hover_text(path.display().to_string());
-                            }
-                            // Ungespeichert: Punkt; beim Drüberfahren (oder im aktiven Tab) das X
-                            let (r, close) =
-                                ui.allocate_exact_size(Vec2::splat(18.0), Sense::click());
-                            if close.hovered() {
-                                ui.painter()
-                                    .rect_filled(r, 5.0, theme.text.gamma_multiply(0.12));
-                            }
-                            if doc.dirty && !close.hovered() && !hovered {
-                                ui.painter().circle_filled(r.center(), 4.0, color);
-                            } else if active || hovered || close.hovered() {
-                                ui.painter().text(
-                                    r.center(),
-                                    Align2::CENTER_CENTER,
-                                    icon::X,
-                                    FontId::proportional(12.0),
-                                    theme.text.gamma_multiply(0.75),
-                                );
-                            }
-                            let tip = if doc.dirty {
-                                "Close tab (unsaved changes)"
-                            } else {
-                                "Close tab"
-                            };
-                            if close.on_hover_text(tip).clicked() {
-                                out = Some(Command::CloseTab(i));
-                            }
-                        });
+                        }
+                        if icon_button(ui, icon::PLUS, "New tab", Some(&SC_NEW_TAB), true) {
+                            out = Some(Command::NewTab);
+                        }
                     });
-                if ui.rect_contains_pointer(tab.response.rect) {
-                    self.hovered_tab = Some(i);
-                }
-            }
-            if icon_button(ui, icon::PLUS, "New tab", Some(&SC_NEW_TAB), true) {
-                out = Some(Command::NewTab);
-            }
+                });
 
             // Ansichts-Umschalter rechts
             let current = self.docs[self.active].mode;
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if let Some(mode) = mode_switch(ui, theme, current) {
+                if let Some(mode) = mode_switch(ui, theme, current, icons_only) {
                     out = Some(Command::SetMode(mode));
                 }
             });
@@ -2322,10 +2370,19 @@ impl MindMapApp {
         if (6.0..7.5).contains(&age) {
             ui.ctx().request_repaint();
         }
+        // Schmales Fenster: Tipp rechts ausblenden, Meldung links abschneiden
+        let width = ui.available_width();
+        let show_hint = width >= 1050.0;
+        let right = if show_hint { 560.0 } else { 300.0 };
         ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(self.status.as_str())
-                    .color(ui.visuals().text_color().gamma_multiply(fade)),
+            let status = egui::RichText::new(self.status.as_str())
+                .color(ui.visuals().text_color().gamma_multiply(fade));
+            ui.allocate_ui(
+                Vec2::new((width - right).max(40.0), ui.available_height()),
+                |ui| {
+                    ui.add(egui::Label::new(status).truncate())
+                        .on_hover_text(self.status.as_str());
+                },
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let doc = &self.docs[self.active];
@@ -2342,8 +2399,10 @@ impl MindMapApp {
                         icon::TREE_STRUCTURE,
                         count(doc.map.nodes.len(), "node")
                     ));
-                    ui.separator();
-                    ui.weak("## heading = branch · - bullet = child · text = note");
+                    if show_hint {
+                        ui.separator();
+                        ui.weak("## heading = branch · - bullet = child · text = note");
+                    }
                 } else {
                     // Zoom: − Prozent +, Klick auf die Zahl holt alles ins Bild
                     let small = |ic: &str| {
@@ -2383,11 +2442,13 @@ impl MindMapApp {
                         icon::TREE_STRUCTURE,
                         count(doc.map.nodes.len(), "node")
                     ));
-                    ui.separator();
-                    ui.weak(format!(
-                        "{} Right-click: menu · F1: shortcuts",
-                        icon::KEYBOARD
-                    ));
+                    if show_hint {
+                        ui.separator();
+                        ui.weak(format!(
+                            "{} Right-click: menu · F1: shortcuts",
+                            icon::KEYBOARD
+                        ));
+                    }
                 }
             });
         });
@@ -2836,7 +2897,12 @@ impl MindMapApp {
         if self.show_welcome && pristine {
             let card = Rect::from_center_size(
                 Pos2::new(area.center().x, area.bottom() - 70.0),
-                Vec2::new(area.width().min(760.0), 80.0),
+                // Schmal: kompakte Karte (siehe `narrow` unten), mittig
+                Vec2::new(
+                    area.width()
+                        .min(if area.width() < 720.0 { 410.0 } else { 760.0 }),
+                    80.0,
+                ),
             );
             let mut card_ui = ui.new_child(
                 egui::UiBuilder::new()
@@ -2849,19 +2915,30 @@ impl MindMapApp {
                 .corner_radius(12.0)
                 .inner_margin(egui::Margin::symmetric(16, 10))
                 .show(&mut card_ui, |ui| {
+                    // Schmales Fenster: nur die Knöpfe, kurz beschriftet
+                    let narrow = area.width() < 720.0;
                     ui.horizontal(|ui| {
                         ui.label(
                             egui::RichText::new(icon::LIGHTBULB)
                                 .size(22.0)
                                 .color(theme.selection),
                         );
-                        ui.vertical(|ui| {
+                        if narrow {
                             ui.strong("Empty mind map");
-                            ui.weak("Tab adds a child, right-click opens the menu.");
-                        });
+                        } else {
+                            ui.vertical(|ui| {
+                                ui.strong("Empty mind map");
+                                ui.weak("Tab adds a child, right-click opens the menu.");
+                            });
+                        }
                         ui.add_space(10.0);
+                        let example = if narrow {
+                            "Example"
+                        } else {
+                            "Example: The Universe"
+                        };
                         if ui
-                            .button(format!("{}  Example: The Universe", icon::ROCKET_LAUNCH))
+                            .button(format!("{}  {example}", icon::ROCKET_LAUNCH))
                             .clicked()
                         {
                             action = Some(Action::OpenExample(0));
