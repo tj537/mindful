@@ -47,6 +47,8 @@ pub struct PromptForm {
     pub scope: Scope,
     /// Am Ende eine Checkliste anhängen lassen
     pub checklist: bool,
+    /// Die KI wählt für passende Abschnitte ein Folienlayout (Zeitstrahl, Kreislauf …)
+    pub layouts: bool,
 }
 
 impl Default for PromptForm {
@@ -57,6 +59,7 @@ impl Default for PromptForm {
             description: String::new(),
             scope: Scope::default(),
             checklist: false,
+            layouts: true,
         }
     }
 }
@@ -75,6 +78,22 @@ const LANGUAGES: [&str; 6] = [
     "Português",
 ];
 
+/// Erklärt der KI die Folienlayouts, damit sie für jeden Abschnitt das passende wählt
+const LAYOUT_GUIDE: &str = r###"
+Slide layouts:
+Every "## " section also becomes a slide in Mindful's presentation mode. By default its points are shown as a bullet list. When the content of a section has a clear shape, turn it into a diagram by adding a layout tag at the end of the heading line, for example "## The Water Cycle <!-- cycle -->". Pick the layout from what the content is, not for decoration:
+- <!-- timeline --> for events or phases in chronological order. 3–6 points; each point is a short date or phase ("1969", "Week 1"), with exactly one sub-point saying what happened.
+- <!-- cycle --> for a process that repeats, where the last step leads back to the first. 3–6 stages, each with one short sub-point.
+- <!-- pyramid --> for levels that build on each other or a hierarchy. 3–5 points from the narrow top (smallest or most specific) down to the broad base; each may have one sub-point, shown beside the level.
+- <!-- funnel --> for something that narrows down step by step, like a selection process or a sales funnel. 3–5 points from the broadest at the top to the most selective at the bottom; each may have one sub-point.
+- <!-- compare --> for 2–4 options or categories side by side. Each point is the name of one option, with 2–4 short sub-points.
+- <!-- matrix --> for exactly 4 points that form a 2×2 grid, such as strengths, weaknesses, opportunities and threats. Each point has 1–3 sub-points.
+- <!-- venn --> for 2 or 3 ideas that overlap. Give each idea as a short label of at most 3 words, then one more point saying what they have in common. No sub-points.
+- <!-- number --> for one striking figure. The first point must start with the number, e.g. "13.8 billion years ago: the Big Bang" or "$4.2 million in sales"; up to 3 sub-points or further points become small facts below it.
+- <!-- quote --> for a famous quotation. A single point holding the quote, with exactly one sub-point naming who said it. Only use real, well-known quotes and never invent who said them.
+Use a mix: about half of the sections should get a layout, each layout at most once or twice, and the rest stay plain bullet lists. Never put a layout tag on the "# " heading or on bullet points, and never add a layout to a checklist section.
+"###;
+
 /// Der fertige Prompt mit den Eingaben an den Platzhaltern
 pub fn build_prompt(form: &PromptForm) -> String {
     let topic = form.topic.trim();
@@ -90,6 +109,11 @@ pub fn build_prompt(form: &PromptForm) -> String {
         "- End with one more \"## \" section: a practical checklist whose points start with \"- [ ] \".\n"
     } else {
         ""
+    };
+    let (layout_guide, example_tag) = if form.layouts {
+        (LAYOUT_GUIDE, " <!-- timeline -->")
+    } else {
+        ("", "")
     };
     format!(
         r###"Please create a mind map for the app "Mindful". Write it as Markdown in exactly the format described below, so I can paste it straight into the app.
@@ -108,27 +132,30 @@ Format rules:
 - If a bullet point needs an explanation, add a single line directly below it, indented two spaces further and without a dash. It becomes a note.
 {checklist}- No bold or italic text, links, tables, numbered lists, code blocks or emojis.
 - Reply with the Markdown only: no introduction, no closing remarks, and do not wrap it in a code block.
-
+{layout_guide}
 Example of the format (the example is in English – write your answer in {language}):
 
 # Coffee
 
 How a small bean became the world's favourite drink.
 
-## Origins
+## Origins{example_tag}
 
-Coffee was first brewed in Ethiopia and Yemen.
+Coffee travelled from Ethiopia to the rest of the world.
 
-- Discovered in Ethiopia
-  Legend says a goat herder noticed his goats dancing.
-- Spread through the Arab world
-  - First coffee houses in Mecca
+- 1400s
+  - Monks in Yemen brew it to stay awake
+- 1550s
+  - First coffee houses open in Istanbul
+- 1650s
+  - Coffee reaches Europe
 
 ## Brewing
 
 There are many ways to turn beans into coffee.
 
 - Espresso
+  Hot water pressed through finely ground beans.
 - Filter coffee
 - French press
 "###,
@@ -202,8 +229,12 @@ pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction>
             });
             ui.end_row();
 
-            ui.label("");
-            ui.checkbox(&mut form.checklist, "Add a checklist at the end");
+            ui.label("Extras");
+            ui.vertical(|ui| {
+                ui.checkbox(&mut form.layouts, "Use slide layouts")
+                    .on_hover_text("The AI turns suitable sections into timelines, cycles, pyramids, comparisons and other diagrams");
+                ui.checkbox(&mut form.checklist, "Add a checklist at the end");
+            });
             ui.end_row();
         });
 
@@ -245,7 +276,7 @@ pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::MindMap;
+    use crate::model::{MindMap, SlideLayout};
 
     #[test]
     fn prompt_contains_the_inputs() {
@@ -255,6 +286,7 @@ mod tests {
             description: "For a school talk".into(),
             scope: Scope::Short,
             checklist: true,
+            layouts: true,
         };
         let prompt = build_prompt(&form);
         assert!(prompt.contains("Topic: Bees"));
@@ -262,7 +294,13 @@ mod tests {
         assert!(prompt.contains("For a school talk"));
         assert!(prompt.contains("4 main branches"));
         assert!(prompt.contains("- [ ] "));
-        assert!(!build_prompt(&PromptForm::default()).contains("checklist"));
+        assert!(!build_prompt(&PromptForm::default()).contains("- [ ] "));
+        assert!(prompt.contains("<!-- cycle -->"));
+        let plain = build_prompt(&PromptForm {
+            layouts: false,
+            ..form
+        });
+        assert!(!plain.contains("<!--"));
     }
 
     #[test]
@@ -270,7 +308,12 @@ mod tests {
         let prompt = build_prompt(&PromptForm::default());
         let example = &prompt[prompt.find("# Coffee").unwrap()..];
         let map = MindMap::from_outline(example).unwrap();
-        assert_eq!(map.children(map.root().unwrap()).count(), 2);
+        let root = map.root().unwrap();
+        assert_eq!(map.children(root).count(), 2);
+        assert_eq!(
+            map.children(root).next().unwrap().layout,
+            Some(SlideLayout::Timeline)
+        );
         assert_eq!(map.to_markdown(), example);
     }
 }

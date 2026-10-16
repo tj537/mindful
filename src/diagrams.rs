@@ -139,8 +139,11 @@ fn text_left(
     rect
 }
 
-/// Unterpunkte als Liste mit Punkten
+/// Unterpunkte als Liste mit Punkten (ein einzelner Unterpunkt ohne Punkt)
 fn child_lines(item: &Item) -> String {
+    if let [only] = item.children.as_slice() {
+        return only.clone();
+    }
     item.children
         .iter()
         .map(|c| format!("• {c}"))
@@ -208,7 +211,8 @@ fn timeline(
 ) {
     let n = items.len();
     let f = fit(n, 5);
-    let y = r.top() + 40.0 * s;
+    // Etwas über der Mitte, damit Linie und Texte die Fläche füllen
+    let y = r.top() + ((r.height() - 190.0 * s) * 0.4).max(40.0 * s);
     let margin = 70.0 * s;
     let span = (r.width() - 2.0 * margin).max(1.0);
     let step = if n > 1 { span / (n - 1) as f32 } else { 0.0 };
@@ -257,13 +261,13 @@ fn timeline(
             theme.on_accent,
         );
         let top = Pos2::new(c.x, y + 46.0 * s + (1.0 - e) * 16.0 * s);
-        let title = text_centered(&q, &item.text, 26.0 * s * f, theme.text, wrap, top);
+        let title = text_centered(&q, &item.text, 30.0 * s * f, theme.text, wrap, top);
         if !item.children.is_empty() {
             text_centered(
                 &q,
                 &child_lines(item),
-                19.0 * s * f,
-                theme.text.gamma_multiply(0.65),
+                21.0 * s * f,
+                theme.text.gamma_multiply(0.7),
                 wrap,
                 Pos2::new(c.x, title.bottom() + 10.0 * s),
             );

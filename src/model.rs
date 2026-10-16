@@ -926,15 +926,23 @@ mod example_tests {
         let map = MindMap::from_outline(md).unwrap();
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "The Universe");
-        // Einige Folien zeigen Diagramme
-        let layout = |t: &str| map.nodes.iter().find(|n| n.text == t).unwrap().layout;
-        assert_eq!(layout("Spaceflight"), Some(SlideLayout::Timeline));
-        assert_eq!(layout("Galaxies"), Some(SlideLayout::Matrix));
-        // Die Checkliste: 2 von 6 erledigt
-        let checklist = map.children(root).last().unwrap();
-        assert_eq!(map.task_progress(checklist.id), Some((2, 6)));
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 8);
+        assert_eq!(branches.len(), 11);
+        // Jedes Folienlayout kommt genau einmal vor, dazu normale Aufzählungen
+        for layout in SlideLayout::ALL {
+            assert_eq!(
+                branches.iter().filter(|b| b.layout == Some(layout)).count(),
+                1,
+                "{}",
+                layout.name()
+            );
+        }
+        // Die Checkliste: 2 von 6 erledigt
+        let checklist = branches
+            .iter()
+            .find(|b| b.text == "Stargazing Checklist")
+            .unwrap();
+        assert_eq!(map.task_progress(checklist.id), Some((2, 6)));
         assert!(branches
             .iter()
             .all(|b| !b.note.is_empty() && map.has_children(b.id)));
@@ -948,7 +956,11 @@ mod example_tests {
         let root = map.root().unwrap();
         assert_eq!(map.get(root).unwrap().text, "Das Weltall");
         let branches: Vec<&Node> = map.children(root).collect();
-        assert_eq!(branches.len(), 8);
+        assert_eq!(branches.len(), 11);
+        assert_eq!(
+            branches.iter().filter(|b| b.layout.is_some()).count(),
+            SlideLayout::ALL.len()
+        );
         assert!(branches
             .iter()
             .all(|b| !b.note.is_empty() && map.has_children(b.id)));

@@ -167,32 +167,24 @@ impl Snapshot {
 mod tests {
     use super::*;
     use crate::document::{Document, Mode};
-    use crate::model::{MindMap, SlideLayout};
+    use crate::model::MindMap;
     use crate::present::{self, Effects};
     use crate::theme::{apply_spacing, install_fonts, visuals_for, THEMES};
 
-    /// Alle Folien des Beispiels rendern – mit einem anderen Layout auf jeder Folie
+    /// Alle Folien der beiden Beispiele rendern (darin kommt jedes Layout vor)
     #[test]
     #[ignore]
     fn render_slides() {
-        let mut map =
-            MindMap::from_outline(include_str!("../assets/examples/universe.md")).unwrap();
-        let root = map.root().unwrap();
-        let quote = map.add_child_text(root, "A Thought");
-        let line = map.add_child_text(quote, "The cosmos is within us. We are made of star-stuff.");
-        map.add_child_text(line, "Carl Sagan");
-        for (title, layout) in [
-            ("Our Solar System", SlideLayout::Compare),
-            ("Stars", SlideLayout::Cycle),
-            ("Black Holes", SlideLayout::Pyramid),
-            ("Life Out There?", SlideLayout::Venn),
-            ("Stargazing Checklist", SlideLayout::Funnel),
-            ("A Thought", SlideLayout::Quote),
+        for (name, md) in [
+            ("universe", include_str!("../assets/examples/universe.md")),
+            ("weltall", include_str!("../assets/examples/weltall.md")),
         ] {
-            let id = map.nodes.iter().find(|n| n.text == title).unwrap().id;
-            map.get_mut(id).unwrap().layout = Some(layout);
+            render(name, MindMap::from_outline(md).unwrap());
         }
+    }
 
+    fn render(name: &str, map: MindMap) {
+        let root = map.root().unwrap();
         let theme = &THEMES[1];
         let mut fx = Effects::default();
         let mut doc = Document::new(map, None);
@@ -218,7 +210,7 @@ mod tests {
             }
             snap.save(
                 &shapes,
-                Path::new(&format!("target/snapshots/slide_{slide:02}.png")),
+                Path::new(&format!("target/snapshots/{name}_{slide:02}.png")),
             );
         }
     }

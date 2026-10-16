@@ -2,47 +2,77 @@
 
 A journey from our Sun to the edge of the observable universe.
 
-## Our Solar System
+## Our Solar System <!-- compare -->
 
-Formed about 4.6 billion years ago from a spinning cloud of gas and dust.
+Eight planets and countless smaller bodies circle an ordinary star: the Sun.
 
-- The Sun
-  An ordinary star – yet it holds 99.86 % of the solar system's mass.
 - Rocky planets
   - Mercury, Venus, Earth, Mars
+  - Small, dense, solid surface
+  - Few or no moons
 - Gas giants
   - Jupiter and Saturn
+  - Mostly hydrogen and helium
+  - Rings and many moons
 - Ice giants
   - Uranus and Neptune
-- Dwarf planets such as Pluto and Ceres
-  Pluto has not been counted as a planet since 2006.
-- Sunlight takes just over 8 minutes to reach Earth
+  - Water, ammonia and methane ice
+  - Cold, windy and far away
+- Dwarf planets
+  - Pluto, Ceres, Eris and more
+  - Too small to clear their orbit
+  - Pluto was reclassified in 2006
 
-## Stars
+## How Big Is Space? <!-- pyramid -->
 
-Huge balls of hot gas whose cores fuse hydrogen into helium.
+Each step up the ladder is thousands of times larger than the one before.
 
-- The life of a star
-  - Born in a cloud of gas
-  - A long, calm phase like our Sun's
-  - Red giant
-  - Ends as a white dwarf or in a supernova
-- Neutron stars
-  A teaspoon of their matter weighs about a billion tonnes.
-- The nearest star: Proxima Centauri, 4.24 light-years away
+- Earth
+  - 12,742 km across
+- Solar system
+  - Sunlight needs 4 hours to reach Neptune
+- Milky Way
+  - 100,000 light-years across
+- Local Group
+  - More than 80 galaxies
+- Observable universe
+  - 93 billion light-years across
+
+## The Life of a Star <!-- cycle -->
+
+Stars are born, shine and die – and their remains build the next generation.
+
+- Nebula
+  - A cold cloud of gas and dust
+- Protostar
+  - Gravity pulls the gas together
+- Main sequence
+  - Fusing hydrogen for billions of years
+- Red giant
+  - It swells as the fuel runs out
+- Supernova or white dwarf
+  - Scatters new material into space
 
 ## Galaxies <!-- matrix -->
 
-Stars don't live alone – they gather in vast star systems.
+Stars don't live alone – they gather in vast star systems of four main shapes.
 
-- The Milky Way
-  - Barred spiral galaxy about 100,000 light-years across
-  - 100 to 400 billion stars
-- Andromeda – our big neighbour
-  - 2.5 million light-years away
-  - Could merge with the Milky Way in a few billion years
-- Shapes: spiral, elliptical and irregular galaxies
-- The observable universe holds hundreds of billions of galaxies
+- Spiral
+  - Flat disk with winding arms
+  - Example: the Milky Way
+  - Young blue stars light up the arms
+- Elliptical
+  - Smooth, round or oval
+  - Mostly old, red stars
+  - Includes the largest galaxies known
+- Lenticular
+  - A disk without spiral arms
+  - Halfway between the other two
+  - Little gas left for new stars
+- Irregular
+  - No clear shape at all
+  - Example: the Magellanic Clouds
+  - Often shaped by collisions
 
 ## Black Holes
 
@@ -50,6 +80,7 @@ Regions where gravity is so strong that not even light can escape.
 
 - Form when very massive stars collapse
 - Event horizon: the point of no return
+  Anything that crosses it can never come back out.
 - Sagittarius A*
   - At the centre of the Milky Way
   - About 4 million solar masses
@@ -57,41 +88,59 @@ Regions where gravity is so strong that not even light can escape.
   - 2019: M87*
   - 2022: Sagittarius A*
 
-## The Big Bang and Beyond <!-- number -->
+## The Big Bang <!-- number -->
 
 The universe had a beginning – and it is still expanding today.
 
 - 13.8 billion years ago: the Big Bang
-- 380,000 years later the universe becomes transparent
-  We still measure this first light as the cosmic microwave background.
-- Known since 1998: the expansion is speeding up
-- What the universe is made of
-  - 5 % ordinary matter
-  - 27 % dark matter
-  - 68 % dark energy
+  - Everything began hot and incredibly dense
+  - After 380,000 years the first light shone
+- Since 1998 we know the expansion is speeding up
+  Dark energy, which nobody fully understands yet, is thought to drive it.
 
 ## Spaceflight <!-- timeline -->
 
 Within a few decades, from the first satellite to a view of the early universe.
 
-- 1957: Sputnik 1, the first satellite
-- 1961: Yuri Gagarin, the first human in space
-- 1969: Apollo 11 lands on the Moon
-- Continuously inhabited since 2000: the International Space Station
-- Voyager 1 reaches interstellar space in 2012
-- 2021: Launch of the James Webb Space Telescope
+- 1957
+  - Sputnik 1, the first satellite
+- 1961
+  - Yuri Gagarin, the first human in space
+- 1969
+  - Apollo 11 lands on the Moon
+- 2000
+  - First crew moves into the ISS
+- 2012
+  - Voyager 1 reaches interstellar space
+- 2021
+  - James Webb Space Telescope launches
 
-## Life Out There?
+## What Does Life Need? <!-- venn -->
 
-Perhaps the biggest open question: are we alone?
+Life as we know it depends on three ingredients coming together.
 
-- More than 6,000 confirmed exoplanets
-- Habitable zone: not too hot, not too cold for liquid water
-- Candidates in our solar system
-  - Mars
-  - Jupiter's moon Europa
-  - Saturn's moon Enceladus
-- The search goes on – with telescopes, probes and radio antennas
+- Liquid water
+  The solvent in which the chemistry of life takes place.
+- Energy
+  From sunlight or from heat deep inside a planet or moon.
+- Building blocks
+  Carbon, hydrogen, nitrogen, oxygen and a few other elements.
+- Together: a world where life could exist
+
+## Searching for Another Earth <!-- funnel -->
+
+Narrowing billions of stars down to the few places where life might exist.
+
+- Stars in the Milky Way
+  - 100 to 400 billion
+- Confirmed exoplanets
+  - More than 6,000 so far
+- In the habitable zone
+  - Not too hot, not too cold
+- Rocky and Earth-sized
+  - Only a handful
+- Signs of life
+  - None found – yet
 
 ## Stargazing Checklist
 
@@ -104,3 +153,10 @@ Things to see with your own eyes – most of them need nothing but a clear night
 - [ ] Watch a meteor shower
   The Perseids peak every year around 12 August.
 - [ ] Visit a dark-sky park
+
+## One Last Thought <!-- quote -->
+
+Most of the matter in your body was forged inside stars long ago.
+
+- The cosmos is within us. We are made of star-stuff.
+  - Carl Sagan

@@ -278,9 +278,9 @@ Undo: the first change of an editor session creates a snapshot, and everything a
 
 ## AI prompt (`ai_prompt.rs`)
 
-The *AI prompt* button next to the search field opens a popup (`egui::popup::popup_below_widget`) with a small form: topic, language (free text plus quick picks), description, scope and an optional checklist. The form is stored with the app state, so it remembers the last entries.
+The *AI prompt* button next to the search field opens a popup (`egui::popup::popup_below_widget`) with a small form: topic, language (free text plus quick picks), description, scope, *Use slide layouts* (on by default) and an optional checklist. The form is stored with the app state, so it remembers the last entries.
 
-`build_prompt()` fills these into a fixed English prompt that explains Mindful's Markdown format to the AI – `#` central topic with an intro paragraph, `##` branches with a one-sentence note, short bullets, optional notes and `- [ ]` checkboxes, Markdown only – and ends with a short example. A test makes sure that example is itself valid Mindful Markdown.
+`build_prompt()` fills these into a fixed English prompt that explains Mindful's Markdown format to the AI – `#` central topic with an intro paragraph, `##` branches with a one-sentence note, short bullets, optional notes and `- [ ]` checkboxes, Markdown only – and ends with a short example. With *Use slide layouts*, `LAYOUT_GUIDE` is added: it explains each `<!-- layout -->` tag, what content it suits and how many points and sub-points it expects, so the AI picks fitting diagrams itself (about half of the sections, the rest plain lists); the example then carries a `timeline` tag. A test makes sure that example is itself valid Mindful Markdown.
 
 *Copy prompt* puts the prompt on the clipboard. *New Markdown tab* opens an empty tab in the Markdown editor and focuses it, ready for pasting the answer; from there the usual Markdown sync turns it into a mind map.
 
@@ -344,7 +344,7 @@ A main branch can have a `layout` (`SlideLayout`). Its slide then shows a diagra
 
 `Slide::groups()` asks `SlideLayout::steps()` how many reveal steps a layout has, so diagrams build up exactly like bullet points (`reveal(i)` is the appear progress of item *i*). Choosing a layout: right-click the slide while presenting, right-click a main branch in the mind map (`Action::SetLayout`), or write `<!-- name -->` after the `##` heading – `split_layout()` reads it, `to_markdown()` writes it back.
 
-**Checking how slides look:** `snapshot.rs` (tests only) runs egui without a window and rasterizes its triangles in software into PNG files. `cargo test --release render_slides -- --ignored` renders every slide of the example, each with a different layout, into `target/snapshots/`.
+**Checking how slides look:** `snapshot.rs` (tests only) runs egui without a window and rasterizes its triangles in software into PNG files. `cargo test --release render_slides -- --ignored` renders every slide of both examples into `target/snapshots/` (the examples use every layout once).
 
 ## Camera tour (`tour.rs`)
 
@@ -526,7 +526,7 @@ cargo test
 | `quick_jump_keys` | ← → Enter Esc in the quick-jump strip |
 | `prompt_contains_the_inputs` | the AI prompt contains topic, language, description, scope |
 | `example_in_the_prompt_is_valid_mindful_markdown` | the format example in the prompt parses and round-trips |
-| `universe_example_is_complete` | the English example is complete |
+| `universe_example_is_complete` | the English example is complete and uses every slide layout once |
 | `weltall_example_is_complete` | the German example is complete |
 | `svg_and_png_export` | SVG is escaped correctly, PNG is created |
 | `stops_are_overview_branches_finale` | tour stops are in the right order |

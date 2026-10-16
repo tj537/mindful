@@ -37,7 +37,7 @@ Also:
 - Export as PNG image, SVG graphic or Markdown
 - **Slide layouts** like SmartArt, made from the same bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (counts up) and quote – chosen by right-clicking a slide or main branch, or as `<!-- timeline -->` after a heading in Markdown
 - **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; they appear on slides, in the tour and in exports, and can be ticked off right during a presentation
-- **AI prompt**: describe topic, language, details and scope, copy a ready-made prompt for ChatGPT, Claude & co., and paste the AI's Markdown answer into a new tab – it becomes a mind map instantly
+- **AI prompt**: describe topic, language, details and scope, copy a ready-made prompt for ChatGPT, Claude & co., and paste the AI's Markdown answer into a new tab – it becomes a mind map instantly. The prompt explains every slide layout, so the AI picks a fitting diagram for each section by itself (can be switched off)
 - **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
 - Auto layout with animation: nodes glide to their new places and the view follows smoothly
 - Undo/redo, search, zoom, copy/paste, notes on every node
@@ -45,7 +45,7 @@ Also:
 - Optional extras (⚙︎ while presenting): a light sweep over titles, slow zoom on slides, the colored bar on the left of slides, vignette
 - Tour effects: a ripple on arrival and optionally glow, light pulses, orbiting sparks, depth of field, warp streaks while flying, camera bounce and drift – and revealing the levels below a branch one by one
 - 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
-- Ready-made examples to try: **File → Open example → The Universe** (also available in German)
+- Ready-made examples to try: **File → Open example → The Universe** (also available in German) – eleven slides that show every slide layout
 
 ---
 
@@ -160,7 +160,7 @@ The first build downloads all libraries and takes a few minutes. After that it t
 | `cargo test` | run all tests |
 | `cargo clippy` | check the code for common mistakes and style issues |
 | `cargo fmt` | format the code consistently |
-| `cargo test --release render_slides -- --ignored` | render every slide of the example to `target/snapshots/*.png` to check how they look |
+| `cargo test --release render_slides -- --ignored` | render every slide of both examples to `target/snapshots/*.png` to check how they look |
 | `cargo build --release` | build the optimized version → `target/release/mindful` (Windows: `mindful.exe`) |
 
 ---
@@ -303,6 +303,22 @@ Note on the branch (shown on the slide below the heading). The optional comment 
 - [ ] Open task
 - [x] Done task
 ```
+
+#### What each slide layout expects
+
+| Layout | Use it for | Bullet points |
+|---|---|---|
+| `timeline` | events in order | 3–6 points, each a date or phase with one sub-point |
+| `cycle` | a process that repeats | 3–6 stages, each with one short sub-point |
+| `pyramid` | levels or a hierarchy | 3–5 points from the narrow top to the broad base; sub-points appear beside the level |
+| `funnel` | narrowing down | 3–5 points from broadest to most selective; sub-points beside |
+| `compare` | 2–4 options side by side | option names with 2–4 sub-points each |
+| `matrix` | a 2×2 grid (e.g. SWOT) | exactly 4 points with 1–3 sub-points |
+| `venn` | overlapping ideas | 2–3 short labels plus one point saying what they share |
+| `number` | one striking figure | first point starts with the number; up to 3 sub-points or further points become fact cards |
+| `quote` | a quotation | one point with the quote, one sub-point with the author |
+
+The examples under **File → Open example** use every layout once.
 
 ---
 
