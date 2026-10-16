@@ -69,7 +69,7 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 
 **Writing and organizing**
 - **Icons on nodes:** 64 icons from the right-click menu, written as `:rocket:` in Markdown and shown in the branch colour on the mind map and the slides. Typed emojis work too.
-- Tabs, undo/redo, search, copy & paste, notes on every node, 8 color themes – theme and options live behind the gear at the top right.
+- Tabs, undo/redo, search, copy & paste, notes on every node, 16 colour themes (from Light and Dark to Nord, Dracula, Tokyo Night, Gruvbox, Solarized and Catppuccin) plus a colour editor for your own – all behind the gear at the top right.
 - Mindful tells you when a new version is out (one request to GitHub per start; can be switched off in the settings).
 - Templates (brainstorming, project plan, SWOT, weekly plan, meeting notes, book summary) and a complete example to explore: **File → Open example → The Universe** (also in German).
 - **AI prompt:** describe a topic, copy the generated prompt into ChatGPT, Claude or any other assistant and paste the answer into a new tab. The prompt teaches the AI Mindful's format, including when to use which slide layout.

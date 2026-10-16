@@ -1,5 +1,7 @@
 use eframe::egui::{self, Color32, CornerRadius, Margin, Stroke, Vec2};
+use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, PartialEq)]
 pub struct Theme {
     pub name: &'static str,
     pub dark: bool,
@@ -17,6 +19,80 @@ pub struct Theme {
     pub branches: [Color32; 6],
 }
 
+/// Name des eigenen Farbschemas (gespeichert wie die anderen über den Namen)
+pub const CUSTOM_NAME: &str = "Custom";
+
+/// Eigene Farben aus dem Farb-Editor. Gitter, Textfarbe auf farbigen Knoten
+/// und hell/dunkel werden daraus berechnet.
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CustomColors {
+    pub background: [u8; 3],
+    pub card: [u8; 3],
+    pub text: [u8; 3],
+    pub root: [u8; 3],
+    pub selection: [u8; 3],
+    pub branches: [[u8; 3]; 6],
+}
+
+impl Default for CustomColors {
+    fn default() -> Self {
+        Self::from_theme(&THEMES[1])
+    }
+}
+
+fn to_rgb(c: Color32) -> [u8; 3] {
+    [c.r(), c.g(), c.b()]
+}
+
+fn from_rgb([r, g, b]: [u8; 3]) -> Color32 {
+    Color32::from_rgb(r, g, b)
+}
+
+/// Helligkeit 0…1 (für die Wahl der Textfarbe)
+pub fn luminance(c: Color32) -> f32 {
+    (0.299 * c.r() as f32 + 0.587 * c.g() as f32 + 0.114 * c.b() as f32) / 255.0
+}
+
+impl CustomColors {
+    pub fn from_theme(t: &Theme) -> Self {
+        Self {
+            background: to_rgb(t.background),
+            card: to_rgb(t.card),
+            text: to_rgb(t.text),
+            root: to_rgb(t.root),
+            selection: to_rgb(t.selection),
+            branches: t.branches.map(to_rgb),
+        }
+    }
+
+    pub fn to_theme(&self) -> Theme {
+        let background = from_rgb(self.background);
+        let text = from_rgb(self.text);
+        let root = from_rgb(self.root);
+        let branches = self.branches.map(from_rgb);
+        // Auf hellen Zweigfarben dunkle Schrift, sonst weiße
+        let accents = std::iter::once(root).chain(branches);
+        let light = accents.map(luminance).sum::<f32>() / 7.0 > 0.62;
+        Theme {
+            name: CUSTOM_NAME,
+            dark: luminance(background) < 0.5,
+            background,
+            grid: mix(background, text, 0.14),
+            card: from_rgb(self.card),
+            text,
+            on_accent: if light {
+                rgb(30, 30, 36)
+            } else {
+                Color32::WHITE
+            },
+            root,
+            selection: from_rgb(self.selection),
+            branches,
+        }
+    }
+}
+
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
@@ -25,7 +101,7 @@ const fn hex(v: u32) -> Color32 {
     rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
 }
 
-pub const THEMES: [Theme; 8] = [
+pub const THEMES: [Theme; 16] = [
     Theme {
         name: "Light",
         dark: false,
@@ -179,6 +255,158 @@ pub const THEMES: [Theme; 8] = [
             hex(0x94e2d5),
         ],
     },
+    Theme {
+        name: "Nord",
+        dark: true,
+        background: hex(0x2E3440),
+        grid: hex(0x434C5E),
+        card: hex(0x3B4252),
+        text: hex(0xECEFF4),
+        on_accent: hex(0x2E3440),
+        root: hex(0x81A1C1),
+        selection: hex(0xEBCB8B),
+        branches: [
+            hex(0x88C0D0),
+            hex(0xBF616A),
+            hex(0xA3BE8C),
+            hex(0xEBCB8B),
+            hex(0xB48EAD),
+            hex(0x8FBCBB),
+        ],
+    },
+    Theme {
+        name: "Dracula",
+        dark: true,
+        background: hex(0x282A36),
+        grid: hex(0x44475A),
+        card: hex(0x343746),
+        text: hex(0xF8F8F2),
+        on_accent: hex(0x282A36),
+        root: hex(0xBD93F9),
+        selection: hex(0xF1FA8C),
+        branches: [
+            hex(0x8BE9FD),
+            hex(0xFF79C6),
+            hex(0x50FA7B),
+            hex(0xFFB86C),
+            hex(0xBD93F9),
+            hex(0xFF5555),
+        ],
+    },
+    Theme {
+        name: "Tokyo Night",
+        dark: true,
+        background: hex(0x1A1B26),
+        grid: hex(0x2F334D),
+        card: hex(0x24283B),
+        text: hex(0xC0CAF5),
+        on_accent: hex(0x1A1B26),
+        root: hex(0xBB9AF7),
+        selection: hex(0xE0AF68),
+        branches: [
+            hex(0x7AA2F7),
+            hex(0xF7768E),
+            hex(0x9ECE6A),
+            hex(0xE0AF68),
+            hex(0xBB9AF7),
+            hex(0x7DCFFF),
+        ],
+    },
+    Theme {
+        name: "Gruvbox",
+        dark: true,
+        background: hex(0x282828),
+        grid: hex(0x45403D),
+        card: hex(0x32302F),
+        text: hex(0xEBDBB2),
+        on_accent: hex(0x282828),
+        root: hex(0xFE8019),
+        selection: hex(0xFABD2F),
+        branches: [
+            hex(0x83A598),
+            hex(0xFB4934),
+            hex(0xB8BB26),
+            hex(0xFABD2F),
+            hex(0xD3869B),
+            hex(0x8EC07C),
+        ],
+    },
+    Theme {
+        name: "Rosé Pine",
+        dark: true,
+        background: hex(0x191724),
+        grid: hex(0x312D47),
+        card: hex(0x1F1D2E),
+        text: hex(0xE0DEF4),
+        on_accent: hex(0x191724),
+        root: hex(0xC4A7E7),
+        selection: hex(0xF6C177),
+        branches: [
+            hex(0x9CCFD8),
+            hex(0xEB6F92),
+            hex(0xB4E3AD),
+            hex(0xF6C177),
+            hex(0xC4A7E7),
+            hex(0xEBBCBA),
+        ],
+    },
+    Theme {
+        name: "Solarized Dark",
+        dark: true,
+        background: hex(0x002B36),
+        grid: hex(0x0E4553),
+        card: hex(0x073642),
+        text: hex(0xEEE8D5),
+        on_accent: Color32::WHITE,
+        root: hex(0x268BD2),
+        selection: hex(0xB58900),
+        branches: [
+            hex(0x268BD2),
+            hex(0xDC322F),
+            hex(0x859900),
+            hex(0xCB4B16),
+            hex(0x6C71C4),
+            hex(0x2AA198),
+        ],
+    },
+    Theme {
+        name: "Solarized Light",
+        dark: false,
+        background: hex(0xFDF6E3),
+        grid: hex(0xE6DFC9),
+        card: hex(0xFFFDF5),
+        text: hex(0x073642),
+        on_accent: Color32::WHITE,
+        root: hex(0x268BD2),
+        selection: hex(0xB58900),
+        branches: [
+            hex(0x268BD2),
+            hex(0xDC322F),
+            hex(0x859900),
+            hex(0xCB4B16),
+            hex(0x6C71C4),
+            hex(0x2AA198),
+        ],
+    },
+    Theme {
+        name: "Sakura",
+        dark: false,
+        background: hex(0xFFF5F7),
+        grid: hex(0xF1D9DF),
+        card: hex(0xFFFFFF),
+        text: hex(0x4A3B40),
+        on_accent: Color32::WHITE,
+        root: hex(0xC2557A),
+        selection: hex(0xF2B705),
+        branches: [
+            hex(0xE76F93),
+            hex(0x7B9ACC),
+            hex(0x6DB38C),
+            hex(0xE8A04E),
+            hex(0xA27BC9),
+            hex(0x4DB6AC),
+        ],
+    },
 ];
 
 /// Mischt zwei Farben (t = 0 → a, t = 1 → b)
@@ -297,4 +525,37 @@ pub fn install_fonts(ctx: &egui::Context) {
 
 fn stroke(width: f32, color: Color32) -> Stroke {
     Stroke::new(width, color)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn themes_have_unique_names_and_custom_colours_round_trip() {
+        // Gespeichert wird der Name – er muss eindeutig sein
+        for (i, a) in THEMES.iter().enumerate() {
+            assert!(
+                THEMES[i + 1..].iter().all(|b| a.name != b.name),
+                "{}",
+                a.name
+            );
+            assert_ne!(a.name, CUSTOM_NAME);
+        }
+        let custom = CustomColors::from_theme(&THEMES[1]).to_theme();
+        assert_eq!(custom.background, THEMES[1].background);
+        assert_eq!(custom.branches, THEMES[1].branches);
+        assert!(custom.dark);
+        // Helle Zweigfarben bekommen dunkle Schrift, kräftige weiße
+        let pastel = CustomColors {
+            root: [230, 230, 250],
+            branches: [[240, 220, 200]; 6],
+            ..Default::default()
+        };
+        assert!(luminance(pastel.to_theme().on_accent) < 0.3);
+        assert_eq!(
+            CustomColors::from_theme(&THEMES[0]).to_theme().on_accent,
+            Color32::WHITE
+        );
+    }
 }

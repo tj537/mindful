@@ -196,6 +196,13 @@ mod tests {
             shapes = snap.frame(t, |ctx| app.show(ctx));
         }
         snap.save(&shapes, Path::new("target/snapshots/app_settings.png"));
+        snap.ctx.memory_mut(|m| m.close_popup());
+        app.open_color_editor_for_snapshot();
+        for t in [27.9, 27.95, 27.99] {
+            shapes = snap.frame(t, |ctx| app.show(ctx));
+        }
+        snap.save(&shapes, Path::new("target/snapshots/app_colours.png"));
+        app.set_theme_for_snapshot(1);
         // schmal: kompakter Knopf
         snap.ctx.memory_mut(|m| m.close_popup());
         snap.size = Vec2::new(1000.0, 200.0);

@@ -434,7 +434,7 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 
 ## Settings
 
-The gear at the right end of the top bar opens a popup (`MindMapApp::settings_ui`) with the theme cards, the presentation switches (reveal bullets one by one, topics on the title slide, more effects) and the general ones (tips on empty maps, update check). Everything in it is stored with the app state. New global options belong here rather than in the menus.
+The gear at the right end of the top bar opens a popup (`MindMapApp::settings_ui`) with the theme cards, the button for your own colours and the general switches (tips on empty maps, update check). Presentation options stay in *View* and in the ⚙︎ menu while presenting. Everything in it is stored with the app state. New global options belong here rather than in the menus.
 
 ## Update check (`update.rs`)
 
@@ -512,6 +512,8 @@ A `Theme` describes background, grid, card color, text colors, root color, selec
 - `visuals_for(theme)` derives the egui look from it: flat buttons, rounded corners, accent color on hover.
 - `apply_spacing` sets spacing and font sizes (the same for all themes).
 - `install_fonts` loads the macOS system font if available, plus the Phosphor icons.
+
+`THEMES` holds 16 fixed themes; `Theme` is `Copy` and the app always works with `MindMapApp::current_theme()`. The index `THEMES.len()` stands for **your own colours**: `CustomColors` stores background, cards, text, central topic, highlight and the six branch colours (saved with the app state); `to_theme` derives the grid, light/dark and the text colour on coloured nodes (dark on pastel colours, white otherwise). The colour editor (`MindMapApp::color_editor`) changes them live and can start from any built-in theme. Themes are saved by **name**, so names must stay unique (a test checks this).
 
 Icons are inserted into text as characters: `format!("{}  Save", icon::FLOPPY_DISK)`.
 

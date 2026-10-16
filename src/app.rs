@@ -10,7 +10,9 @@ use crate::nodes::{
     with_thumb, NodeStyle, MIN_NODE, TASK_SPACE,
 };
 use crate::present::ease_in_out_cubic;
-use crate::theme::{apply_spacing, install_fonts, visuals_for, Theme, THEMES};
+use crate::theme::{
+    apply_spacing, install_fonts, visuals_for, CustomColors, Theme, CUSTOM_NAME, THEMES,
+};
 use crate::{ai_prompt, markdown_view, present, tour};
 use eframe::egui::{
     self, epaint::CubicBezierShape, Align, Align2, Color32, FontId, Key, KeyboardShortcut, Layout,
@@ -390,6 +392,44 @@ fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool
     picked
 }
 
+/// Ein Farbschema als Kärtchen in seinen eigenen Farben
+fn theme_card(ui: &mut egui::Ui, t: &Theme, selected: bool, accent: Color32) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(176.0, 44.0), Sense::click());
+    let p = ui.painter();
+    p.rect_filled(rect, 10.0, t.background);
+    let stroke = if selected {
+        Stroke::new(2.0_f32, accent)
+    } else if resp.hovered() {
+        Stroke::new(1.0_f32, t.text.gamma_multiply(0.4))
+    } else {
+        Stroke::new(1.0_f32, t.grid)
+    };
+    p.rect_stroke(rect, 10.0, stroke, egui::StrokeKind::Inside);
+    for (k, c) in [t.root, t.branches[0], t.branches[1], t.branches[2]]
+        .into_iter()
+        .enumerate()
+    {
+        p.circle_filled(
+            rect.left_center() + Vec2::new(14.0 + k as f32 * 8.0, 0.0),
+            5.0,
+            c,
+        );
+    }
+    let label = if t.name == CUSTOM_NAME {
+        format!("{}  Your colours", icon::PALETTE)
+    } else {
+        t.name.to_string()
+    };
+    p.with_clip_rect(rect.shrink(2.0)).text(
+        rect.left_center() + Vec2::new(52.0, 0.0),
+        Align2::LEFT_CENTER,
+        label,
+        FontId::proportional(13.0),
+        t.text,
+    );
+    resp.on_hover_text(t.name)
+}
+
 fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
     ui.set_min_width(220.0);
     let l = |ic: &str, text: &str| format!("{ic}  {text}");
@@ -674,6 +714,8 @@ struct SavedState {
     prompt: ai_prompt::PromptForm,
     #[serde(default = "yes")]
     check_updates: bool,
+    #[serde(default)]
+    custom_colors: CustomColors,
 }
 
 fn yes() -> bool {
@@ -690,13 +732,18 @@ struct SavedStateRef<'a> {
     effects: present::Effects,
     prompt: &'a ai_prompt::PromptForm,
     check_updates: bool,
+    custom_colors: CustomColors,
 }
 
 pub struct MindMapApp {
     docs: Vec<Document>,
     active: usize,
+    /// Index in `THEMES`; `THEMES.len()` steht für die eigenen Farben
     theme: usize,
-    applied_theme: Option<usize>,
+    applied_theme: Option<Theme>,
+    /// Eigene Farben aus dem Farb-Editor
+    custom_colors: CustomColors,
+    show_color_editor: bool,
     /// Tab wurde gedrückt (wird abgefangen, bevor egui damit den Fokus wechselt)
     tab_pressed: bool,
     /// Ctrl+Tab / Ctrl+Shift+Tab
@@ -777,6 +824,8 @@ impl MindMapApp {
             active: 0,
             theme: DEFAULT_THEME,
             applied_theme: None,
+            custom_colors: CustomColors::default(),
+            show_color_editor: false,
             tab_pressed: false,
             tab_switch: 0,
             focus_pending: false,
@@ -820,11 +869,16 @@ impl MindMapApp {
                     "Wald" => "Forest",
                     other => other,
                 };
-                app.theme = THEMES
-                    .iter()
-                    .position(|t| t.name == name)
-                    .unwrap_or(DEFAULT_THEME);
+                app.theme = if name == CUSTOM_NAME {
+                    THEMES.len()
+                } else {
+                    THEMES
+                        .iter()
+                        .position(|t| t.name == name)
+                        .unwrap_or(DEFAULT_THEME)
+                };
             }
+            app.custom_colors = state.custom_colors;
             app.docs = state.docs;
             app.active = state.active;
             app.show_welcome = state.show_welcome;
@@ -859,9 +913,10 @@ impl MindMapApp {
     pub fn show(&mut self, ctx: &egui::Context) {
         self.poll_pdf_export(ctx);
         self.poll_update_check();
-        if self.applied_theme != Some(self.theme) {
-            ctx.set_visuals(visuals_for(&THEMES[self.theme]));
-            self.applied_theme = Some(self.theme);
+        let current = self.current_theme();
+        if self.applied_theme != Some(current) {
+            ctx.set_visuals(visuals_for(&current));
+            self.applied_theme = Some(current);
         }
         // Hineingezogene Dateien: Bilder an einen Knoten hängen, Mindmaps öffnen
         let dropped: Vec<PathBuf> = ctx.input(|i| {
@@ -878,7 +933,7 @@ impl MindMapApp {
             }
         }
 
-        let theme = &THEMES[self.theme];
+        let theme = &self.current_theme();
         let mode = self.doc().mode;
 
         // Folien oder Kamerafahrt: nur die Präsentation, keine Leisten
@@ -952,6 +1007,7 @@ impl MindMapApp {
 
         self.help_window(ctx);
         self.note_window(ctx);
+        self.color_editor(ctx);
 
         if let Some(a) = action {
             self.apply(ctx, a);
@@ -975,6 +1031,12 @@ impl MindMapApp {
     }
 
     #[cfg(test)]
+    pub fn open_color_editor_for_snapshot(&mut self) {
+        self.theme = THEMES.len();
+        self.show_color_editor = true;
+    }
+
+    #[cfg(test)]
     pub fn new_tab_for_snapshot(&mut self) {
         self.new_tab();
     }
@@ -988,6 +1050,14 @@ impl MindMapApp {
             root.map(|n| n.text.clone()).unwrap_or_default(),
             doc.editing.is_some(),
         )
+    }
+
+    /// Aktuelles Farbschema – eines aus `THEMES` oder die eigenen Farben
+    fn current_theme(&self) -> Theme {
+        THEMES
+            .get(self.theme)
+            .copied()
+            .unwrap_or_else(|| self.custom_colors.to_theme())
     }
 
     fn doc(&self) -> &Document {
@@ -1151,6 +1221,71 @@ impl MindMapApp {
         }
     }
 
+    /// Fenster zum Bearbeiten der eigenen Farben; Änderungen wirken sofort
+    fn color_editor(&mut self, ctx: &egui::Context) {
+        if !self.show_color_editor {
+            return;
+        }
+        let mut open = true;
+        let mut start_from = None;
+        egui::Window::new(format!("{}  Your colours", icon::PALETTE))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(320.0)
+            .show(ctx, |ui| {
+                let c = &mut self.custom_colors;
+                ui.horizontal(|ui| {
+                    ui.label("Start from");
+                    egui::ComboBox::from_id_salt("colour_start")
+                        .selected_text("a theme …")
+                        .show_ui(ui, |ui| {
+                            for (i, t) in THEMES.iter().enumerate() {
+                                if ui.selectable_label(false, t.name).clicked() {
+                                    start_from = Some(i);
+                                }
+                            }
+                        });
+                });
+                ui.add_space(6.0);
+                let pick = |ui: &mut egui::Ui, label: &str, rgb: &mut [u8; 3]| {
+                    ui.label(label);
+                    let mut color = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+                    if egui::color_picker::color_edit_button_srgba(
+                        ui,
+                        &mut color,
+                        egui::color_picker::Alpha::Opaque,
+                    )
+                    .changed()
+                    {
+                        *rgb = [color.r(), color.g(), color.b()];
+                    }
+                    ui.end_row();
+                };
+                egui::Grid::new("colour_grid")
+                    .num_columns(2)
+                    .spacing(Vec2::new(18.0, 8.0))
+                    .show(ui, |ui| {
+                        pick(ui, "Background", &mut c.background);
+                        pick(ui, "Cards and bars", &mut c.card);
+                        pick(ui, "Text", &mut c.text);
+                        pick(ui, "Central topic", &mut c.root);
+                        pick(ui, "Highlight", &mut c.selection);
+                        for (i, branch) in c.branches.iter_mut().enumerate() {
+                            pick(ui, &format!("Branch {}", i + 1), branch);
+                        }
+                    });
+                ui.add_space(6.0);
+                ui.weak("Changes apply right away. Text on coloured nodes switches between dark and white by itself.");
+            });
+        if let Some(i) = start_from {
+            self.custom_colors = CustomColors::from_theme(&THEMES[i]);
+        }
+        if !open {
+            self.show_color_editor = false;
+        }
+    }
+
     /// Inhalt des Einstellungen-Fensters (Zahnrad oben rechts)
     fn settings_ui(&mut self, ui: &mut egui::Ui, current_theme: usize, out: &mut Option<Command>) {
         use crate::ai_prompt::{field_label, toggle};
@@ -1163,68 +1298,42 @@ impl MindMapApp {
         ui.add_space(4.0);
 
         field_label(ui, "THEME");
-        // Farbschemas als Kärtchen in zwei Spalten
-        let accent = THEMES[current_theme].branches[0];
-        egui::Grid::new("settings_themes")
-            .num_columns(2)
-            .spacing(Vec2::new(8.0, 8.0))
+        // Farbschemas als Kärtchen in zwei Spalten, dazu die eigenen Farben
+        let accent = self.current_theme().branches[0];
+        let custom = self.custom_colors.to_theme();
+        let themes: Vec<Theme> = THEMES.iter().copied().chain([custom]).collect();
+        egui::ScrollArea::vertical()
+            .id_salt("settings_themes_scroll")
+            // Alle Kärtchen zeigen, nur bei kleinem Fenster scrollen
+            .max_height((ui.ctx().screen_rect().height() - 380.0).clamp(150.0, 480.0))
             .show(ui, |ui| {
-                for (i, t) in THEMES.iter().enumerate() {
-                    let size = Vec2::new(176.0, 44.0);
-                    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-                    let p = ui.painter();
-                    p.rect_filled(rect, 10.0, t.background);
-                    let selected = i == current_theme;
-                    let stroke = if selected {
-                        Stroke::new(2.0_f32, accent)
-                    } else if resp.hovered() {
-                        Stroke::new(1.0_f32, t.text.gamma_multiply(0.4))
-                    } else {
-                        Stroke::new(1.0_f32, t.grid)
-                    };
-                    p.rect_stroke(rect, 10.0, stroke, egui::StrokeKind::Inside);
-                    for (k, c) in [t.root, t.branches[0], t.branches[1], t.branches[2]]
-                        .into_iter()
-                        .enumerate()
-                    {
-                        p.circle_filled(
-                            rect.left_center() + Vec2::new(14.0 + k as f32 * 8.0, 0.0),
-                            5.0,
-                            c,
-                        );
-                    }
-                    p.with_clip_rect(rect.shrink(2.0)).text(
-                        rect.left_center() + Vec2::new(52.0, 0.0),
-                        Align2::LEFT_CENTER,
-                        t.name,
-                        FontId::proportional(13.0),
-                        t.text,
-                    );
-                    if resp.on_hover_text(t.name).clicked() {
-                        *out = Some(Command::Theme(i));
-                    }
-                    if i % 2 == 1 {
-                        ui.end_row();
-                    }
-                }
+                egui::Grid::new("settings_themes")
+                    .num_columns(2)
+                    .spacing(Vec2::new(8.0, 8.0))
+                    .show(ui, |ui| {
+                        for (i, t) in themes.iter().enumerate() {
+                            if theme_card(ui, t, i == current_theme, accent).clicked() {
+                                *out = Some(Command::Theme(i));
+                            }
+                            if i % 2 == 1 {
+                                ui.end_row();
+                            }
+                        }
+                    });
             });
-
-        field_label(ui, "PRESENTATION");
-        toggle(
-            ui,
-            &mut self.build_bullets,
-            "Reveal bullet points one by one",
-            "Space or → shows the next point instead of the next slide",
-        );
-        toggle(
-            ui,
-            &mut self.effects.title_topics,
-            "Topics on the title slide",
-            "Show the main branches as coloured tags on the title slide",
-        );
-        ui.menu_button(format!("{}  More effects", icon::SPARKLE), |ui| {
-            present::effects_menu(ui, &mut self.effects, true, true)
-        });
+        ui.add_space(2.0);
+        if ui
+            .button(format!("{}  Edit your own colours …", icon::PALETTE))
+            .on_hover_text("Pick every colour yourself – starts from the current theme")
+            .clicked()
+        {
+            if self.theme < THEMES.len() {
+                self.custom_colors = CustomColors::from_theme(&THEMES[self.theme]);
+            }
+            *out = Some(Command::Theme(THEMES.len()));
+            self.show_color_editor = true;
+            ui.memory_mut(|m| m.close_popup());
+        }
 
         field_label(ui, "GENERAL");
         toggle(
@@ -1287,17 +1396,17 @@ impl MindMapApp {
             return;
         }
         let map = self.doc().map.clone();
-        let theme = self.theme;
+        let theme = self.current_theme();
         let fx = self.effects;
         let job = PdfJob {
             done: Arc::default(),
-            total: present::slide_count(&map, &THEMES[theme]),
+            total: present::slide_count(&map, &theme),
             result: Arc::default(),
             path: path.clone(),
         };
         let (done, result) = (job.done.clone(), job.result.clone());
         std::thread::spawn(move || {
-            let outcome = crate::pdf::export(&map, &THEMES[theme], &fx, &path, &done);
+            let outcome = crate::pdf::export(&map, &theme, &fx, &path, &done);
             if let Ok(mut slot) = result.lock() {
                 *slot = Some(outcome);
             }
@@ -1458,7 +1567,7 @@ impl MindMapApp {
     }
 
     fn export_nodes(&self, ctx: &egui::Context) -> Vec<ExportNode> {
-        let theme = &THEMES[self.theme];
+        let theme = &self.current_theme();
         let map = &self.doc().map;
         map.nodes
             .iter()
@@ -1497,7 +1606,7 @@ impl MindMapApp {
         else {
             return;
         };
-        let theme = &THEMES[self.theme];
+        let theme = &self.current_theme();
         if let ExportKind::Pdf = kind {
             self.start_pdf_export(path);
             return;
@@ -2010,7 +2119,7 @@ impl MindMapApp {
         let current_theme = self.theme;
         let mode = self.doc().mode;
         let md_preview = self.md_preview;
-        let accent = THEMES[self.theme].branches[0];
+        let accent = self.current_theme().branches[0];
         let l = |ic: &str, text: &str| format!("{ic}  {text}");
 
         // Schmales Fenster: Teile der Leiste nach und nach ausblenden oder verkleinern,
@@ -2283,6 +2392,7 @@ impl MindMapApp {
                     Command::SetMode(Mode::Tour),
                     &mut out,
                 );
+                ui.checkbox(&mut self.build_bullets, "Reveal bullet points one by one");
                 ui.menu_button(l(icon::SPARKLE, "Presentation effects"), |ui| {
                     present::effects_menu(ui, &mut self.effects, true, true)
                 });
@@ -2835,7 +2945,7 @@ impl MindMapApp {
     }
 
     fn canvas(&mut self, ui: &mut egui::Ui) -> Option<Action> {
-        let theme = &THEMES[self.theme];
+        let theme = &self.current_theme();
         let query = self.search.trim().to_lowercase();
         let focus_pending = &mut self.focus_pending;
         let edit_cursor_end = &mut self.edit_cursor_end;
@@ -3318,8 +3428,9 @@ impl MindMapApp {
             action_item(ui, true, "Fit to window", &fit_sc, Action::Fit, &mut action);
             ui.separator();
             ui.menu_button("Theme", |ui| {
-                for (i, t) in THEMES.iter().enumerate() {
-                    if ui.radio(current_theme == i, t.name).clicked() {
+                let names = THEMES.iter().map(|t| t.name).chain([CUSTOM_NAME]);
+                for (i, name) in names.enumerate() {
+                    if ui.radio(current_theme == i, name).clicked() {
                         action = Some(Action::SetTheme(i));
                         ui.close_menu();
                     }
@@ -3441,7 +3552,7 @@ impl eframe::App for MindMapApp {
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         let state = SavedStateRef {
-            theme_name: THEMES[self.theme].name,
+            theme_name: self.current_theme().name,
             docs: &self.docs,
             active: self.active,
             show_welcome: self.show_welcome,
@@ -3449,6 +3560,7 @@ impl eframe::App for MindMapApp {
             effects: self.effects,
             prompt: &self.prompt,
             check_updates: self.check_updates,
+            custom_colors: self.custom_colors,
         };
         eframe::set_value(storage, eframe::APP_KEY, &state);
     }
