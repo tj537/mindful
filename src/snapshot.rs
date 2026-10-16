@@ -24,6 +24,8 @@ pub struct Snapshot {
     pub ctx: egui::Context,
     textures: HashMap<TextureId, Texture>,
     size: Vec2,
+    /// Pixel pro Punkt (2 = Retina)
+    scale: f32,
 }
 
 impl Snapshot {
@@ -32,6 +34,15 @@ impl Snapshot {
             ctx: egui::Context::default(),
             textures: HashMap::new(),
             size: Vec2::new(width, height),
+            scale: 1.0,
+        }
+    }
+
+    /// Wie `new`, aber mit `scale` Pixeln pro Punkt gerastert (schärfer)
+    pub fn retina(width: f32, height: f32, scale: f32) -> Self {
+        Self {
+            scale,
+            ..Self::new(width, height)
         }
     }
 
@@ -41,11 +52,16 @@ impl Snapshot {
         time: f64,
         run_ui: impl FnMut(&egui::Context),
     ) -> Vec<ClippedPrimitive> {
-        let input = egui::RawInput {
+        let mut input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, self.size)),
             time: Some(time),
             ..Default::default()
         };
+        input
+            .viewports
+            .entry(egui::ViewportId::ROOT)
+            .or_default()
+            .native_pixels_per_point = Some(self.scale);
         let output = self.ctx.run(input, run_ui);
         for (id, delta) in output.textures_delta.set {
             let (width, height, pixels) = match &delta.image {
@@ -84,7 +100,11 @@ impl Snapshot {
 
     /// Dreiecke rastern und als PNG speichern
     pub fn save(&self, primitives: &[ClippedPrimitive], path: &Path) {
-        let (w, h) = (self.size.x as usize, self.size.y as usize);
+        let scale = self.scale;
+        let (w, h) = (
+            (self.size.x * scale) as usize,
+            (self.size.y * scale) as usize,
+        );
         // Vormultiplizierte Farben 0…1, wie egui sie liefert
         let mut buffer = vec![[0.0_f32; 4]; w * h];
         let rgba = |c: Color32| c.to_array().map(|v| v as f32 / 255.0);
@@ -95,12 +115,18 @@ impl Snapshot {
             let Primitive::Mesh(mesh) = &primitive.primitive else {
                 continue;
             };
-            let clip = primitive
-                .clip_rect
-                .intersect(Rect::from_min_size(Pos2::ZERO, self.size));
+            let clip = Rect::from_min_max(
+                primitive.clip_rect.min * scale,
+                primitive.clip_rect.max * scale,
+            )
+            .intersect(Rect::from_min_size(Pos2::ZERO, self.size * scale));
             let texture = self.textures.get(&mesh.texture_id);
             for tri in mesh.indices.as_chunks::<3>().0 {
-                let [a, b, c] = [tri[0], tri[1], tri[2]].map(|i| mesh.vertices[i as usize]);
+                let [a, b, c] = [tri[0], tri[1], tri[2]].map(|i| {
+                    let mut v = mesh.vertices[i as usize];
+                    v.pos = (v.pos.to_vec2() * scale).to_pos2();
+                    v
+                });
                 let area = edge(a.pos, b.pos, c.pos);
                 if area.abs() < 1e-6 {
                     continue;
@@ -237,5 +263,34 @@ mod tests {
             &shapes,
             Path::new(&format!("target/snapshots/{name}_tour.png")),
         );
+    }
+
+    /// Das ganze Fenster in allen Ansichten und einigen Farbschemas rendern
+    #[test]
+    #[ignore]
+    fn render_app() {
+        use crate::app::MindMapApp;
+        let mut snap = Snapshot::retina(1400.0, 860.0, 2.0);
+        let mut app = MindMapApp::for_snapshot(&snap.ctx);
+        for (name, mode) in [("mindmap", Mode::Mindmap), ("markdown", Mode::Markdown)] {
+            app.set_mode_for_snapshot(mode);
+            let mut shapes = Vec::new();
+            for t in [0.0, 0.5, 5.0, 10.0] {
+                shapes = snap.frame(t, |ctx| app.show(ctx));
+            }
+            snap.save(
+                &shapes,
+                Path::new(&format!("target/snapshots/app_{name}.png")),
+            );
+        }
+        // Helles Farbschema und eine leere Mindmap mit Tipp-Karte
+        app.set_mode_for_snapshot(Mode::Mindmap);
+        app.set_theme_for_snapshot(0);
+        app.new_tab_for_snapshot();
+        let mut shapes = Vec::new();
+        for t in [20.0, 20.5, 25.0] {
+            shapes = snap.frame(t, |ctx| app.show(ctx));
+        }
+        snap.save(&shapes, Path::new("target/snapshots/app_light_empty.png"));
     }
 }

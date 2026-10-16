@@ -1,145 +1,141 @@
 # Mindful
 
-Mind maps, Markdown and presentations in one lightweight desktop app – written in Rust with [egui](https://github.com/emilk/egui).
+**Mind maps, Markdown and presentations in one small desktop app.**
+Write an outline, see it as a mind map, and present it as slides or as a camera flight through the map, all from the same data. Mindful is written in Rust with [egui](https://github.com/emilk/egui). It starts instantly and keeps your mind map in a single file.
 
-![Example mind map “The Universe”](docs/example-universe.png)
+![Mindful showing the example mind map “The Universe”](docs/screenshot-mindmap.png)
 
-**Contents**
+| Slides with diagram layouts | Pictures on slides |
+|---|---|
+| ![A cycle diagram slide](docs/slide-cycle.png) | ![A gallery slide with three planets](docs/slide-gallery.png) |
 
-1. [What Mindful does](#what-mindful-does)
-2. [Status per operating system](#status-per-operating-system)
-3. [Who does what?](#who-does-what)
-4. [For users: install and get started](#for-users-install-and-get-started)
-5. [For developers: setup](#for-developers-setup)
-6. [Team workflow](#team-workflow)
-7. [Building releases](#building-releases)
-8. [Usage and keyboard shortcuts](#usage-and-keyboard-shortcuts)
-9. [Project structure](#project-structure)
-10. [Known limitations and ideas](#known-limitations-and-ideas)
+## Features
 
----
-
-## What Mindful does
-
-Mindful shows **one mind map in four views**. All of them work on the same data, so a change in one appears in the others immediately.
+**One mind map, four views.** A change in one view shows up in the others right away.
 
 | View | What it's for |
 |---|---|
-| **Markdown editor** | Write quickly as text: `#` central topic, `##` main branches, `-` children, plain text as notes; with live preview |
-| **Mind map** | Collect ideas: add nodes, drag them, color them, collapse them, lay them out automatically |
-| **Presentation** | Present: a title slide plus one slide per main branch, full screen; bullet points appear one by one |
-| **Camera tour** | Present right on the mind map: the camera flies from branch to branch, the current branch is spotlit and its children grow out of it |
+| **Markdown** | Write fast: `#` central topic, `##` main branches, `-` points, plain lines as notes, with a live preview |
+| **Mind map** | Collect and arrange ideas: drag, color, collapse, auto layout |
+| **Presentation** | A title slide plus one slide per main branch; bullet points appear one by one |
+| **Tour** | Present on the mind map itself: the camera flies from branch to branch and reveals what's below |
 
-Also:
+**Slides that look like slides**
+- Nine diagram layouts built from your bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (it counts up) and quote. Pick one with a right-click on the slide.
+- Pictures from your computer: drag them onto a node or a slide, or paste a screenshot. One picture sits beside the text, a single picture fills the slide, several become a gallery.
+- Checkboxes you can tick off during the talk, with confetti if you like.
+- Transitions, bullet effects, animated backgrounds (a starfield by default), a laser pointer and a quick-jump strip. Everything is optional under ⚙︎.
 
-- Several mind maps in tabs. Everything is restored on the next start, including unsaved changes.
-- Save and open as `.mindmap` files, import Markdown and plain-text outlines
-- Export as PNG image, SVG graphic or Markdown
-- **Slide layouts** like SmartArt, made from the same bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (counts up) and quote – chosen by right-clicking a slide or main branch, or as `<!-- timeline -->` after a heading in Markdown
-- **Images** from your computer: drag them onto a node or a slide, use **Image → Insert image…** in the node's right-click menu, or paste a screenshot with ⌘V. One image beside the bullet points, a single image without bullet points fills the whole slide (with a slow zoom), several images become a gallery with captions. Images are scaled down and stored **inside the `.mindmap` file** – you only ever share one file
-- **Checkboxes** on any node – written as `- [ ]` / `- [x]` in Markdown; they appear on slides, in the tour and in exports, and can be ticked off right during a presentation
-- **AI prompt**: describe topic, language, details and scope, copy a ready-made prompt for ChatGPT, Claude & co., and paste the AI's Markdown answer into a new tab – it becomes a mind map instantly. The prompt explains every slide layout, so the AI picks a fitting diagram for each section by itself (can be switched off)
-- **Templates**: brainstorming, project plan, SWOT analysis, weekly plan, meeting notes, book summary (**File → New from template**)
-- Auto layout with animation: nodes glide to their new places and the view follows smoothly
-- Undo/redo, search, zoom, copy/paste, notes on every node
-- Presentation effects: slide transitions (fade by default, slide, zoom, rise), bullet effects (slide in, fade, pop, typewriter), animated backgrounds (a starfield with parallax, nebula and shooting stars by default, bokeh or aurora), title animations, confetti when ticking a checkbox, a laser pointer and a quick-jump strip
-- Optional extras (⚙︎ while presenting): a light sweep over titles, slow zoom on slides, the colored bar on the left of slides, vignette
-- Tour effects: a ripple on arrival and optionally glow, light pulses, orbiting sparks, depth of field, warp streaks while flying, camera bounce and drift – and revealing the levels below a branch one by one
-- 8 themes (Dark is the default), including Catppuccin; icons by [Phosphor](https://phosphoricons.com)
-- Ready-made examples to try: **File → Open example → The Universe** (also available in German) – thirteen slides that show every slide layout plus a gallery, a full-screen image and an image beside text (the space pictures are drawn by `examples/make_space_images.rs` and built into the app)
+**Writing and organizing**
+- Tabs, undo/redo, search, copy & paste, notes on every node, 8 color themes.
+- Templates (brainstorming, project plan, SWOT, weekly plan, meeting notes, book summary) and a complete example to explore: **File → Open example → The Universe** (also in German).
+- **AI prompt:** describe a topic, copy the generated prompt into ChatGPT, Claude or any other assistant and paste the answer into a new tab. The prompt teaches the AI Mindful's format, including when to use which slide layout.
+- Save as `.mindmap` (one file, pictures included), import Markdown and plain-text outlines, export PNG, SVG or Markdown.
+- Your open tabs, including unsaved changes, are restored on the next start.
 
----
+## Download
 
-## Status per operating system
+Get the latest version from the [Releases page](../../releases).
 
-| System | Status | Ready-made package | Notes |
-|---|---|---|---|
-| **macOS, Apple silicon (M1–M4)** | ✅ developed and tested | `Mindful.app` via `scripts/build-mac.sh` | main platform |
-| **macOS, Intel** | 🟡 builds, untested | cross-build from an Apple-silicon Mac | see [Building releases](#building-releases) |
-| **Windows 10/11** | 🟡 code prepared, untested | none yet, build `mindful.exe` yourself | console window already disabled, icon not yet embedded in the `.exe` |
-| **Linux** | 🟡 should work, untested | none yet | needs a few system libraries |
+| System | Status |
+|---|---|
+| macOS 11+ on Apple silicon (M1 and newer) | ✅ ready-made app |
+| macOS on Intel | builds from source, untested |
+| Windows 10/11 | builds from source, untested; a ready-made package is planned |
+| Linux | builds from source, untested |
 
-The code is the same on every system. Only setup and packaging differ.
+**Installing on macOS:** unzip, then drag `Mindful.app` into *Applications*.
+Mindful isn't notarized by Apple yet, so macOS blocks the first launch. Open it anyway like this:
 
----
+1. Double-click Mindful and close the warning.
+2. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
 
-## Who does what?
+After that it opens normally. If you prefer the terminal, you can remove the download flag instead:
 
-| Role | Needs | Tasks |
+```bash
+xattr -dr com.apple.quarantine /Applications/Mindful.app
+```
+
+## Getting started
+
+1. Open the example (**File → Open example → The Universe**) and press **F5** to present it.
+2. Press **Esc** to come back, then **⌘E** to see the same content as Markdown.
+3. Start your own: **⌘T** opens a new tab. **Tab** adds a child, **Enter** a sibling, right-click opens the menu.
+
+**F1** shows all keyboard shortcuts inside the app.
+
+### Keyboard shortcuts
+
+On the Mac use ⌘, on Windows and Linux use Ctrl.
+
+| Key | Action |
+|---|---|
+| **Mind map** | |
+| Tab · Enter | Add child · add sibling |
+| F2 · double-click | Rename |
+| Del | Delete node and its children |
+| Space | Collapse / expand |
+| ⌘Enter | Add checkbox / tick it off |
+| Arrow keys | Move selection |
+| ⌘C · ⌘X · ⌘V · ⌘D | Copy · cut · paste · duplicate (⌘V also pastes images) |
+| ⌘L | Auto layout |
+| ⌘F | Find (Enter: next match) |
+| ⌘0 · ⌘+ · ⌘− | Fit to window · zoom |
+| **General** | |
+| ⌘E | Switch between Markdown and mind map |
+| F5 · F6 | Start presentation · start tour |
+| ⌘Z · ⇧⌘Z | Undo · redo |
+| ⌘T · ⌘W | New tab · close tab |
+| Ctrl+Tab · ⌘1…9 | Switch tab |
+| ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
+| **Presenting** | |
+| Space · → · ← | Next · back |
+| G | Quick jump to any slide |
+| L | Laser pointer |
+| F · Esc | Full screen · end |
+
+Navigation while presenting is keyboard-only, so clicking a checkbox never skips a slide.
+
+## The Markdown format
+
+```markdown
+# Title of the mind map
+
+Introduction (becomes the subtitle of the title slide).
+
+## A main branch <!-- timeline -->
+
+A note on the branch, shown below the slide title.
+The comment after the heading picks a slide layout (optional).
+
+- A point
+  A note on the point
+  - A sub-point
+- [ ] An open task
+- [x] A done task
+- A point with a picture
+  ![](beach.jpg)
+```
+
+A picture belongs to the line directly above it. Mindful stores the picture data inside the mind map. Exported Markdown carries it in a comment block at the end, so the file stays complete. When you import Markdown, picture paths next to the file are read in automatically.
+
+### Slide layouts
+
+| Layout | Good for | Bullet points |
 |---|---|---|
-| **User** | a Mac (Windows later) | install and use the app, report bugs (GitHub → *Issues*) |
-| **Developer** | macOS, Windows or Linux with Rust | build features, fix bugs, write tests, open pull requests |
-| **Mac release** | a Mac | run `scripts/build-mac.sh`, hand out `Mindful.app` |
-| **Windows release** | a Windows PC (or a cross-build) | build and hand out `mindful.exe`, set up Windows packaging (open) |
-| **Repository admin** (tj537) | GitHub access | invite contributors, review and merge pull requests, decide on visibility and license |
+| `timeline` | events in order | 3–6 points, each a date or phase with one sub-point |
+| `cycle` | a process that repeats | 3–6 stages, each with one short sub-point |
+| `pyramid` | levels or a hierarchy | 3–5 points from the narrow top to the broad base |
+| `funnel` | narrowing down | 3–5 points from broadest to most selective |
+| `compare` | 2–4 options side by side | option names with 2–4 sub-points each |
+| `matrix` | a 2×2 grid such as SWOT | exactly 4 points with 1–3 sub-points |
+| `venn` | overlapping ideas | 2–3 short labels plus one point saying what they share |
+| `number` | one striking figure | first point starts with the number; up to 3 more facts |
+| `quote` | a quotation | one point with the quote, one sub-point with the author |
 
-One person can of course have several roles. The important part: **a Mac package can only be built on a Mac**, and a Windows package is easiest to build on Windows.
+## Building from source
 
----
-
-## For users: install and get started
-
-### macOS
-
-1. Get `Mindful.app` from whoever builds the Mac release, or [build it yourself](#macos-2).
-2. Drag it into **Applications**, then into the Dock if you like.
-3. **On first launch:** right-click the app → **Open** → **Open**.
-   The app is only signed locally, not notarized by Apple, so macOS asks once. After that it opens normally with a double-click.
-
-### Windows
-
-There is no ready-made package yet. Until then, [build it yourself](#windows-2) and right-click `mindful.exe` → **Pin to taskbar**. On first launch Windows SmartScreen warns because the file isn't signed: **More info → Run anyway**.
-
-### Where Mindful stores data
-
-| What | macOS | Windows | Linux |
-|---|---|---|---|
-| Your mind maps | wherever you save them (`.mindmap`) | wherever you save them | wherever you save them |
-| Open tabs (including unsaved changes and their images), theme, window size, presentation effects, the AI prompt form | `~/Library/Application Support/Mindful/` | `%APPDATA%\Mindful\data\` | `~/.local/share/mindful/` |
-
-Deleting the app folder from this table resets Mindful to a fresh install.
-
----
-
-## For developers: setup
-
-On every system, Rust is installed via **rustup**. The current stable version is enough. Mindful was developed with Rust 1.99.
-
-### macOS
-
-```bash
-xcode-select --install
-```
-This installs the Xcode command line tools (compiler, linker, `iconutil`, `codesign`). If a build later complains that the license hasn't been accepted:
-```bash
-sudo xcodebuild -license
-```
-Then install Rust:
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-### Windows
-
-1. Install the **Visual Studio Build Tools** ([download](https://visualstudio.microsoft.com/visual-cpp-build-tools/)) and select the **“Desktop development with C++”** workload. Rust needs its linker and the Windows SDK.
-2. Install **Rust** with `rustup-init.exe` from [rustup.rs](https://rustup.rs) and accept the defaults.
-3. Install **Git** ([git-scm.com](https://git-scm.com)), and optionally the GitHub CLI ([cli.github.com](https://cli.github.com)).
-
-All commands below work the same in PowerShell; just write paths with `\`.
-
-### Linux (Debian/Ubuntu)
-
-```bash
-sudo apt install build-essential libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev zenity
-```
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-File dialogs use the desktop portal (`xdg-desktop-portal`), which GNOME and KDE usually ship already. `zenity` is needed for the prompt when closing a tab with unsaved changes.
-
-### Get the project and run it
-
-The repository is private, so the repository admin has to invite you first (GitHub → *Settings → Collaborators*).
+Install Rust with [rustup](https://rustup.rs), then:
 
 ```bash
 git clone https://github.com/tj537/mindful.git
@@ -148,242 +144,59 @@ git clone https://github.com/tj537/mindful.git
 cd mindful
 ```
 ```bash
-cargo run
+cargo run --release
 ```
 
-The first build downloads all libraries and takes a few minutes. After that it takes seconds.
+The first build takes a few minutes. Platform prerequisites:
 
-### The most important commands
+- **macOS:** the Xcode command line tools (`xcode-select --install`).
+- **Windows:** the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the *Desktop development with C++* workload.
+- **Linux (Debian/Ubuntu):** `sudo apt install build-essential libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev zenity`
+
+**Mac app bundle:** `./scripts/build-mac.sh` builds `dist/Mindful.app`. With `--install` it also copies the app into `/Applications`. The bundle runs on Macs with the same processor type as the build machine.
+
+### Development
 
 | Command | What it does |
 |---|---|
-| `cargo run` | build (debug) and start the app |
-| `cargo test` | run all tests |
-| `cargo clippy` | check the code for common mistakes and style issues |
-| `cargo fmt` | format the code consistently |
-| `cargo test --release render_slides -- --ignored` | render every slide of both examples to `target/snapshots/*.png` to check how they look |
-| `cargo build --release` | build the optimized version → `target/release/mindful` (Windows: `mindful.exe`) |
+| `cargo test` | run the tests |
+| `cargo clippy --all-targets` | lint |
+| `cargo fmt` | format |
+| `cargo test --release render_ -- --ignored` | render every slide and the app window to `target/snapshots/` without opening a window, handy for checking visual changes |
 
----
-
-## Team workflow
-
-1. Create a **new branch** for every change:
-   ```bash
-   git switch -c feature/short-name
-   ```
-2. Make your changes, then check before every commit:
-   ```bash
-   cargo fmt && cargo clippy && cargo test
-   ```
-   All three should finish without warnings or errors – that's the state of `main`.
-3. Commit and push:
-   ```bash
-   git push -u origin feature/short-name
-   ```
-4. Open a **pull request** against `main` on GitHub. The repository admin reviews and merges it.
-5. Try **platform-specific changes** (fonts, file paths, shortcuts) on the affected system if you can. In the code they are marked with `cfg!(target_os = "...")`.
-
-Commit messages in English, short and in the imperative: “Add notes to the export”.
-
----
-
-## Building releases
-
-### macOS
-
-```bash
-./scripts/build-mac.sh
-```
-
-The script:
-
-1. builds the optimized version (`cargo build --release`),
-2. renders the icon from `assets/icon.svg` in every size (`examples/make_icon.rs`) and turns it into an `.icns` file,
-3. assembles `dist/Mindful.app` (binary, icon, `packaging/macos/Info.plist`),
-4. signs the bundle locally (`codesign --sign -`).
-
-To build **and install** in one step – replacing `/Applications/Mindful.app` and quitting a running copy first:
-
-```bash
-./scripts/build-mac.sh --install
-```
-
-Pin the app to the Dock from **/Applications**, not from `dist/`: the Dock icon then always opens the latest build.
-
-The version number comes from `Cargo.toml`. The result runs on Macs with **the same processor type** as the one it was built on.
-
-**For Intel Macs**, or as a **universal app for both**, additionally run:
-```bash
-rustup target add x86_64-apple-darwin aarch64-apple-darwin
-```
-```bash
-cargo build --release --target x86_64-apple-darwin && cargo build --release --target aarch64-apple-darwin
-```
-```bash
-lipo -create -output target/release/mindful target/x86_64-apple-darwin/release/mindful target/aarch64-apple-darwin/release/mindful
-```
-Then do steps 2–4 of the script by hand, or extend the script (open).
-
-**Distributing without the macOS warning** requires an Apple Developer ID ($99/year) and notarization by Apple. That isn't set up yet.
-
-### Windows
-
-On the Windows PC, in the project folder:
-```powershell
-cargo build --release
-```
-The result is `target\release\mindful.exe`, a single file with no further dependencies. The release build doesn't open a console window next to the app.
-
-Still open:
-- embed the app icon in the `.exe` (e.g. with the `winresource` crate in a `build.rs`)
-- a `scripts/build-windows.ps1` script like the Mac one
-- optionally an installer and code signing to avoid the SmartScreen warning
-
-### Linux
-
-```bash
-cargo build --release
-```
-Result: `target/release/mindful`. There is no package (AppImage, `.deb`, Flatpak) yet.
-
----
-
-## Usage and keyboard shortcuts
-
-Switch views on the right of the tab bar or with a shortcut. **F1** shows every shortcut inside the app.
-On the Mac use ⌘, on Windows and Linux use Ctrl.
-
-| Key | Action |
-|---|---|
-| **Mind map** | |
-| Tab | Add child (also while typing) |
-| Enter | Add sibling / finish typing |
-| F2 · double-click | Rename |
-| Del · Backspace | Delete node and its children |
-| Space | Collapse / expand |
-| ⌘Enter | Add checkbox / tick it off |
-| Arrow keys | Move selection |
-| ⌘C · ⌘X · ⌘V · ⌘D | Copy · cut · paste · duplicate |
-| ⌘L | Auto layout |
-| ⌘F | Find (Enter: next match) |
-| ⌘0 · ⌘+ · ⌘− | Fit to window · zoom |
-| Right-click | Menu with color, note and more |
-| **General** | |
-| ⌘E | Toggle Markdown editor |
-| F5 | Start presentation |
-| F6 | Start camera tour |
-| ⌘Z · ⇧⌘Z | Undo · redo |
-| ⌘T · ⌘W | New tab · close tab |
-| Ctrl+Tab · ⌘1…9 | Switch tab |
-| ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
-| **Presentation and tour** | |
-| Space · → | Next bullet point / slide / stop (or next level in the tour) |
-| ← | Back |
-| G | Quick jump: ← → to pick, Enter to jump |
-| L | Laser pointer |
-| F · Esc | Full screen · end |
-| Click on a checkbox | Tick it off |
-
-Navigation is keyboard-only, so clicks never interfere with ticking checkboxes. While presenting, the ⚙︎ button in the top right holds the effect settings and this list of shortcuts.
-
-### Markdown format
-
-```markdown
-# Title of the mind map
-
-Note on the central topic (becomes the subtitle of the title slide).
-
-## Main branch <!-- timeline -->
-
-Note on the branch (shown on the slide below the heading). The optional comment after the heading picks a slide layout: `timeline`, `cycle`, `pyramid`, `funnel`, `compare`, `matrix`, `venn`, `number` or `quote`.
-
-- Child
-  Note on the child
-  - deeper
-- [ ] Open task
-- [x] Done task
-- Photo of the beach
-  ![](beach-3fa2c19d.jpg)
-```
-
-An image belongs to the line above it: `![](…)` directly under a heading or bullet point. When Mindful exports Markdown, the image data travels along in a comment block at the end of the file (`<!-- mindful-images … -->`), so the file stays complete. When importing Markdown, `![](photo.jpg)` paths relative to the file (or absolute, or `~/…`) are read in automatically – also when you type such a path in the Markdown editor and switch views.
-
-#### What each slide layout expects
-
-| Layout | Use it for | Bullet points |
-|---|---|---|
-| `timeline` | events in order | 3–6 points, each a date or phase with one sub-point |
-| `cycle` | a process that repeats | 3–6 stages, each with one short sub-point |
-| `pyramid` | levels or a hierarchy | 3–5 points from the narrow top to the broad base; sub-points appear beside the level |
-| `funnel` | narrowing down | 3–5 points from broadest to most selective; sub-points beside |
-| `compare` | 2–4 options side by side | option names with 2–4 sub-points each |
-| `matrix` | a 2×2 grid (e.g. SWOT) | exactly 4 points with 1–3 sub-points |
-| `venn` | overlapping ideas | 2–3 short labels plus one point saying what they share |
-| `number` | one striking figure | first point starts with the number; up to 3 sub-points or further points become fact cards |
-| `quote` | a quotation | one point with the quote, one sub-point with the author |
-
-The examples under **File → Open example** use every layout once.
-
----
-
-## Project structure
+How the code fits together (data model, the flow of a frame, Markdown sync, file format, how to add features) is described in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ```
-mindful/
-├── src/
-│   ├── main.rs            startup, window, icon, migration of old data
-│   ├── app.rs             main window: menus, tabs, mind map canvas, keyboard
-│   ├── document.rs        one tab: file, view, undo/redo
-│   ├── model.rs           mind map data, auto layout, reading and writing Markdown
-│   ├── markdown_view.rs   Markdown editor with highlighting and preview
-│   ├── present.rs         presentation mode (slides)
-│   ├── diagrams.rs        slide layouts: timeline, cycle, pyramid, matrix …
-│   ├── tour.rs            camera tour through the mind map
-│   ├── ai_prompt.rs       "AI prompt" form and the generated prompt
-│   ├── images.rs          inserting images (file, drag & drop, clipboard), scaling, drawing
-│   ├── nodes.rs           how nodes look and are drawn (shared)
-│   ├── export.rs          SVG and PNG export
-│   └── theme.rs           themes, fonts, widget style
-├── assets/
-│   ├── icon.svg / icon.png    app icon (source / for the window)
-│   ├── examples/              bundled examples (English and German) and their images
-│   └── templates/             templates for new mind maps
-├── examples/make_icon.rs  renders the icon for the Mac bundle
-├── examples/make_space_images.rs  draws the space pictures for the examples
-├── packaging/macos/       Info.plist for Mindful.app
-├── scripts/build-mac.sh   builds dist/Mindful.app
-└── docs/                  architecture and images
+src/
+├── main.rs            startup and window
+├── app.rs             main window: menus, tabs, mind map canvas, keyboard
+├── document.rs        one tab: file, view, undo/redo
+├── model.rs           mind map data, auto layout, Markdown
+├── markdown_view.rs   Markdown editor and preview
+├── present.rs         presentation mode
+├── diagrams.rs        slide layouts
+├── tour.rs            camera tour
+├── images.rs          inserting, scaling and drawing pictures
+├── nodes.rs           how nodes are drawn
+├── ai_prompt.rs       the AI prompt form
+├── export.rs          SVG and PNG export
+├── theme.rs           color themes and fonts
+└── snapshot.rs        offscreen rendering for tests
 ```
 
-**How it all fits together** – data model, the flow of a frame, Markdown sync, file format and how to add features – is explained in detail in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+## Contributing
 
-### Libraries
+Bug reports and ideas are welcome in the [issues](../../issues). For code changes, please open a pull request and run `cargo fmt`, `cargo clippy --all-targets` and `cargo test` first. Most code comments are still in German; English ones are welcome.
 
-| Crate | Used for |
-|---|---|
-| `eframe` / `egui` 0.31 | window and user interface |
-| `egui-phosphor` 0.9 | icons (version must match egui) |
-| `rfd` | native file and message dialogs |
-| `resvg` | rendering SVG to PNG (export, icon) |
-| `serde` / `serde_json` | saving and loading |
-| `image` | reading, scaling and encoding inserted images (JPEG, PNG, GIF, WebP) |
-| `base64` | image data as text inside `.mindmap` and Markdown files |
-| `arboard` | reading images from the clipboard |
+### Known limitations
 
----
-
-## Known limitations and ideas
-
-- A **Windows package** with icon and build script is still missing.
-- The menu lives inside the window, not in the macOS menu bar (an egui limitation).
-- Double-clicking a `.mindmap` file in Finder doesn't open Mindful yet.
-- Windows and Linux use egui's built-in font; the Mac uses the system font (SF).
-- Slides show children down to the third level. Notes on children don't appear on slides.
-- Slides with a diagram layout don't show images. Animated GIFs show their first frame. PNG/SVG export of the mind map leaves images out.
-- Updating egui requires code changes because its API changes frequently.
-- Code comments are still in German.
+- The menu lives inside the window rather than in the macOS menu bar.
+- Double-clicking a `.mindmap` file in the Finder doesn't open Mindful yet.
+- Slides with a diagram layout don't show pictures. Animated GIFs show their first frame. Pictures are left out of the PNG/SVG export.
+- Windows and Linux use egui's built-in font; the Mac uses the system font.
 
 ## License
 
-Not chosen yet; the repository is private. Pick a license (e.g. MIT or Apache-2.0) before making it public.
+[MIT](LICENSE)
+
+The example pictures are generated by `examples/make_space_images.rs` and are covered by the same license. Icons by [Phosphor](https://phosphoricons.com) (MIT).

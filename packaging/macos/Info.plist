@@ -7,7 +7,7 @@
     <key>CFBundleDisplayName</key>
     <string>Mindful</string>
     <key>CFBundleIdentifier</key>
-    <string>local.mindful.app</string>
+    <string>io.github.tj537.mindful</string>
     <key>CFBundleExecutable</key>
     <string>mindful</string>
     <key>CFBundleIconFile</key>

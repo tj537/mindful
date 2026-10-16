@@ -192,6 +192,15 @@ enum Action {
     HideWelcome,
 }
 
+/// „1 node“, „5 nodes“
+fn count(n: usize, word: &str) -> String {
+    if n == 1 {
+        format!("1 {word}")
+    } else {
+        format!("{n} {word}s")
+    }
+}
+
 /// Beschriftung aus einem Dateinamen: „mars_rover-2“ → „Mars rover 2“
 fn caption(name: &str) -> String {
     let text = name.replace(['_', '-'], " ");
@@ -223,7 +232,7 @@ fn fit_target(doc: &Document, area: Rect, sizes: &HashMap<u64, Vec2>) -> Option<
     }
     let zoom = ((area.width() - 80.0) / bounds.width())
         .min((area.height() - 80.0) / bounds.height())
-        .clamp(MIN_ZOOM, 1.25);
+        .clamp(MIN_ZOOM, 1.0);
     Some((-bounds.center().to_vec2() * zoom, zoom))
 }
 
@@ -265,6 +274,99 @@ fn icon_button(
         .on_hover_text(&tip)
         .on_disabled_hover_text(&tip)
         .clicked()
+}
+
+/// Segment-Schalter für die vier Ansichten; die Markierung gleitet zur gewählten
+fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode) -> Option<Mode> {
+    let modes = [
+        (
+            Mode::Markdown,
+            icon::TEXT_ALIGN_LEFT,
+            "Markdown",
+            SC_MARKDOWN,
+        ),
+        (Mode::Mindmap, icon::GRAPH, "Mind map", SC_MARKDOWN),
+        (
+            Mode::Present,
+            icon::PRESENTATION,
+            "Presentation",
+            SC_PRESENT,
+        ),
+        (Mode::Tour, icon::PATH, "Tour", SC_TOUR),
+    ];
+    let font = FontId::proportional(14.0);
+    let pad = Vec2::new(12.0, 6.0);
+    let galleys: Vec<_> = modes
+        .iter()
+        .map(|(_, ic, label, _)| {
+            ui.painter()
+                .layout_no_wrap(format!("{ic}  {label}"), font.clone(), theme.text)
+        })
+        .collect();
+    let inner = 3.0;
+    let widths: Vec<f32> = galleys.iter().map(|g| g.size().x + 2.0 * pad.x).collect();
+    let height = galleys[0].size().y + 2.0 * pad.y;
+    let total = Vec2::new(
+        widths.iter().sum::<f32>() + 2.0 * inner,
+        height + 2.0 * inner,
+    );
+    let (outer, _) = ui.allocate_exact_size(total, Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(outer, 10.0, theme.background);
+
+    // Rechtecke der Segmente von links nach rechts
+    let mut x = outer.left() + inner;
+    let rects: Vec<Rect> = widths
+        .iter()
+        .map(|w| {
+            let r = Rect::from_min_size(Pos2::new(x, outer.top() + inner), Vec2::new(*w, height));
+            x += w;
+            r
+        })
+        .collect();
+    let index = modes.iter().position(|m| m.0 == current).unwrap_or(1);
+    let at = ui
+        .ctx()
+        .animate_value_with_time(ui.id().with("mode_switch"), index as f32, 0.18);
+    let (lo, hi) = (
+        at.floor() as usize,
+        (at.ceil() as usize).min(rects.len() - 1),
+    );
+    let t = at - at.floor();
+    let lerp = |a: f32, b: f32| a + (b - a) * t;
+    let marker = Rect::from_min_max(
+        Pos2::new(lerp(rects[lo].left(), rects[hi].left()), rects[lo].top()),
+        Pos2::new(
+            lerp(rects[lo].right(), rects[hi].right()),
+            rects[lo].bottom(),
+        ),
+    );
+    let accent = theme.branches[0];
+    painter.rect_filled(marker, 8.0, accent);
+
+    let mut picked = None;
+    for (i, ((mode, _, label, sc), galley)) in modes.iter().zip(galleys).enumerate() {
+        let r = rects[i];
+        let resp = ui.interact(r, ui.id().with(("mode", i)), Sense::click());
+        let selected = *mode == current;
+        if resp.hovered() && !selected {
+            painter.rect_filled(r.shrink(1.0), 8.0, theme.text.gamma_multiply(0.06));
+        }
+        let color = if selected {
+            theme.on_accent
+        } else if resp.hovered() {
+            theme.text
+        } else {
+            theme.text.gamma_multiply(0.7)
+        };
+        painter.galley_with_override_text_color(r.center() - galley.size() / 2.0, galley, color);
+        // ⌘E schaltet zwischen Markdown und Mindmap hin und her
+        let tip = format!("{label}   {}", ui.ctx().format_shortcut(sc));
+        if resp.on_hover_text(tip).clicked() && !selected {
+            picked = Some(*mode);
+        }
+    }
+    picked
 }
 
 fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
@@ -587,6 +689,10 @@ pub struct MindMapApp {
     search_focus: bool,
     show_help: bool,
     status: String,
+    /// Zuletzt angezeigte Meldung und seit wann (zum Verblassen)
+    status_shown: (String, f64),
+    /// Tab unter dem Mauszeiger im letzten Frame
+    hovered_tab: Option<usize>,
     window_title: String,
     canvas_rect: Rect,
     /// Vorschau neben dem Markdown-Editor
@@ -610,10 +716,25 @@ pub struct MindMapApp {
 
 impl MindMapApp {
     pub fn new(cc: &eframe::CreationContext) -> Self {
+        let saved = cc
+            .storage
+            .and_then(|s| eframe::get_value::<SavedState>(s, eframe::APP_KEY));
+        Self::with_state(&cc.egui_ctx, saved)
+    }
+
+    /// Ohne Fenster, für Bildschirmfotos in Tests: mit dem Weltall-Beispiel
+    #[cfg(test)]
+    pub fn for_snapshot(ctx: &egui::Context) -> Self {
+        let mut app = Self::with_state(ctx, None);
+        app.open_example(0);
+        app
+    }
+
+    fn with_state(ctx: &egui::Context, saved: Option<SavedState>) -> Self {
         // Cmd +/- soll die Mindmap zoomen, nicht die ganze Oberfläche
-        cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
-        install_fonts(&cc.egui_ctx);
-        cc.egui_ctx.style_mut(apply_spacing);
+        ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        install_fonts(ctx);
+        ctx.style_mut(apply_spacing);
 
         let mut app = Self {
             docs: Vec::new(),
@@ -627,6 +748,8 @@ impl MindMapApp {
             search_focus: false,
             show_help: false,
             status: "Ready".into(),
+            status_shown: (String::new(), 0.0),
+            hovered_tab: None,
             window_title: String::new(),
             canvas_rect: Rect::NOTHING,
             md_preview: true,
@@ -640,10 +763,7 @@ impl MindMapApp {
             prompt: ai_prompt::PromptForm::default(),
         };
 
-        if let Some(state) = cc
-            .storage
-            .and_then(|s| eframe::get_value::<SavedState>(s, eframe::APP_KEY))
-        {
+        if let Some(state) = saved {
             if let Some(name) = state.theme_name {
                 // Farbschemas hießen früher deutsch
                 let name = match name.as_str() {
@@ -666,9 +786,6 @@ impl MindMapApp {
             app.effects = state.effects;
             app.effects.migrate();
             app.prompt = state.prompt;
-        } else if Path::new("mindmap.json").exists() {
-            // Datei aus der ersten Version übernehmen
-            app.open_path(PathBuf::from("mindmap.json"));
         }
         if app.docs.is_empty() {
             app.new_tab();
@@ -684,6 +801,128 @@ impl MindMapApp {
             doc.set_mode(mode);
         }
         app
+    }
+
+    /// Ein Frame der ganzen Oberfläche
+    pub fn show(&mut self, ctx: &egui::Context) {
+        if self.applied_theme != Some(self.theme) {
+            ctx.set_visuals(visuals_for(&THEMES[self.theme]));
+            self.applied_theme = Some(self.theme);
+        }
+        // Hineingezogene Dateien: Bilder an einen Knoten hängen, Mindmaps öffnen
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if !dropped.is_empty() {
+            match self.drop_target(ctx) {
+                Some(target) => self.add_image_files(target, dropped),
+                None => dropped.into_iter().for_each(|p| self.open_path(p)),
+            }
+        }
+
+        let theme = &THEMES[self.theme];
+        let mode = self.doc().mode;
+
+        // Folien oder Kamerafahrt: nur die Präsentation, keine Leisten
+        if mode.is_presenting() {
+            self.tab_pressed = false;
+            let build_bullets = self.build_bullets;
+            let mut event = None;
+            egui::CentralPanel::default()
+                .frame(egui::Frame::default().fill(theme.background))
+                .show(ctx, |ui| {
+                    let doc = &mut self.docs[self.active];
+                    let fx = &mut self.effects;
+                    event = if mode == Mode::Tour {
+                        tour::show(ui, doc, theme, fx)
+                    } else {
+                        present::show(ui, doc, theme, build_bullets, fx)
+                    };
+                });
+            match event {
+                Some(present::Event::Exit) => self.set_mode(ctx, Mode::Mindmap),
+                Some(present::Event::ToggleFullscreen) => {
+                    self.fullscreen = !self.fullscreen;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+                }
+                None => {}
+            }
+            self.update_title(ctx);
+            return;
+        }
+
+        let mut commands = self.shortcuts(ctx);
+        if self.tab_switch != 0 {
+            commands.push(Command::NextTab(std::mem::take(&mut self.tab_switch)));
+        }
+
+        let bar = egui::Frame::default()
+            .fill(theme.card)
+            .inner_margin(egui::Margin::symmetric(12, 6));
+        egui::TopBottomPanel::top("menu")
+            .frame(bar)
+            .show(ctx, |ui| {
+                commands.extend(self.menu_bar(ui));
+            });
+        egui::TopBottomPanel::top("tabs")
+            .frame(bar)
+            .show(ctx, |ui| {
+                commands.extend(self.tab_bar(ui, theme));
+            });
+        egui::TopBottomPanel::bottom("status")
+            .frame(bar)
+            .show(ctx, |ui| commands.extend(self.status_bar(ui)));
+
+        let mut action = None;
+        if mode == Mode::Mindmap {
+            action = self.node_keys(ctx);
+        } else {
+            self.tab_pressed = false;
+        }
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().fill(theme.background))
+            .show(ctx, |ui| match mode {
+                Mode::Markdown => {
+                    markdown_view::show(ui, &mut self.docs[self.active], theme, self.md_preview)
+                }
+                _ => {
+                    if let Some(a) = self.canvas(ui) {
+                        action = Some(a);
+                    }
+                }
+            });
+
+        self.help_window(ctx);
+        self.note_window(ctx);
+
+        if let Some(a) = action {
+            self.apply(ctx, a);
+        }
+        for cmd in commands {
+            self.run(ctx, cmd);
+        }
+        self.update_title(ctx);
+    }
+
+    /// Alle Tabs samt ungespeicherter Änderungen sichern; beim nächsten Start
+    /// ist alles wieder da.
+    #[cfg(test)]
+    pub fn set_mode_for_snapshot(&mut self, mode: Mode) {
+        self.doc_mut().set_mode(mode);
+    }
+
+    #[cfg(test)]
+    pub fn set_theme_for_snapshot(&mut self, theme: usize) {
+        self.theme = theme;
+    }
+
+    #[cfg(test)]
+    pub fn new_tab_for_snapshot(&mut self) {
+        self.new_tab();
     }
 
     fn doc(&self) -> &Document {
@@ -1865,22 +2104,6 @@ impl MindMapApp {
                     true,
                     Command::Fit,
                 );
-                tool(
-                    ui,
-                    icon::MAGNIFYING_GLASS_MINUS,
-                    "Zoom out",
-                    Some(&SC_ZOOM_OUT),
-                    true,
-                    Command::ZoomOut,
-                );
-                tool(
-                    ui,
-                    icon::MAGNIFYING_GLASS_PLUS,
-                    "Zoom in",
-                    Some(&SC_ZOOM_IN),
-                    true,
-                    Command::ZoomIn,
-                );
             } else {
                 let tip = if md_preview {
                     "Hide preview"
@@ -1896,22 +2119,6 @@ impl MindMapApp {
                     Command::TogglePreview,
                 );
             }
-            tool(
-                ui,
-                icon::PLAY,
-                "Start presentation",
-                Some(&SC_PRESENT),
-                true,
-                Command::SetMode(Mode::Present),
-            );
-            tool(
-                ui,
-                icon::PATH,
-                "Start camera tour",
-                Some(&SC_TOUR),
-                true,
-                Command::SetMode(Mode::Tour),
-            );
             ui.separator();
             ui.menu_button(egui::RichText::new(icon::EXPORT).size(17.0), |ui| {
                 export_menu(ui, &mut out)
@@ -1952,18 +2159,26 @@ impl MindMapApp {
                         .iter()
                         .filter(|n| n.text.to_lowercase().contains(&query))
                         .count();
-                    ui.weak(format!("{n} matches"));
+                    ui.weak(count(n, "match").replace("matchs", "matches"));
                 }
                 ui.separator();
 
                 // „AI prompt“ mit Aufklappmenü
                 let popup_id = ui.make_persistent_id("ai_prompt_popup");
                 let ai = ui
-                    .button(format!(
-                        "{}  AI prompt  {}",
-                        icon::MAGIC_WAND,
-                        icon::CARET_DOWN
-                    ))
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new(format!(
+                                "{}  AI prompt  {}",
+                                icon::MAGIC_WAND,
+                                icon::CARET_DOWN
+                            ))
+                            .color(accent),
+                        )
+                        .fill(accent.gamma_multiply(0.14))
+                        .stroke(Stroke::new(1.0_f32, accent.gamma_multiply(0.45)))
+                        .corner_radius(14.0),
+                    )
                     .on_hover_text("Build a prompt that lets your AI write a mind map");
                 if ai.clicked() {
                     ui.memory_mut(|m| m.toggle_popup(popup_id));
@@ -1992,36 +2207,47 @@ impl MindMapApp {
 
     fn tab_bar(&mut self, ui: &mut egui::Ui, theme: &Theme) -> Option<Command> {
         let mut out = None;
+        let hovered_tab = self.hovered_tab.take();
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             for (i, doc) in self.docs.iter().enumerate() {
                 let active = i == self.active;
+                let hovered = hovered_tab == Some(i);
                 let (fill, stroke) = if active {
                     (theme.background, Stroke::new(1.0_f32, theme.grid))
+                } else if hovered {
+                    (theme.background.gamma_multiply(0.5), Stroke::NONE)
                 } else {
                     (Color32::TRANSPARENT, Stroke::NONE)
                 };
-                egui::Frame::default()
+                let tab = egui::Frame::default()
                     .fill(fill)
                     .stroke(stroke)
                     .corner_radius(8.0)
-                    .inner_margin(egui::Margin::symmetric(10, 4))
+                    .inner_margin(egui::Margin {
+                        left: 10,
+                        right: 6,
+                        top: 4,
+                        bottom: 4,
+                    })
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 6.0;
-                            let dot = if active {
+                            let color = if active {
                                 theme.branches[0]
                             } else {
-                                theme.grid
+                                theme.text.gamma_multiply(0.45)
                             };
-                            ui.label(egui::RichText::new(icon::GRAPH).color(dot));
-                            let mut title = doc.title();
-                            if doc.dirty {
-                                title.push_str(" •");
-                            }
-                            let mut text = egui::RichText::new(title);
+                            let ic = match doc.mode {
+                                Mode::Markdown => icon::TEXT_ALIGN_LEFT,
+                                _ => icon::GRAPH,
+                            };
+                            ui.label(egui::RichText::new(ic).color(color));
+                            let mut text = egui::RichText::new(doc.title());
                             if active {
                                 text = text.strong();
+                            } else {
+                                text = text.color(theme.text.gamma_multiply(0.7));
                             }
                             let label = ui.add(
                                 egui::Label::new(text)
@@ -2037,55 +2263,70 @@ impl MindMapApp {
                             if let Some(path) = &doc.path {
                                 label.on_hover_text(path.display().to_string());
                             }
-                            let close = ui.add(
-                                egui::Button::new(egui::RichText::new(icon::X).size(12.0)).small(),
-                            );
-                            if close.on_hover_text("Close tab").clicked() {
+                            // Ungespeichert: Punkt; beim Drüberfahren (oder im aktiven Tab) das X
+                            let (r, close) =
+                                ui.allocate_exact_size(Vec2::splat(18.0), Sense::click());
+                            if close.hovered() {
+                                ui.painter()
+                                    .rect_filled(r, 5.0, theme.text.gamma_multiply(0.12));
+                            }
+                            if doc.dirty && !close.hovered() && !hovered {
+                                ui.painter().circle_filled(r.center(), 4.0, color);
+                            } else if active || hovered || close.hovered() {
+                                ui.painter().text(
+                                    r.center(),
+                                    Align2::CENTER_CENTER,
+                                    icon::X,
+                                    FontId::proportional(12.0),
+                                    theme.text.gamma_multiply(0.75),
+                                );
+                            }
+                            let tip = if doc.dirty {
+                                "Close tab (unsaved changes)"
+                            } else {
+                                "Close tab"
+                            };
+                            if close.on_hover_text(tip).clicked() {
                                 out = Some(Command::CloseTab(i));
                             }
                         });
                     });
+                if ui.rect_contains_pointer(tab.response.rect) {
+                    self.hovered_tab = Some(i);
+                }
             }
             if icon_button(ui, icon::PLUS, "New tab", Some(&SC_NEW_TAB), true) {
                 out = Some(Command::NewTab);
             }
 
-            // Modus-Umschalter rechts
+            // Ansichts-Umschalter rechts
             let current = self.docs[self.active].mode;
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                egui::Frame::default()
-                    .fill(theme.background)
-                    .corner_radius(9.0)
-                    .inner_margin(egui::Margin::same(3))
-                    .show(ui, |ui| {
-                        // Das rechtsbündige Layout legt von rechts nach links an –
-                        // darum rückwärts durchgehen, damit links „Markdown“ steht
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 2.0;
-                            let modes = [
-                                (Mode::Markdown, icon::TEXT_ALIGN_LEFT, "Markdown"),
-                                (Mode::Mindmap, icon::GRAPH, "Mind map"),
-                                (Mode::Present, icon::PRESENTATION, "Presentation"),
-                                (Mode::Tour, icon::PATH, "Tour"),
-                            ];
-                            for (mode, ic, label) in modes.into_iter().rev() {
-                                if ui
-                                    .selectable_label(current == mode, format!("{ic}  {label}"))
-                                    .clicked()
-                                {
-                                    out = Some(Command::SetMode(mode));
-                                }
-                            }
-                        });
-                    });
+                if let Some(mode) = mode_switch(ui, theme, current) {
+                    out = Some(Command::SetMode(mode));
+                }
             });
         });
         out
     }
 
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
+    fn status_bar(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        let mut out = None;
+        let now = ui.input(|i| i.time);
+        // Meldungen werden nach ein paar Sekunden blasser
+        if self.status != self.status_shown.0 {
+            self.status_shown = (self.status.clone(), now);
+        }
+        let age = now - self.status_shown.1;
+        let fade = (1.0 - ((age - 6.0) / 1.5).clamp(0.0, 1.0) * 0.55) as f32;
+        if (6.0..7.5).contains(&age) {
+            ui.ctx().request_repaint();
+        }
         ui.horizontal(|ui| {
-            ui.label(self.status.as_str());
+            ui.label(
+                egui::RichText::new(self.status.as_str())
+                    .color(ui.visuals().text_color().gamma_multiply(fade)),
+            );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let doc = &self.docs[self.active];
                 if doc.mode == Mode::Markdown {
@@ -2094,26 +2335,53 @@ impl MindMapApp {
                         .split_whitespace()
                         .filter(|w| w.chars().any(char::is_alphanumeric))
                         .count();
-                    ui.label(format!("{} {words} words", icon::TEXT_AA));
+                    ui.label(format!("{} {}", icon::TEXT_AA, count(words, "word")));
                     ui.separator();
                     ui.label(format!(
-                        "{} {} nodes",
+                        "{} {}",
                         icon::TREE_STRUCTURE,
-                        doc.map.nodes.len()
+                        count(doc.map.nodes.len(), "node")
                     ));
                     ui.separator();
                     ui.weak("## heading = branch · - bullet = child · text = note");
                 } else {
-                    ui.label(format!(
-                        "{} {:.0} %",
-                        icon::MAGNIFYING_GLASS,
-                        doc.zoom * 100.0
+                    // Zoom: − Prozent +, Klick auf die Zahl holt alles ins Bild
+                    let small = |ic: &str| {
+                        egui::Button::new(egui::RichText::new(ic).size(13.0))
+                            .min_size(Vec2::new(22.0, 20.0))
+                    };
+                    let zoom_in = ui.add(small(icon::PLUS)).on_hover_text(format!(
+                        "Zoom in   {}",
+                        ui.ctx().format_shortcut(&SC_ZOOM_IN)
                     ));
+                    if zoom_in.clicked() {
+                        out = Some(Command::ZoomIn);
+                    }
+                    let percent = ui
+                        .add(
+                            egui::Label::new(format!("{:.0} %", doc.zoom * 100.0))
+                                .selectable(false)
+                                .sense(Sense::click()),
+                        )
+                        .on_hover_text(format!(
+                            "Fit to window   {}",
+                            ui.ctx().format_shortcut(&SC_FIT)
+                        ));
+                    if percent.clicked() {
+                        out = Some(Command::Fit);
+                    }
+                    let zoom_out = ui.add(small(icon::MINUS)).on_hover_text(format!(
+                        "Zoom out   {}",
+                        ui.ctx().format_shortcut(&SC_ZOOM_OUT)
+                    ));
+                    if zoom_out.clicked() {
+                        out = Some(Command::ZoomOut);
+                    }
                     ui.separator();
                     ui.label(format!(
-                        "{} {} nodes",
+                        "{} {}",
                         icon::TREE_STRUCTURE,
-                        doc.map.nodes.len()
+                        count(doc.map.nodes.len(), "node")
                     ));
                     ui.separator();
                     ui.weak(format!(
@@ -2123,6 +2391,7 @@ impl MindMapApp {
                 }
             });
         });
+        out
     }
 
     fn help_window(&mut self, ctx: &egui::Context) {
@@ -2755,111 +3024,9 @@ impl eframe::App for MindMapApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.applied_theme != Some(self.theme) {
-            ctx.set_visuals(visuals_for(&THEMES[self.theme]));
-            self.applied_theme = Some(self.theme);
-        }
-        // Hineingezogene Dateien: Bilder an einen Knoten hängen, Mindmaps öffnen
-        let dropped: Vec<PathBuf> = ctx.input(|i| {
-            i.raw
-                .dropped_files
-                .iter()
-                .filter_map(|f| f.path.clone())
-                .collect()
-        });
-        if !dropped.is_empty() {
-            match self.drop_target(ctx) {
-                Some(target) => self.add_image_files(target, dropped),
-                None => dropped.into_iter().for_each(|p| self.open_path(p)),
-            }
-        }
-
-        let theme = &THEMES[self.theme];
-        let mode = self.doc().mode;
-
-        // Folien oder Kamerafahrt: nur die Präsentation, keine Leisten
-        if mode.is_presenting() {
-            self.tab_pressed = false;
-            let build_bullets = self.build_bullets;
-            let mut event = None;
-            egui::CentralPanel::default()
-                .frame(egui::Frame::default().fill(theme.background))
-                .show(ctx, |ui| {
-                    let doc = &mut self.docs[self.active];
-                    let fx = &mut self.effects;
-                    event = if mode == Mode::Tour {
-                        tour::show(ui, doc, theme, fx)
-                    } else {
-                        present::show(ui, doc, theme, build_bullets, fx)
-                    };
-                });
-            match event {
-                Some(present::Event::Exit) => self.set_mode(ctx, Mode::Mindmap),
-                Some(present::Event::ToggleFullscreen) => {
-                    self.fullscreen = !self.fullscreen;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
-                }
-                None => {}
-            }
-            self.update_title(ctx);
-            return;
-        }
-
-        let mut commands = self.shortcuts(ctx);
-        if self.tab_switch != 0 {
-            commands.push(Command::NextTab(std::mem::take(&mut self.tab_switch)));
-        }
-
-        let bar = egui::Frame::default()
-            .fill(theme.card)
-            .inner_margin(egui::Margin::symmetric(12, 6));
-        egui::TopBottomPanel::top("menu")
-            .frame(bar)
-            .show(ctx, |ui| {
-                commands.extend(self.menu_bar(ui));
-            });
-        egui::TopBottomPanel::top("tabs")
-            .frame(bar)
-            .show(ctx, |ui| {
-                commands.extend(self.tab_bar(ui, theme));
-            });
-        egui::TopBottomPanel::bottom("status")
-            .frame(bar)
-            .show(ctx, |ui| self.status_bar(ui));
-
-        let mut action = None;
-        if mode == Mode::Mindmap {
-            action = self.node_keys(ctx);
-        } else {
-            self.tab_pressed = false;
-        }
-        egui::CentralPanel::default()
-            .frame(egui::Frame::default().fill(theme.background))
-            .show(ctx, |ui| match mode {
-                Mode::Markdown => {
-                    markdown_view::show(ui, &mut self.docs[self.active], theme, self.md_preview)
-                }
-                _ => {
-                    if let Some(a) = self.canvas(ui) {
-                        action = Some(a);
-                    }
-                }
-            });
-
-        self.help_window(ctx);
-        self.note_window(ctx);
-
-        if let Some(a) = action {
-            self.apply(ctx, a);
-        }
-        for cmd in commands {
-            self.run(ctx, cmd);
-        }
-        self.update_title(ctx);
+        self.show(ctx);
     }
 
-    /// Alle Tabs samt ungespeicherter Änderungen sichern; beim nächsten Start
-    /// ist alles wieder da.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         let state = SavedStateRef {
             theme_name: THEMES[self.theme].name,

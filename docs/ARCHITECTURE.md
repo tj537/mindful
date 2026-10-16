@@ -78,7 +78,7 @@ This line draws the button **and** asks, in the same moment, whether it was clic
 
 ## The flow of a frame
 
-eframe calls `MindMapApp::update` (`app.rs`) once per frame, with `raw_input_hook` running just before it.
+eframe calls `MindMapApp::update` (`app.rs`) once per frame, with `raw_input_hook` running just before it. `update` only forwards to `MindMapApp::show(ctx)`, which needs no window – that's what lets the snapshot tests render the whole app.
 
 ```mermaid
 sequenceDiagram
@@ -160,7 +160,7 @@ Key functions:
 | `neighbor` | nearest node in a direction (arrow keys) |
 | `extract`, `insert_subtree`, `clip_json` | copy and paste with new IDs |
 | `auto_layout` | automatic layout, see below |
-| `task_progress` | done / total checkboxes below a node (for the progress ring) |
+| `task_progress` | done / total checkboxes below a node (shown as “2 of 6 done” on slides) |
 | `to_markdown`, `apply_outline`, `parse_outline` | Markdown, see [Markdown sync](#markdown-sync) |
 | `to_markdown_with_images`, `from_markdown_with_images` | Markdown plus the image data in a trailing `<!-- mindful-images … -->` block (Markdown export and import) |
 
@@ -363,7 +363,7 @@ A main branch can have a `layout` (`SlideLayout`). Its slide then shows a diagra
 
 `Slide::groups()` asks `SlideLayout::steps()` how many reveal steps a layout has, so diagrams build up exactly like bullet points (`reveal(i)` is the appear progress of item *i*). Choosing a layout: right-click the slide while presenting, right-click a main branch in the mind map (`Action::SetLayout`), or write `<!-- name -->` after the `##` heading – `split_layout()` reads it, `to_markdown()` writes it back.
 
-**Checking how slides look:** `snapshot.rs` (tests only) runs egui without a window and rasterizes its triangles in software into PNG files. `cargo test --release render_slides -- --ignored` renders every slide of both examples into `target/snapshots/` (the examples use every layout once).
+**Checking how slides look:** `snapshot.rs` (tests only) runs egui without a window and rasterizes its triangles in software into PNG files. `cargo test --release render_ -- --ignored` renders every slide of both examples (the examples use every layout once), a tour overview and the whole app window – mind map, Markdown editor, a light theme with an empty map – into `target/snapshots/`. `Snapshot::retina` rasterizes at 2× for sharp screenshots; `MindMapApp::for_snapshot` builds the app without eframe.
 
 ## Camera tour (`tour.rs`)
 
@@ -524,7 +524,7 @@ It shows up in every menu automatically.
 
 1. Add a variant to `Mode` in `document.rs` and its transitions in `Document::set_mode`.
 2. Create a file following `markdown_view.rs` with `pub fn show(ui, doc, theme)`.
-3. Call it from `MindMapApp::update` and add it to the switcher in `tab_bar`.
+3. Call it from `MindMapApp::show` and add it to `mode_switch` in `app.rs`.
 
 ---
 
@@ -546,6 +546,7 @@ cargo test
 | `slide_layouts_in_markdown` | layout comments are read and written back |
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
 | `render_slides` (ignored, run on demand) | renders every slide of both examples plus a tour overview to PNG for a visual check |
+| `render_app` (ignored, run on demand) | renders the whole window (mind map, Markdown, light theme, empty map) to PNG |
 | `images_round_trip_and_travel_with_the_file` | image lines survive Markdown; image data travels in the Markdown block, the JSON file and the clipboard; unused images are dropped |
 | `large_images_are_scaled_and_stored_as_jpeg` | big pictures are scaled to 1920 px and re-encoded |
 | `builtin_example_images_resolve` | example pictures are found inside the app |
