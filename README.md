@@ -16,6 +16,35 @@ Write an outline, see it as a mind map, and present it as slides or as a camera 
 | **Charts from bullet points** | **Presenter view** |
 | ![A bar chart slide](docs/slide-chart.png) | ![The presenter view with current slide, next slide, notes and timer](docs/presenter.png) |
 
+## Why Mindful?
+
+Most talks, lectures and project kick-offs start the same way: a messy list of thoughts. You sort them in a mind map tool, then rebuild everything slide by slide in PowerPoint or Keynote – and from then on every change has to be made twice, in two programs that don't know about each other.
+
+Mindful keeps **one source**: an outline that you can write as plain Markdown. The mind map, the slides and the camera tour are simply different views of it. Rename a branch in the mind map and the slide title changes. Add a bullet in the editor and it appears on the slide. Your structure stays the single source of truth from the first idea to the last slide.
+
+### What makes it different
+
+- **One source, four views.** Write, structure and present the same content without copying anything between apps.
+- **Slides that design themselves.** Twelve layouts – timelines, cycles, pyramids, comparisons, Venn diagrams, bar, pie and line charts – are built from ordinary bullet points. Choose a layout with a right-click; no dragging boxes or fiddling with chart editors.
+- **Plain text you own.** Markdown in, Markdown out. It works with Git, with any text editor and with AI assistants. A `.mindmap` file is a single file, pictures included.
+- **Made for AI.** The built-in prompt teaches ChatGPT, Claude & co. Mindful's format, including which slide layout fits which content. Paste the answer and you have a structured talk with diagrams in a minute.
+- **Presenting built in.** Presenter view with notes and timer, PDF export, checkboxes you tick off live, keyboard-only navigation and a camera flight through the mind map as an alternative to slides.
+- **Small and fast.** A native app written in Rust: about 11 MB on disk, a 5 MB download, starts instantly and runs offline. No account, no cloud, no tracking, no subscription.
+- **Open source.** MIT licensed – use it, change it, build on it.
+
+### How it compares
+
+| | Mind map apps | Markdown slide tools | PowerPoint / Keynote | **Mindful** |
+|---|:---:|:---:|:---:|:---:|
+| Visual mind map | ✓ | – | – | ✓ |
+| Write the content as plain text | partly | ✓ | – | ✓ |
+| Slides from the same content | partly | ✓ | – | ✓ |
+| Diagrams and charts from bullet points | – | – | by hand | ✓ |
+| Fly through the mind map as a talk | rarely | – | – | ✓ |
+| Free and open source | rarely | often | – | ✓ |
+
+Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It is for everyone who thinks in structures – students, teachers, speakers, project leads – and wants to get from an idea to a presentation without doing the work twice.
+
 ## Features
 
 **One mind map, four views.** A change in one view shows up in the others right away.
