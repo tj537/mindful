@@ -1,6 +1,8 @@
 # When a version tag is pushed (e.g. v0.4.0): build the Mac app and the
 # Windows version and attach them to the GitHub release. The description
 # comes from .github/release-notes/<tag>.md, otherwise GitHub generates it.
+# A release created by hand keeps its text; only an empty title or empty
+# notes are filled in.
 name: Release
 
 on:
@@ -81,6 +83,14 @@ jobs:
           notes="../.github/release-notes/$TAG.md"
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" *.zip SHA256SUMS.txt --clobber
+            # Created by hand (e.g. on the website)? Fill in an empty title and
+            # empty notes – text that is already there is never replaced
+            if [ -z "$(gh release view "$TAG" --json name -q .name)" ]; then
+              gh release edit "$TAG" --title "Mindful ${TAG#v}"
+            fi
+            if [ -z "$(gh release view "$TAG" --json body -q .body)" ] && [ -f "$notes" ]; then
+              gh release edit "$TAG" --notes-file "$notes"
+            fi
           elif [ -f "$notes" ]; then
             gh release create "$TAG" *.zip SHA256SUMS.txt --title "Mindful ${TAG#v}" --notes-file "$notes"
           else
