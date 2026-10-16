@@ -66,7 +66,7 @@ impl CustomColors {
         }
     }
 
-    pub fn to_theme(&self) -> Theme {
+    pub fn to_theme(self) -> Theme {
         let background = from_rgb(self.background);
         let text = from_rgb(self.text);
         let root = from_rgb(self.root);
