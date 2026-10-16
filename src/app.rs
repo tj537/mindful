@@ -155,7 +155,6 @@ enum Command {
     Fit,
     Find,
     FindNext,
-    AddChild,
     InsertImage,
     PasteImage,
     Help,
@@ -421,31 +420,6 @@ fn export_menu(ui: &mut egui::Ui, out: &mut Option<Command>) {
         Command::Export(ExportKind::Pdf),
         out,
     );
-}
-
-/// Farbschemas mit kleiner Farbvorschau
-fn theme_menu(ui: &mut egui::Ui, current: usize, out: &mut Option<Command>) {
-    ui.set_min_width(230.0);
-    for (i, t) in THEMES.iter().enumerate() {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0;
-            for c in [
-                t.background,
-                t.root,
-                t.branches[0],
-                t.branches[1],
-                t.branches[2],
-            ] {
-                let (rect, _) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
-                ui.painter().circle_filled(rect.center(), 5.5, c);
-            }
-            ui.add_space(6.0);
-            if ui.selectable_label(current == i, t.name).clicked() {
-                *out = Some(Command::Theme(i));
-                ui.close_menu();
-            }
-        });
-    }
 }
 
 fn action_item(
@@ -736,6 +710,9 @@ pub struct MindMapApp {
     /// Für Bildschirmfotos in Tests: das „AI prompt“-Fenster öffnen
     #[cfg(test)]
     pub open_ai_popup: bool,
+    /// Für Bildschirmfotos in Tests: das Einstellungen-Fenster öffnen
+    #[cfg(test)]
+    pub open_settings_popup: bool,
     window_title: String,
     canvas_rect: Rect,
     /// Vorschau neben dem Markdown-Editor
@@ -804,6 +781,8 @@ impl MindMapApp {
             pdf_job: None,
             #[cfg(test)]
             open_ai_popup: false,
+            #[cfg(test)]
+            open_settings_popup: false,
             window_title: String::new(),
             canvas_rect: Rect::NOTHING,
             md_preview: true,
@@ -1132,6 +1111,108 @@ impl MindMapApp {
                 false
             }
         }
+    }
+
+    /// Inhalt des Einstellungen-Fensters (Zahnrad oben rechts)
+    fn settings_ui(&mut self, ui: &mut egui::Ui, current_theme: usize, out: &mut Option<Command>) {
+        use crate::ai_prompt::{field_label, toggle};
+        ui.spacing_mut().item_spacing.y = 6.0;
+        ui.label(
+            egui::RichText::new(format!("{}  Settings", icon::GEAR_SIX))
+                .strong()
+                .size(17.0),
+        );
+        ui.add_space(4.0);
+
+        field_label(ui, "THEME");
+        // Farbschemas als Kärtchen in zwei Spalten
+        let accent = THEMES[current_theme].branches[0];
+        egui::Grid::new("settings_themes")
+            .num_columns(2)
+            .spacing(Vec2::new(8.0, 8.0))
+            .show(ui, |ui| {
+                for (i, t) in THEMES.iter().enumerate() {
+                    let size = Vec2::new(176.0, 44.0);
+                    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+                    let p = ui.painter();
+                    p.rect_filled(rect, 10.0, t.background);
+                    let selected = i == current_theme;
+                    let stroke = if selected {
+                        Stroke::new(2.0_f32, accent)
+                    } else if resp.hovered() {
+                        Stroke::new(1.0_f32, t.text.gamma_multiply(0.4))
+                    } else {
+                        Stroke::new(1.0_f32, t.grid)
+                    };
+                    p.rect_stroke(rect, 10.0, stroke, egui::StrokeKind::Inside);
+                    for (k, c) in [t.root, t.branches[0], t.branches[1], t.branches[2]]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        p.circle_filled(
+                            rect.left_center() + Vec2::new(14.0 + k as f32 * 8.0, 0.0),
+                            5.0,
+                            c,
+                        );
+                    }
+                    p.with_clip_rect(rect.shrink(2.0)).text(
+                        rect.left_center() + Vec2::new(52.0, 0.0),
+                        Align2::LEFT_CENTER,
+                        t.name,
+                        FontId::proportional(13.0),
+                        t.text,
+                    );
+                    if resp.on_hover_text(t.name).clicked() {
+                        *out = Some(Command::Theme(i));
+                    }
+                    if i % 2 == 1 {
+                        ui.end_row();
+                    }
+                }
+            });
+
+        field_label(ui, "PRESENTATION");
+        toggle(
+            ui,
+            &mut self.build_bullets,
+            "Reveal bullet points one by one",
+            "Space or → shows the next point instead of the next slide",
+        );
+        toggle(
+            ui,
+            &mut self.effects.title_topics,
+            "Topics on the title slide",
+            "Show the main branches as coloured tags on the title slide",
+        );
+        ui.menu_button(format!("{}  More effects", icon::SPARKLE), |ui| {
+            present::effects_menu(ui, &mut self.effects, true, true)
+        });
+
+        field_label(ui, "GENERAL");
+        toggle(
+            ui,
+            &mut self.show_welcome,
+            "Tips on empty mind maps",
+            "A small card with the example and templates on new, empty mind maps",
+        );
+        toggle(
+            ui,
+            &mut self.check_updates,
+            "Check for updates on startup",
+            "Asks GitHub once per start whether a newer version exists",
+        );
+        ui.horizontal(|ui| {
+            if ui
+                .button(format!("{}  Check now", icon::ARROWS_CLOCKWISE))
+                .clicked()
+            {
+                let ctx = ui.ctx().clone();
+                self.update_check = Some(crate::update::start(move || ctx.request_repaint()));
+                self.status = "Checking for updates …".into();
+                self.manual_update_check = true;
+            }
+            ui.weak(format!("Mindful {}", env!("CARGO_PKG_VERSION")));
+        });
     }
 
     /// Wohin ein hineingezogenes Bild gehört: in der Präsentation an die aktuelle Folie,
@@ -1510,11 +1591,6 @@ impl MindMapApp {
             Command::Fit => self.apply(ctx, Action::Fit),
             Command::Find => self.search_focus = true,
             Command::FindNext => self.find_next(),
-            Command::AddChild => {
-                if let Some(id) = selected.or(self.doc().map.root()) {
-                    self.apply(ctx, Action::AddChild(id));
-                }
-            }
             Command::Help => self.show_help = !self.show_help,
             Command::Theme(i) => self.theme = i,
             Command::SetMode(mode) => self.set_mode(ctx, mode),
@@ -1900,6 +1976,8 @@ impl MindMapApp {
         let show_tools = width >= 760.0;
 
         egui::menu::bar(ui, |ui| {
+            // Mehr Luft in den Menü-Knöpfen (File, Edit, …)
+            ui.spacing_mut().button_padding = Vec2::new(10.0, 5.0);
             ui.label(egui::RichText::new(icon::GRAPH).size(20.0).color(accent));
             if show_wordmark {
                 ui.label(egui::RichText::new("Mindful").strong().size(15.0));
@@ -2150,13 +2228,8 @@ impl MindMapApp {
                     Command::SetMode(Mode::Tour),
                     &mut out,
                 );
-                ui.checkbox(&mut self.build_bullets, "Reveal bullet points one by one");
                 ui.menu_button(l(icon::SPARKLE, "Presentation effects"), |ui| {
                     present::effects_menu(ui, &mut self.effects, true, true)
-                });
-                ui.separator();
-                ui.menu_button(l(icon::PALETTE, "Theme"), |ui| {
-                    theme_menu(ui, current_theme, &mut out)
                 });
             });
 
@@ -2178,20 +2251,6 @@ impl MindMapApp {
                     Command::OpenExample(0),
                     &mut out,
                 );
-                ui.separator();
-                ui.checkbox(&mut self.show_welcome, "Tips on empty mind maps");
-                ui.checkbox(&mut self.check_updates, "Check for updates on startup")
-                    .on_hover_text("Asks GitHub once per start whether a newer version exists");
-                if ui
-                    .button(format!("{}  Check for updates now", icon::ARROWS_CLOCKWISE))
-                    .clicked()
-                {
-                    let ctx = ui.ctx().clone();
-                    self.update_check = Some(crate::update::start(move || ctx.request_repaint()));
-                    self.status = "Checking for updates …".into();
-                    self.manual_update_check = true;
-                    ui.close_menu();
-                }
             });
 
             // Werkzeugleiste
@@ -2242,26 +2301,9 @@ impl MindMapApp {
                     can_redo,
                     Command::Redo,
                 );
-                ui.separator();
-                if mode == Mode::Mindmap {
-                    tool(
-                        ui,
-                        icon::PLUS_CIRCLE,
-                        "New child (Tab)",
-                        None,
-                        true,
-                        Command::AddChild,
-                    );
-                    tool(
-                        ui,
-                        icon::TRASH,
-                        "Delete (Del)",
-                        None,
-                        has_sel,
-                        Command::Delete,
-                    );
-                    if show_view_tools {
-                        ui.separator();
+                if show_view_tools {
+                    ui.separator();
+                    if mode == Mode::Mindmap {
                         tool(
                             ui,
                             icon::TREE_STRUCTURE,
@@ -2278,21 +2320,21 @@ impl MindMapApp {
                             true,
                             Command::Fit,
                         );
-                    }
-                } else if show_view_tools {
-                    let tip = if md_preview {
-                        "Hide preview"
                     } else {
-                        "Show preview"
-                    };
-                    tool(
-                        ui,
-                        icon::SIDEBAR_SIMPLE,
-                        tip,
-                        None,
-                        true,
-                        Command::TogglePreview,
-                    );
+                        let tip = if md_preview {
+                            "Hide preview"
+                        } else {
+                            "Show preview"
+                        };
+                        tool(
+                            ui,
+                            icon::SIDEBAR_SIMPLE,
+                            tip,
+                            None,
+                            true,
+                            Command::TogglePreview,
+                        );
+                    }
                 }
                 if show_extra_tools {
                     ui.separator();
@@ -2301,16 +2343,38 @@ impl MindMapApp {
                     })
                     .response
                     .on_hover_text("Export");
-                    ui.menu_button(egui::RichText::new(icon::PALETTE).size(17.0), |ui| {
-                        theme_menu(ui, current_theme, &mut out)
-                    })
-                    .response
-                    .on_hover_text("Theme");
                 }
             }
 
-            // Suche rechts in der Leiste
+            // Rechts in der Leiste: Einstellungen ganz außen, daneben die Suche
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let settings_id = ui.make_persistent_id("settings_popup");
+                let gear = ui
+                    .add(
+                        egui::Button::new(egui::RichText::new(icon::GEAR_SIX).size(18.0))
+                            .min_size(Vec2::splat(32.0)),
+                    )
+                    .on_hover_text("Settings");
+                if gear.clicked() {
+                    ui.memory_mut(|m| m.toggle_popup(settings_id));
+                }
+                #[cfg(test)]
+                if std::mem::take(&mut self.open_settings_popup) {
+                    ui.memory_mut(|m| m.open_popup(settings_id));
+                }
+                egui::popup::popup_below_widget(
+                    ui,
+                    settings_id,
+                    &gear,
+                    egui::PopupCloseBehavior::CloseOnClickOutside,
+                    |ui| {
+                        ui.set_width(380.0);
+                        egui::Frame::default()
+                            .inner_margin(egui::Margin::same(10))
+                            .show(ui, |ui| self.settings_ui(ui, current_theme, &mut out));
+                    },
+                );
+                ui.add_space(4.0);
                 let resp = ui.add(
                     egui::TextEdit::singleline(&mut self.search)
                         .hint_text("Search …")

@@ -428,9 +428,13 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 
 `Node::icon` holds a short name from `ICONS` (64 entries: name, Phosphor glyph, label). In Markdown it is written as a GitHub-style shortcode before the text – `## :rocket: Spaceflight`, `- :bulb: Idea` – and read back by `split_icon` (unknown names and things like `10:30:` stay text). `nodes::label_job` puts the glyph in front of the label (in the branch colour on outlined nodes), `icons::label` does the same for slides, the preview and the presenter view, and slide titles colour the glyph in the slide colour (`title_job`). The context menu has an *Icon* picker (`icons::picker`, `Action::SetIcon`).
 
+## Settings
+
+The gear at the right end of the top bar opens a popup (`MindMapApp::settings_ui`) with the theme cards, the presentation switches (reveal bullets one by one, topics on the title slide, more effects) and the general ones (tips on empty maps, update check). Everything in it is stored with the app state. New global options belong here rather than in the menus.
+
 ## Update check (`update.rs`)
 
-Once per start (if *Help → Check for updates on startup* is on, stored as `check_updates`) a background thread asks `api.github.com/repos/tj537/mindful/releases/latest` with the system's `curl` – no HTTP library needed. If the tag is newer than `CARGO_PKG_VERSION` (`is_newer` compares `major.minor.patch`), the status bar shows an *Update to x.y.z* button that opens the release page. *Help → Check for updates now* also reports “up to date” or errors.
+Once per start (if *Settings → Check for updates on startup* is on, stored as `check_updates`) a background thread asks `api.github.com/repos/tj537/mindful/releases/latest` with the system's `curl` – no HTTP library needed. If the tag is newer than `CARGO_PKG_VERSION` (`is_newer` compares `major.minor.patch`), the status bar shows an *Update to x.y.z* button that opens the release page. *Settings → Check now* also reports “up to date” or errors.
 
 ## Saving, restoring, file format
 

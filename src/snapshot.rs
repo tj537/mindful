@@ -189,6 +189,13 @@ mod tests {
             shapes = snap.frame(t, |ctx| app.show(ctx));
         }
         snap.save(&shapes, Path::new("target/snapshots/app_ai_prompt.png"));
+        // Einstellungen
+        snap.ctx.memory_mut(|m| m.close_popup());
+        app.open_settings_popup = true;
+        for t in [27.0, 27.5, 27.8] {
+            shapes = snap.frame(t, |ctx| app.show(ctx));
+        }
+        snap.save(&shapes, Path::new("target/snapshots/app_settings.png"));
         // schmal: kompakter Knopf
         snap.ctx.memory_mut(|m| m.close_popup());
         snap.size = Vec2::new(1000.0, 200.0);

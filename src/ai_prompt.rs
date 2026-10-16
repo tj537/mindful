@@ -164,7 +164,7 @@ There are many ways to turn beans into coffee.
 }
 
 /// Kleine Überschrift über einem Feld
-fn field_label(ui: &mut egui::Ui, text: &str) {
+pub fn field_label(ui: &mut egui::Ui, text: &str) {
     ui.add_space(4.0);
     ui.label(
         RichText::new(text)
@@ -175,7 +175,7 @@ fn field_label(ui: &mut egui::Ui, text: &str) {
 }
 
 /// Kippschalter statt Häkchen
-fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str, hint: &str) {
+pub fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str, hint: &str) {
     ui.horizontal(|ui| {
         let size = Vec2::new(34.0, 20.0);
         let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click());
