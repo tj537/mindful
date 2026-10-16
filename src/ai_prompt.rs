@@ -130,7 +130,8 @@ Format rules:
 - Under each heading, the points as a bullet list starting with "- ". Indent sub-points by two spaces. Go at most three levels deep.
 - Keep every bullet point short (about 8 words at most) – they appear as boxes in a mind map and on slides.
 - If a bullet point needs an explanation, add a single line directly below it, indented two spaces further and without a dash. It becomes a note.
-- Speaker notes: after the note of each "## " heading, add a blank line and one line "<!-- notes: … -->" with 1–2 sentences the presenter could say. They are only shown to the speaker, never on the slides.
+- Callout boxes: where a tip, a warning or a key fact deserves to stand out, add a box right after the note of a "## " heading: a blank line, then "> [!TIP]" on its own line and the text in one line starting with "> ". Kinds: NOTE, TIP, IMPORTANT, WARNING, CAUTION. Use them in about a third of the sections at most, one per section.
+- Speaker notes: after the note of each "## " heading (and after its callout box, if there is one), add a blank line and one line "<!-- notes: … -->" with 1–2 sentences the presenter could say. They are only shown to the speaker, never on the slides.
 - No bold or italic text, links, tables, numbered lists, code blocks or emojis.
 - Reply with the Markdown only: no introduction, no closing remarks, and do not wrap it in a code block.
 {layout_guide}
@@ -156,6 +157,9 @@ Coffee travelled from Ethiopia to the rest of the world.
 ## Brewing
 
 There are many ways to turn beans into coffee.
+
+> [!TIP]
+> Grind the beans just before brewing – the aroma fades within minutes.
 
 <!-- notes: Ask the audience how they make their coffee at home. -->
 
@@ -511,6 +515,7 @@ mod tests {
         assert!(map
             .children(root)
             .all(|b| !b.note.is_empty() && !b.speaker_notes.is_empty()));
+        assert!(map.children(root).any(|b| !b.callouts.is_empty()));
         assert_eq!(map.to_markdown(), example);
     }
 }

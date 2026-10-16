@@ -82,6 +82,61 @@ impl SlideLayout {
     }
 }
 
+/// Kind of a callout box, as in GitHub's `> [!NOTE]` alerts
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CalloutKind {
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
+}
+
+impl CalloutKind {
+    pub const ALL: [CalloutKind; 5] = [
+        CalloutKind::Note,
+        CalloutKind::Tip,
+        CalloutKind::Important,
+        CalloutKind::Warning,
+        CalloutKind::Caution,
+    ];
+
+    /// Name in Markdown: `NOTE`, `TIP`, …
+    pub fn tag(self) -> &'static str {
+        match self {
+            CalloutKind::Note => "NOTE",
+            CalloutKind::Tip => "TIP",
+            CalloutKind::Important => "IMPORTANT",
+            CalloutKind::Warning => "WARNING",
+            CalloutKind::Caution => "CAUTION",
+        }
+    }
+
+    /// Label shown in the box
+    pub fn label(self) -> &'static str {
+        match self {
+            CalloutKind::Note => "Note",
+            CalloutKind::Tip => "Tip",
+            CalloutKind::Important => "Important",
+            CalloutKind::Warning => "Warning",
+            CalloutKind::Caution => "Caution",
+        }
+    }
+
+    pub fn from_tag(tag: &str) -> Option<CalloutKind> {
+        CalloutKind::ALL
+            .into_iter()
+            .find(|k| k.tag().eq_ignore_ascii_case(tag.trim()))
+    }
+}
+
+/// A callout box: `> [!TIP]` followed by `> text` lines
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Callout {
+    pub kind: CalloutKind,
+    pub text: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Node {
     pub id: u64,
@@ -94,6 +149,9 @@ pub struct Node {
     /// In Markdown written as `<!-- notes: … -->`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub speaker_notes: String,
+    /// Callout boxes (`> [!NOTE]` …): on the slide below the description or the bullet
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callouts: Vec<Callout>,
     /// Position relative to the centre of the canvas
     pub pos: [f32; 2],
     pub parent: Option<u64>,
@@ -159,6 +217,7 @@ impl Node {
             text: text.into(),
             note: String::new(),
             speaker_notes: String::new(),
+            callouts: Vec::new(),
             pos: [pos.x, pos.y],
             parent,
             collapsed: false,
@@ -195,6 +254,7 @@ pub struct OutlineItem {
     pub text: String,
     pub note: String,
     pub speaker_notes: String,
+    pub callouts: Vec<Callout>,
     pub task: Option<bool>,
     pub layout: Option<SlideLayout>,
     pub image: Option<String>,
@@ -575,6 +635,7 @@ impl MindMap {
         ));
         push_image(root, None, &mut out);
         push_note(&root.note, None, &mut out);
+        push_callouts(&root.callouts, None, &mut out);
         push_speaker_notes(&root.speaker_notes, None, &mut out);
         for branch in self.children(root.id) {
             out.push_str(&format!(
@@ -586,6 +647,7 @@ impl MindMap {
             ));
             push_image(branch, None, &mut out);
             push_note(&branch.note, None, &mut out);
+            push_callouts(&branch.callouts, None, &mut out);
             push_speaker_notes(&branch.speaker_notes, None, &mut out);
             if self.has_children(branch.id) {
                 out.push('\n');
@@ -606,6 +668,7 @@ impl MindMap {
             ));
             push_image(child, Some(&format!("{indent}  ")), out);
             push_note(&child.note, Some(&format!("{indent}  ")), out);
+            push_callouts(&child.callouts, Some(&format!("{indent}  ")), out);
             push_speaker_notes(&child.speaker_notes, Some(&format!("{indent}  ")), out);
             self.markdown_bullets(child.id, level + 1, out);
         }
@@ -682,6 +745,7 @@ impl MindMap {
             if let Some(n) = self.get_mut(id) {
                 n.note = item.note.clone();
                 n.speaker_notes = item.speaker_notes.clone();
+                n.callouts = item.callouts.clone();
                 n.task = item.task;
                 n.layout = item.layout;
                 n.image = item.image.clone();
@@ -711,33 +775,43 @@ impl MindMap {
         let min = items.iter().map(|i| i.level).min().unwrap_or(0);
         let single_root = items.first().is_some_and(|i| i.level == min)
             && items.iter().filter(|i| i.level == min).count() == 1;
-        let (root_text, (root_note, root_speaker), root_task, root_image, root_icon, rest) =
-            match items.first() {
-                Some(first) if single_root => (
-                    first.text.clone(),
-                    (first.note.clone(), first.speaker_notes.clone()),
-                    first.task,
-                    first.image.clone(),
-                    first.icon.clone(),
-                    &items[1..],
+        let (
+            root_text,
+            (root_note, root_speaker, root_callouts),
+            root_task,
+            root_image,
+            root_icon,
+            rest,
+        ) = match items.first() {
+            Some(first) if single_root => (
+                first.text.clone(),
+                (
+                    first.note.clone(),
+                    first.speaker_notes.clone(),
+                    first.callouts.clone(),
                 ),
-                Some(_) => (
-                    "Mind map".to_string(),
-                    (String::new(), String::new()),
-                    None,
-                    None,
-                    None,
-                    &items[..],
-                ),
-                None => (
-                    String::new(),
-                    (String::new(), String::new()),
-                    None,
-                    None,
-                    None,
-                    &items[..],
-                ),
-            };
+                first.task,
+                first.image.clone(),
+                first.icon.clone(),
+                &items[1..],
+            ),
+            Some(_) => (
+                "Mind map".to_string(),
+                (String::new(), String::new(), Vec::new()),
+                None,
+                None,
+                None,
+                &items[..],
+            ),
+            None => (
+                String::new(),
+                (String::new(), String::new(), Vec::new()),
+                None,
+                None,
+                None,
+                &items[..],
+            ),
+        };
 
         let images = std::mem::take(&mut self.images);
         let old = std::mem::replace(
@@ -755,6 +829,7 @@ impl MindMap {
                 text: root_text,
                 note: root_note,
                 speaker_notes: root_speaker,
+                callouts: root_callouts,
                 task: root_task,
                 image: root_image,
                 icon: root_icon,
@@ -765,6 +840,7 @@ impl MindMap {
                 self.next_id += 1;
                 n.note = root_note;
                 n.speaker_notes = root_speaker;
+                n.callouts = root_callouts;
                 n.task = root_task;
                 n.image = root_image;
                 n.icon = root_icon;
@@ -801,6 +877,7 @@ impl MindMap {
                         text: item.text.clone(),
                         note: item.note.clone(),
                         speaker_notes: item.speaker_notes.clone(),
+                        callouts: item.callouts.clone(),
                         task: item.task,
                         layout: item.layout,
                         image: item.image.clone(),
@@ -815,6 +892,7 @@ impl MindMap {
                     if let Some(n) = self.get_mut(id) {
                         n.note = item.note.clone();
                         n.speaker_notes = item.speaker_notes.clone();
+                        n.callouts = item.callouts.clone();
                         n.task = item.task;
                         n.layout = item.layout;
                         n.image = item.image.clone();
@@ -846,6 +924,34 @@ fn push_note(note: &str, indent: Option<&str>, out: &mut String) {
             out.push('\n');
         }
     }
+}
+
+/// Writes callout boxes in GitHub's notation: `> [!TIP]`, then the text with `> `.
+/// Under headings with a blank line before each, under bullets indented directly below.
+fn push_callouts(callouts: &[Callout], indent: Option<&str>, out: &mut String) {
+    let pad = indent.unwrap_or("");
+    for callout in callouts {
+        if indent.is_none() {
+            out.push('\n');
+        }
+        out.push_str(&format!("{pad}> [!{}]\n", callout.kind.tag()));
+        for line in callout.text.trim().lines() {
+            let line = line.trim_end();
+            if line.is_empty() {
+                out.push_str(&format!("{pad}>\n"));
+            } else {
+                out.push_str(&format!("{pad}> {line}\n"));
+            }
+        }
+    }
+}
+
+/// `> [!TIP]` (possibly followed by text) → kind and the text on that line
+pub fn callout_start(line: &str) -> Option<(CalloutKind, &str)> {
+    let rest = line.trim_start().strip_prefix('>')?.trim_start();
+    let rest = rest.strip_prefix("[!")?;
+    let (tag, after) = rest.split_once(']')?;
+    Some((CalloutKind::from_tag(tag)?, after.trim()))
 }
 
 /// Start of a speaker-notes comment: `<!-- notes: … -->`
@@ -942,6 +1048,8 @@ enum Line {
     Heading(usize, String, Option<bool>, Option<SlideLayout>),
     /// Speaker notes from a `<!-- notes: … -->` comment (possibly over several lines)
     Notes(String),
+    /// A callout box: `> [!TIP]` and the `> ` lines below it
+    Callout(Callout),
     Bullet(usize, String, Option<bool>),
     Plain(usize, String),
     Image(String),
@@ -996,8 +1104,36 @@ pub fn notes_start(line: &str) -> Option<usize> {
 /// Classifies all lines; a speaker-notes comment over several lines becomes one `Line::Notes`
 fn classify_lines(text: &str) -> Vec<Line> {
     let mut lines = Vec::new();
-    let mut rest = text.lines();
+    let mut rest = text.lines().peekable();
     while let Some(line) = rest.next() {
+        if let Some((kind, first)) = callout_start(line) {
+            let mut body: Vec<String> = Vec::new();
+            if !first.is_empty() {
+                body.push(first.to_string());
+            }
+            // Every following line that starts with `>` belongs to the box
+            while let Some(next) = rest.peek() {
+                let Some(quoted) = next.trim_start().strip_prefix('>') else {
+                    break;
+                };
+                if callout_start(next).is_some() {
+                    break;
+                }
+                body.push(
+                    quoted
+                        .strip_prefix(' ')
+                        .unwrap_or(quoted)
+                        .trim_end()
+                        .to_string(),
+                );
+                rest.next();
+            }
+            lines.push(Line::Callout(Callout {
+                kind,
+                text: body.join("\n").trim().to_string(),
+            }));
+            continue;
+        }
         let Some(indent) = notes_start(line) else {
             lines.push(classify(line));
             continue;
@@ -1067,6 +1203,7 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
             text,
             note: String::new(),
             speaker_notes: String::new(),
+            callouts: Vec::new(),
             task,
             layout: None,
             image: None,
@@ -1102,6 +1239,11 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
             Line::Image(target) => {
                 if let Some(last) = items.last_mut() {
                     last.image.get_or_insert(target);
+                }
+            }
+            Line::Callout(callout) => {
+                if let Some(last) = items.last_mut() {
+                    last.callouts.push(callout);
                 }
             }
             Line::Notes(notes) => {
@@ -1237,6 +1379,38 @@ mod tests {
     }
 
     #[test]
+    fn callouts_round_trip_under_headings_and_bullets() {
+        let md = "# Trip\n\n## Packing\n\nWhat goes into the bag.\n\n> [!TIP]\n> Roll clothes instead of folding them.\n>\n> It saves space.\n\n> [!WARNING]\n> No liquids over 100 ml.\n\n<!-- notes: Show the bag. -->\n\n- Passport\n  > [!IMPORTANT]\n  > Check the expiry date.\n- Charger\n";
+        let map = MindMap::from_outline(md).unwrap();
+        let find = |t: &str| map.nodes.iter().find(|n| n.text == t).unwrap();
+        let packing = find("Packing");
+        assert_eq!(packing.note, "What goes into the bag.");
+        assert_eq!(packing.speaker_notes, "Show the bag.");
+        assert_eq!(
+            packing.callouts,
+            vec![
+                Callout {
+                    kind: CalloutKind::Tip,
+                    text: "Roll clothes instead of folding them.\n\nIt saves space.".into()
+                },
+                Callout {
+                    kind: CalloutKind::Warning,
+                    text: "No liquids over 100 ml.".into()
+                },
+            ]
+        );
+        assert_eq!(find("Passport").callouts[0].kind, CalloutKind::Important);
+        assert!(find("Charger").callouts.is_empty());
+        assert_eq!(map.to_markdown(), md);
+        // A plain quote stays part of the description; the tag ignores case
+        let map = MindMap::from_outline("# A\n\n> just a quote\n\n## B\n\n> [!caution]\n> Hot\n")
+            .unwrap();
+        assert_eq!(map.nodes[0].note, "> just a quote");
+        let b = map.nodes.iter().find(|n| n.text == "B").unwrap();
+        assert_eq!(b.callouts[0].kind, CalloutKind::Caution);
+    }
+
+    #[test]
     fn indented_text_with_four_spaces() {
         let items = parse_outline("Projekt\n    Planung\n        Budget\n    Umsetzung");
         let levels: Vec<usize> = items.iter().map(|i| i.level).collect();
@@ -1355,6 +1529,21 @@ mod example_tests {
                 .count(),
             7
         );
+        // Callouts: note, tip and warning on slides, one below a bullet
+        let kinds: Vec<CalloutKind> = map
+            .nodes
+            .iter()
+            .flat_map(|n| n.callouts.iter().map(|c| c.kind))
+            .collect();
+        assert_eq!(kinds.len(), 4);
+        for kind in [
+            CalloutKind::Note,
+            CalloutKind::Tip,
+            CalloutKind::Important,
+            CalloutKind::Warning,
+        ] {
+            assert!(kinds.contains(&kind), "{kind:?}");
+        }
         assert!(branches
             .iter()
             .all(|b| !b.note.is_empty() && (map.has_children(b.id) || b.image.is_some())));
@@ -1377,6 +1566,7 @@ mod example_tests {
                 .count(),
             7
         );
+        assert_eq!(map.nodes.iter().map(|n| n.callouts.len()).sum::<usize>(), 4);
         assert_eq!(
             branches.iter().filter(|b| b.layout.is_some()).count(),
             SlideLayout::ALL.len()

@@ -115,6 +115,9 @@ Stars don't live alone – they gather in vast star systems of four main shapes.
 
 Regions where gravity is so strong that not even light can escape.
 
+> [!WARNING]
+> Don't get too close: near a small black hole, the difference in gravity between your head and your feet would stretch you like spaghetti.
+
 <!-- notes:
 Black holes don't suck things in like a vacuum cleaner.
 
@@ -135,6 +138,9 @@ From far away they pull just like any other object of the same mass.
 ## :zap: The Big Bang <!-- number -->
 
 The universe had a beginning – and it is still expanding today.
+
+> [!NOTE]
+> The Big Bang was not an explosion in space – space itself began to expand.
 
 - 13.8 billion years ago: the Big Bang
   - Everything began hot and incredibly dense
@@ -211,12 +217,17 @@ Narrowing billions of stars down to the few places where life might exist.
 
 Things to see with your own eyes – most of them need nothing but a clear night.
 
+> [!TIP]
+> Give your eyes 20 minutes to get used to the dark – and use only red light.
+
 - [x] Find the Big Dipper and the North Star
 - [x] Look at the Moon through binoculars
 - [ ] See Jupiter's four largest moons
 - [ ] Spot the ISS passing overhead
 - [ ] Watch a meteor shower
   The Perseids peak every year around 12 August.
+  > [!IMPORTANT]
+  > Check the moon phase first – a bright moon hides the faint meteors.
 - [ ] Visit a dark-sky park
 
 ## :quote: One Last Thought <!-- quote -->

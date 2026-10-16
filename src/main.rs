@@ -3,6 +3,7 @@
 
 mod ai_prompt;
 mod app;
+mod callout;
 mod diagrams;
 mod document;
 mod export;

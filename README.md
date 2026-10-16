@@ -162,12 +162,18 @@ Introduction (becomes the subtitle of the title slide).
 A description of the branch, shown below the slide title.
 The comment after the heading picks a slide layout (optional).
 
+> [!TIP]
+> A callout box below the slide title. Also NOTE, IMPORTANT, WARNING and CAUTION.
+
 <!-- notes: Speaker notes – only in the presenter view and on the phone. -->
 
 - A point
   A description of the point
   <!-- notes: What to say about this point -->
   - A sub-point
+- A point with a warning
+  > [!WARNING]
+  > Shown as a coloured box right below the point.
 - [ ] An open task
 - [x] A done task
 - A point with a picture
@@ -263,6 +269,7 @@ src/
 ├── flight.rs          tour style "Free flight": cards floating in space
 ├── images.rs          inserting, scaling and drawing pictures
 ├── icons.rs           icons on nodes
+├── callout.rs         callout boxes (> [!TIP] …): colours, icons, the box
 ├── search.rs          search: matches in text, descriptions and speaker notes
 ├── sound.rs           optional sound feedback (synthesized, played with rodio)
 ├── logo.rs            the Mindful mark (from assets/icon.svg)

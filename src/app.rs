@@ -185,6 +185,8 @@ enum NoteKind {
     Description,
     /// Only for the speaker: presenter view and phone remote
     Speaker,
+    /// Callout boxes (`> [!TIP]` …) on the slide
+    Callout,
 }
 
 /// Changes to single nodes of the active mind map
@@ -586,6 +588,14 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
         &l(icon::CHAT_CIRCLE_TEXT, "Speaker notes …"),
         "",
         Action::EditNote(id, NoteKind::Speaker),
+        out,
+    );
+    action_item(
+        ui,
+        true,
+        &l(icon::INFO, "Callout box …"),
+        "",
+        Action::EditNote(id, NoteKind::Callout),
         out,
     );
     let current_icon = map.get(id).and_then(|n| n.icon.clone());
@@ -2048,6 +2058,15 @@ impl MindMapApp {
                     doc.record(before);
                 }
                 self.note_edit = Some((id, kind, doc.map.clone()));
+                // A new callout starts as a note, the kind can be changed in the window
+                if kind == NoteKind::Callout {
+                    if let Some(n) = doc.map.get_mut(id).filter(|n| n.callouts.is_empty()) {
+                        n.callouts.push(crate::model::Callout {
+                            kind: crate::model::CalloutKind::Note,
+                            text: String::new(),
+                        });
+                    }
+                }
             }
         }
     }
@@ -3355,44 +3374,54 @@ impl MindMapApp {
 
             // Badges at the top right for description and speaker notes;
             // both appear on hover
-            let (note, speaker) = doc
+            let (note, speaker, callouts) = doc
                 .map
                 .get(id)
                 .map(|n| {
                     (
                         n.note.trim().to_string(),
                         n.speaker_notes.trim().to_string(),
+                        n.callouts.clone(),
                     )
                 })
                 .unwrap_or_default();
+            let mut badges: Vec<(&str, Color32)> = Vec::new();
+            if !note.is_empty() {
+                badges.push((icon::NOTE, l.style.accent));
+            }
+            if !speaker.is_empty() {
+                badges.push((icon::CHAT_CIRCLE_TEXT, l.style.accent));
+            }
+            // A callout shows its own icon in its own colour
+            if let Some(first) = callouts.first() {
+                let (color, glyph) = crate::callout::look(first.kind);
+                badges.push((glyph, color));
+            }
             let mut badge_x = -10.0;
-            for (ic, text) in [(icon::NOTE, &note), (icon::CHAT_CIRCLE_TEXT, &speaker)] {
-                if text.is_empty() {
-                    continue;
-                }
+            for (ic, color) in &badges {
                 let c = rect.right_top() + Vec2::new(badge_x, 2.0) * zoom;
                 painter.circle_filled(c, 9.0 * zoom, theme.card);
-                painter.circle_stroke(c, 9.0 * zoom, Stroke::new(1.5 * zoom, l.style.accent));
+                painter.circle_stroke(c, 9.0 * zoom, Stroke::new(1.5 * zoom, *color));
                 painter.text(
                     c,
                     Align2::CENTER_CENTER,
-                    ic,
+                    *ic,
                     FontId::proportional(10.0 * zoom),
-                    l.style.accent,
+                    *color,
                 );
                 badge_x -= 21.0;
             }
-            if (!note.is_empty() || !speaker.is_empty())
-                && doc.editing != Some(id)
-                && !resp.dragged()
-            {
+            if !badges.is_empty() && doc.editing != Some(id) && !resp.dragged() {
                 resp.on_hover_ui(|ui| {
                     ui.set_max_width(320.0);
                     if !note.is_empty() {
                         ui.label(&note);
                     }
+                    for c in &callouts {
+                        crate::callout::show(ui, c, 13.0, 300.0, theme);
+                    }
                     if !speaker.is_empty() {
-                        if !note.is_empty() {
+                        if !note.is_empty() || !callouts.is_empty() {
                             ui.separator();
                         }
                         ui.weak(format!("{}  Speaker notes", icon::CHAT_CIRCLE_TEXT));
@@ -3621,7 +3650,11 @@ impl MindMapApp {
     }
 
     fn close_note(&mut self) {
-        if let Some((_, _, before)) = self.note_edit.take() {
+        if let Some((id, _, before)) = self.note_edit.take() {
+            // Callouts left empty are dropped
+            if let Some(n) = self.doc_mut().map.get_mut(id) {
+                n.callouts.retain(|c| !c.text.trim().is_empty());
+            }
             self.doc_mut().record(before);
         }
     }
@@ -3637,6 +3670,58 @@ impl MindMapApp {
         };
         let mut open = true;
         let mut changed = false;
+        if kind == NoteKind::Callout {
+            egui::Window::new(format!("{}  Callout box: {}", icon::INFO, node.text))
+                .id(egui::Id::new("note_window"))
+                .open(&mut open)
+                .collapsible(false)
+                .default_width(420.0)
+                .show(ctx, |ui| {
+                    let mut remove = None;
+                    let count = node.callouts.len();
+                    for (i, c) in node.callouts.iter_mut().enumerate() {
+                        ui.push_id(i, |ui| {
+                            let before = c.kind;
+                            crate::callout::kind_picker(ui, &mut c.kind);
+                            changed |= c.kind != before;
+                            let edit = egui::TextEdit::multiline(&mut c.text)
+                                .desired_rows(4)
+                                .desired_width(f32::INFINITY)
+                                .hint_text("Text of the box …");
+                            changed |= ui.add(edit).changed();
+                            if count > 1
+                                && ui
+                                    .small_button(format!("{}  Remove", icon::TRASH))
+                                    .clicked()
+                            {
+                                remove = Some(i);
+                            }
+                        });
+                        ui.separator();
+                    }
+                    if let Some(i) = remove {
+                        node.callouts.remove(i);
+                        changed = true;
+                    }
+                    if ui
+                        .button(format!("{}  Another box", icon::PLUS))
+                        .clicked()
+                    {
+                        node.callouts.push(crate::model::Callout {
+                            kind: crate::model::CalloutKind::Tip,
+                            text: String::new(),
+                        });
+                    }
+                    ui.weak("Shown as a coloured box on the slide – below the title or below this point. In Markdown: > [!TIP] and the text in lines starting with >. Leave the text empty to remove a box.");
+                });
+            if changed {
+                doc.dirty = true;
+            }
+            if !open {
+                self.close_note();
+            }
+            return;
+        }
         let (ic, what, text, hint, info) = match kind {
             NoteKind::Description => (
                 icon::NOTE_PENCIL,
@@ -3652,6 +3737,7 @@ impl MindMapApp {
                 "What you want to say about this point …",
                 "Only for you: shown in the presenter view (P) and on the phone remote, never on the slides.",
             ),
+            NoteKind::Callout => unreachable!("handled above"),
         };
         egui::Window::new(format!("{ic}  {what}: {}", node.text))
             .id(egui::Id::new("note_window"))

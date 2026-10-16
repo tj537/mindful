@@ -115,6 +115,9 @@ Sterne leben nicht allein – sie sammeln sich in riesigen Sternsystemen mit vie
 
 Orte, an denen die Schwerkraft so stark ist, dass nicht einmal Licht entkommt.
 
+> [!WARNING]
+> Nicht zu nah ran: Nahe einem kleinen Schwarzen Loch zöge die Schwerkraft am Kopf so viel stärker als an den Füßen, dass du wie Spaghetti lang gezogen würdest.
+
 <!-- notes:
 Schwarze Löcher saugen nichts an wie ein Staubsauger.
 
@@ -135,6 +138,9 @@ Aus der Ferne ziehen sie genauso wie jedes andere Objekt mit derselben Masse.
 ## :zap: Der Urknall <!-- number -->
 
 Das Universum hatte einen Anfang – und dehnt sich bis heute aus.
+
+> [!NOTE]
+> Der Urknall war keine Explosion im Raum – der Raum selbst begann sich auszudehnen.
 
 - 13,8 Milliarden Jahre: so alt ist das Universum
   - Alles begann heiß und unvorstellbar dicht
@@ -211,12 +217,17 @@ Von Milliarden Sternen zu den wenigen Orten, an denen es Leben geben könnte.
 
 Dinge, die du mit eigenen Augen sehen kannst – meist reicht eine klare Nacht.
 
+> [!TIP]
+> Gib deinen Augen 20 Minuten, um sich an die Dunkelheit zu gewöhnen – und nutze nur rotes Licht.
+
 - [x] Großen Wagen und Polarstern finden
 - [x] Den Mond durchs Fernglas ansehen
 - [ ] Die vier großen Jupitermonde entdecken
 - [ ] Die ISS vorbeiziehen sehen
 - [ ] Einen Meteorschauer beobachten
   Die Perseiden erreichen jedes Jahr um den 12. August ihren Höhepunkt.
+  > [!IMPORTANT]
+  > Vorher die Mondphase prüfen – ein heller Mond überstrahlt die schwachen Meteore.
 - [ ] Einen Sternenpark besuchen
 
 ## :quote: Ein letzter Gedanke <!-- quote -->

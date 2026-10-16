@@ -129,6 +129,7 @@ Menus, buttons and shortcuts only return a `Command` or an `Action`. They are ex
 | `text` | `String` | label |
 | `note` | `String` | description: Markdown paragraph, text below the slide title, tour subtitle, tooltip |
 | `speaker_notes` | `String` | only for the speaker: presenter view and phone remote; `<!-- notes: … -->` in Markdown |
+| `callouts` | `Vec<Callout>` | callout boxes (`kind`: note, tip, important, warning, caution; `text`); `> [!TIP]` in Markdown |
 | `pos` | `[f32; 2]` | position relative to the center of the canvas (world coordinates) |
 | `parent` | `Option<u64>` | parent node, `None` only for the root |
 | `collapsed` | `bool` | children hidden |
@@ -281,9 +282,10 @@ Nodes with a picture are drawn as a card: `nodes::thumb_size` / `with_thumb` add
 | `- Text` (indented) | child; indentation = level below the last heading |
 | plain line | description of the entry above |
 | `<!-- notes: … -->` (one line, or several up to `-->`) | speaker notes of the entry above |
+| `> [!NOTE]` / `[!TIP]` / `[!IMPORTANT]` / `[!WARNING]` / `[!CAUTION]` and the `> ` lines below | a callout box of the entry above (a plain `> quote` stays description text) |
 | `- [ ] Text` / `- [x] Text` | checkbox, open / done (also works on headings: `## [x] Text`) |
 
-`to_markdown` writes exactly this format (`push_note`, then `push_speaker_notes`; a `-->` inside the notes is written as `->` so it can't end the comment). Before classifying, `classify_lines` merges a speaker-notes comment over several lines into one `Line::Notes`, removing only the comment's own indentation. `parse_outline` reads it and understands a bit more: numbered lists, `*`/`+` bullets, checkboxes. If a text contains **no** headings or bullets at all (e.g. pasted from another program), every line becomes a node and indentation decides the level. The indentation width (2 spaces, 4, tab) is detected automatically.
+`to_markdown` writes exactly this format (`push_note`, `push_callouts`, then `push_speaker_notes`; a `-->` inside the notes is written as `->` so it can't end the comment). Before classifying, `classify_lines` merges a speaker-notes comment over several lines into one `Line::Notes`, removing only the comment's own indentation, and a callout (`callout_start`, then every following line starting with `>`) into one `Line::Callout`; a `>` line on its own becomes a blank line, so a box can have paragraphs. `parse_outline` reads it and understands a bit more: numbered lists, `*`/`+` bullets, checkboxes. If a text contains **no** headings or bullets at all (e.g. pasted from another program), every line becomes a node and indentation decides the level. The indentation width (2 spaces, 4, tab) is detected automatically.
 
 ### Live sync without losing data
 
@@ -448,6 +450,16 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 The description is on each card, so there is no subtitle. *Ripple*, *Glow*, *Warp streaks* and *Slow camera drift* apply to both styles; the effects that only make sense on a mind map (levels one by one, pulses, sparks, depth of field, bounce) are only offered for the mind map style.
 
 ---
+
+## Callout boxes (`callout.rs`)
+
+GitHub-style alerts – `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]` – are `Node::callouts`. `callout::look` gives each kind a fixed colour and Phosphor icon (blue info, green light bulb, purple seal, amber triangle, red octagon), the same in every theme; `callout::fill` the tinted background. `callout::show` draws the box as one paragraph – icon and label in colour, then the text – with a bar on the left and a thin border.
+
+- **Slides** (`render_slide`): the callouts of the branch (or of the central topic on the title slide, `Slide::callouts`) come right after the description and fade in with it; diagrams and bullets move down. A bullet's callouts appear as a smaller box right below it and are revealed with its group. Callouts count as extra lines when the bullet text is made smaller, so a slide doesn't overflow. Diagram layouts show only the branch's callouts.
+- **Markdown editor:** the marker line in the kind's colour, the `>` of the following lines too. **Preview:** the real box.
+- **Mind map:** *Callout box …* in the right-click menu opens a window with a kind picker and the text for every box of the node (more can be added; empty ones are dropped on closing, `close_note`). The node shows the icon of its first callout in its colour as a badge; the tooltip shows the boxes.
+- **Free flight:** the cards draw their callouts below the description (`Piece::Callout`).
+- **AI prompt:** asks for a box in about a third of the sections at most; the example has one.
 
 ## Search (`search.rs`)
 
@@ -656,6 +668,7 @@ cargo test
 | `slide_layouts_in_markdown` | layout comments are read and written back |
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
 | `render_slides` (ignored, run on demand) | renders every slide of both examples, the presenter view and a tour overview to PNG for a visual check |
+| `callouts_round_trip_under_headings_and_bullets` | `> [!TIP]` boxes (with paragraphs, several per node, under headings and bullets) are read and written back exactly; a plain quote stays text; the tag ignores case |
 | `speaker_notes_round_trip_apart_from_the_description` | `<!-- notes: … -->` (one line and a block, under headings and bullets) is read into `speaker_notes`, kept apart from the description, survives editing and is written back exactly |
 | `free_flight_arcs_and_lands_exactly` | the free-flight camera starts and lands exactly, pulls back and rises half way; stations lie deeper and deeper |
 | `every_branch_becomes_a_station_with_floating_sub_points` | the universe example gives the title plus 16 stations, the sub-points float beside their card, and the finale grid has a place in front of the camera for every card |

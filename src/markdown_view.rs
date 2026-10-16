@@ -4,7 +4,7 @@
 use crate::document::Document;
 use crate::icons;
 use crate::images;
-use crate::model::{notes_start, MindMap, Node};
+use crate::model::{callout_start, notes_start, MindMap, Node};
 use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
@@ -43,12 +43,28 @@ fn highlight(text: &str, theme: &Theme, query: &str) -> LayoutJob {
     let mut branch_color = theme.root;
     let mut branch = 0;
     let mut in_notes = false;
+    // Inside a callout box: its colour
+    let mut callout: Option<Color32> = None;
 
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim_start();
         let indent = line.len() - trimmed.len();
         let hashes = trimmed.chars().take_while(|&c| c == '#').count();
 
+        if let Some((kind, _)) = callout_start(line) {
+            let color = crate::callout::look(kind).0;
+            callout = Some(color);
+            job.append(line, 0.0, fmt(BODY, color));
+            continue;
+        }
+        match callout {
+            Some(color) if trimmed.starts_with('>') => {
+                job.append(&line[..indent + 1], 0.0, fmt(BODY, color));
+                job.append(&line[indent + 1..], 0.0, fmt(BODY, theme.text));
+                continue;
+            }
+            _ => callout = None,
+        }
         if in_notes || notes_start(line).is_some() {
             // Comment ends on this line? (On the first line only after `<!--`)
             let body = if in_notes { line } else { &trimmed[4..] };
@@ -229,6 +245,17 @@ fn speaker(ui: &mut egui::Ui, notes: &str, indent: f32) {
     });
 }
 
+/// Callout boxes in the preview
+fn callouts(ui: &mut egui::Ui, node: &Node, theme: &Theme, indent: f32) {
+    for c in &node.callouts {
+        ui.horizontal_top(|ui| {
+            ui.add_space(indent);
+            let width = ui.available_width();
+            crate::callout::show(ui, c, 13.5, width, theme);
+        });
+    }
+}
+
 fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
     let Some(root) = map.root().and_then(|r| map.get(r)) else {
         return;
@@ -242,6 +269,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
     ui.add(egui::Label::new(RichText::new(icons::label(root)).size(26.0).strong()).wrap());
     thumb(ui, map, root, 0.0);
     note(ui, &root.note, 0.0);
+    callouts(ui, root, theme, 0.0);
     speaker(ui, &root.speaker_notes, 0.0);
 
     for branch in map.children(root.id) {
@@ -263,12 +291,13 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
         });
         thumb(ui, map, branch, 12.0);
         note(ui, &branch.note, 12.0);
+        callouts(ui, branch, theme, 12.0);
         speaker(ui, &branch.speaker_notes, 12.0);
-        bullets(ui, map, branch.id, 0, color);
+        bullets(ui, map, theme, branch.id, 0, color);
     }
 }
 
-fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color32) {
+fn bullets(ui: &mut egui::Ui, map: &MindMap, theme: &Theme, id: u64, depth: usize, color: Color32) {
     for child in map.children(id) {
         let indent = 12.0 + depth as f32 * 20.0;
         ui.horizontal_top(|ui| {
@@ -293,7 +322,8 @@ fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color
         });
         thumb(ui, map, child, indent + 16.0);
         note(ui, &child.note, indent + 16.0);
+        callouts(ui, child, theme, indent + 16.0);
         speaker(ui, &child.speaker_notes, indent + 16.0);
-        bullets(ui, map, child.id, depth + 1, color);
+        bullets(ui, map, theme, child.id, depth + 1, color);
     }
 }

@@ -4,11 +4,12 @@
 //! effect settings, keyboard, buttons, slide strip, animated
 //! backgrounds, laser pointer and easing curves.
 
+use crate::callout;
 use crate::diagrams::{draw as draw_diagram, layout_menu, Item};
 use crate::document::Document;
 use crate::icons;
 use crate::images::{self, Fit};
-use crate::model::{MindMap, SlideLayout, StoredImage};
+use crate::model::{Callout, MindMap, SlideLayout, StoredImage};
 use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
@@ -907,6 +908,8 @@ type Bullet = (usize, String, Color32, Option<bool>, u64);
 struct Slide {
     title: String,
     note: String,
+    /// Callout boxes of the branch (or of the central topic on the title slide)
+    callouts: Vec<Callout>,
     bullets: Vec<Bullet>,
     color: Color32,
     is_title: bool,
@@ -1155,6 +1158,7 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
     let mut out = vec![Slide {
         title: icons::label(root),
         note: root.note.clone(),
+        callouts: root.callouts.clone(),
         bullets: map
             .children(root.id)
             .map(|c| (0, icons::label(c), color_of(map, theme, c.id), c.task, c.id))
@@ -1202,6 +1206,7 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
             images,
             title: icons::label(branch),
             note: branch.note.clone(),
+            callouts: branch.callouts.clone(),
             bullets,
             color,
             is_title: false,
@@ -1394,6 +1399,14 @@ pub fn render_slide(
                     );
                 });
             }
+            // Callouts of the central topic, appearing with the subtitle
+            for callout in &slide.callouts {
+                ui.add_space(8.0 * s);
+                ui.scope(|ui| {
+                    ui.multiply_opacity(line_in);
+                    callout::show(ui, callout, 22.0 * s, content.width() * 0.72, theme);
+                });
+            }
             ui.add_space(36.0 * s);
             // Chapter chips pop up one after another (can be switched off)
             let topics = if fx.title_topics {
@@ -1454,6 +1467,15 @@ pub fn render_slide(
                     );
                 });
                 ui.add_space(10.0 * s);
+            }
+            // Callout boxes below the description, above the bullets or the diagram
+            for callout in &slide.callouts {
+                ui.scope(|ui| {
+                    ui.multiply_opacity(line_in);
+                    let width = ui.available_width();
+                    callout::show(ui, callout, 21.0 * s, width, theme);
+                });
+                ui.add_space(8.0 * s);
             }
 
             if let Some(layout) = slide.layout {
@@ -1535,7 +1557,16 @@ pub fn render_slide(
                     }
                 };
                 let building = build_bullets && slide.groups() > 0;
-                let shrink = (8.0 / slide.bullets.len().max(8) as f32).max(0.6);
+                // Many bullets (or callout boxes taking room) → smaller text
+                let callout_lines = slide.callouts.len() * 2
+                    + slide
+                        .bullets
+                        .iter()
+                        .filter_map(|b| map.get(b.4))
+                        .map(|n| n.callouts.len())
+                        .sum::<usize>();
+                let lines = slide.bullets.len() + callout_lines;
+                let shrink = (8.0 / lines.max(8) as f32).max(0.6);
                 let mut group = 0;
                 for (i, (depth, text, color, task, node)) in slide.bullets.iter().enumerate() {
                     if *depth == 0 && i > 0 {
@@ -1623,6 +1654,14 @@ pub fn render_slide(
                             }
                             ui.add(egui::Label::new(label).wrap());
                         });
+                        // Callouts of a bullet: a smaller box right below it
+                        for callout in map.get(*node).map_or(&[][..], |n| &n.callouts[..]) {
+                            ui.horizontal_top(|ui| {
+                                ui.add_space(*depth as f32 * 40.0 * s + base_size * 0.8 + shift);
+                                let width = ui.available_width();
+                                callout::show(ui, callout, base_size * 0.72, width, theme);
+                            });
+                        }
                     });
                 }
             }

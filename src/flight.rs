@@ -13,7 +13,7 @@
 use crate::document::{Camera, Document, TourState};
 use crate::icons;
 use crate::images::{self, Fit};
-use crate::model::MindMap;
+use crate::model::{CalloutKind, MindMap};
 use crate::nodes::paint_checkbox;
 use crate::present::{
     backdrop, color_of, ease_in_out_cubic, ease_out_back, ease_out_cubic, read_nav, soft_shadow,
@@ -113,6 +113,8 @@ impl Kind {
 
 enum Piece {
     Text(Arc<Galley>),
+    /// Background of a callout box
+    Callout(CalloutKind),
     Image(String),
     Check(bool),
 }
@@ -248,6 +250,40 @@ fn layout_card(
         y += h;
     }
 
+    // Callout boxes
+    for c in &node.callouts {
+        let (color, glyph) = crate::callout::look(c.kind);
+        let size = match kind {
+            Kind::Title => 22.0,
+            Kind::Main => 20.0,
+            Kind::Child => 15.0,
+        } * s;
+        let (bx, by) = (size * 0.9, size * 0.6);
+        y += 14.0 * s;
+        let label = galley(text(
+            &format!("{glyph}  {}", c.kind.label()),
+            size * 0.8,
+            color,
+            inner - 2.0 * bx,
+        ));
+        let body = galley(text(c.text.trim(), size, theme.text, inner - 2.0 * bx));
+        let (lh, bh) = (label.size().y, body.size().y);
+        let h = 2.0 * by + lh + size * 0.25 + bh;
+        pieces.push((
+            Rect::from_min_size(Pos2::new(pad, y), Vec2::new(inner, h)),
+            Piece::Callout(c.kind),
+        ));
+        pieces.push((
+            Rect::from_min_size(Pos2::new(pad + bx, y + by), label.size()),
+            Piece::Text(label),
+        ));
+        pieces.push((
+            Rect::from_min_size(Pos2::new(pad + bx, y + by + lh + size * 0.25), body.size()),
+            Piece::Text(body),
+        ));
+        y += h;
+    }
+
     // Sub-points of a sub-point, as a short list
     if kind == Kind::Child {
         let lines = sub_lines(map, id);
@@ -364,6 +400,18 @@ fn paint_card(
                 }
                 None => images::placeholder(p, r, 12.0 * s),
             },
+            Piece::Callout(kind) => {
+                let color = crate::callout::look(kind).0;
+                p.rect_filled(r, 10.0 * s, crate::callout::fill(kind, theme));
+                p.rect_filled(
+                    Rect::from_min_size(
+                        r.min + Vec2::new(0.0, 8.0 * s),
+                        Vec2::new(3.5 * s, (r.height() - 16.0 * s).max(0.0)),
+                    ),
+                    1.75 * s,
+                    color,
+                );
+            }
             Piece::Check(done) => {
                 paint_checkbox(p, r, done, accent, theme.text.gamma_multiply(0.7));
                 check = Some(r);
