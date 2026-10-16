@@ -57,6 +57,24 @@ mod tests {
             );
         }
 
+        // Titelfolie ohne Themen-Marken
+        fx.title_topics = false;
+        doc.slide = 0;
+        doc.slide_time = 3000.0;
+        let mut shapes = Vec::new();
+        for t in [3000.0, 3020.0] {
+            shapes = snap.frame(t, |ctx| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::default().fill(theme.background))
+                    .show(ctx, |ui| present::show(ui, &mut doc, theme, false, &mut fx));
+            });
+        }
+        snap.save(
+            &shapes,
+            Path::new(&format!("target/snapshots/{name}_title_plain.png")),
+        );
+        fx.title_topics = true;
+
         // Referentenansicht (ohne echtes zweites Fenster als eingebettetes Fenster)
         if name == "universe" {
             let mut wide = Snapshot::retina(1500.0, 900.0, 1.0);

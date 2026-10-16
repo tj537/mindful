@@ -82,6 +82,8 @@ pub struct Effects {
     pub vignette: bool,
     /// Folien: farbiger Balken am linken Rand der Folie
     pub accent_bar: bool,
+    /// Titelfolie: die Hauptzweige als farbige Themen-Marken zeigen
+    pub title_topics: bool,
     /// Folien: Lichtschimmer, der über den Titel zieht
     pub shine: bool,
     /// Folien: langsamer Zoom, solange eine Folie zu sehen ist
@@ -114,6 +116,7 @@ impl Default for Effects {
             confetti: true,
             vignette: false,
             accent_bar: true,
+            title_topics: true,
             shine: false,
             ken_burns: false,
             warp: false,
@@ -175,6 +178,7 @@ pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: boo
                     }
                 });
                 ui.checkbox(&mut fx.accent_bar, "Colored bar on the left");
+                ui.checkbox(&mut fx.title_topics, "Topics on the title slide");
                 ui.checkbox(&mut fx.shine, "Light sweep over titles");
                 ui.checkbox(&mut fx.ken_burns, "Slow zoom on each slide");
                 ui.separator();
@@ -908,6 +912,18 @@ impl Slide {
     }
 }
 
+/// Weichgezeichneter Schatten unter `rect`: um `drop` nach unten versetzt,
+/// mit einem weichen Rand der Breite `blur`
+fn soft_shadow(rect: Rect, radius: f32, drop: f32, blur: f32, color: Color32) -> egui::Shape {
+    let shadow = egui::epaint::Shadow {
+        offset: [0, drop.round().clamp(0.0, 127.0) as i8],
+        blur: blur.round().clamp(0.0, 255.0) as u8,
+        spread: 0,
+        color,
+    };
+    egui::Shape::Rect(shadow.as_shape(rect, radius.round().clamp(0.0, 255.0) as u8))
+}
+
 /// Bild oben (und für die Fortschrittsleiste unten) abdunkeln, damit heller Text lesbar bleibt.
 /// Ein Netz mit gemeinsamen Kanten, das an den Ecken der Rundung der Folie folgt –
 /// so gibt es weder Streifen noch Nähte.
@@ -1028,11 +1044,13 @@ fn picture_grid(
                 let shown = images::contain(frame, img.aspect());
                 let target = if fit == Fit::Contain { shown } else { frame };
                 // Weicher Schatten unter dem Bild
-                p.rect_filled(
-                    target.translate(Vec2::new(0.0, 6.0 * s)),
+                p.add(soft_shadow(
+                    target,
                     14.0 * s,
-                    Color32::from_black_alpha((60.0 * e) as u8),
-                );
+                    8.0 * s,
+                    24.0 * s,
+                    Color32::from_black_alpha((90.0 * e) as u8),
+                ));
                 images::paint(p, ctx, &pic.key, img, frame, fit, 14.0 * s, tint, 1.0)
             }
             None => {
@@ -1181,11 +1199,15 @@ pub fn render_slide(
 
     let radius = if view.page { 0.0 } else { 24.0 * s };
     if !view.page {
-        painter.rect_filled(
-            card.translate(Vec2::new(0.0, 10.0 * s)).expand(2.0 * s),
+        // Weicher, weichgezeichneter Schatten unter der Folie
+        let alpha = if theme.dark { 150 } else { 55 };
+        painter.add(soft_shadow(
+            card,
             radius,
-            Color32::from_black_alpha(if theme.dark { 110 } else { 35 }),
-        );
+            18.0 * s,
+            56.0 * s,
+            Color32::from_black_alpha(alpha),
+        ));
     }
     painter.rect_filled(card, radius, theme.card);
     let full_bleed = slide.full_bleed();
@@ -1294,7 +1316,9 @@ pub fn render_slide(
         };
 
         if slide.is_title {
-            ui.add_space(content.height() * 0.22);
+            // Ohne Themen-Marken steht der Titel etwas tiefer, näher an der Mitte
+            let top = if fx.title_topics { 0.22 } else { 0.3 };
+            ui.add_space(content.height() * top);
             title(&mut ui, &slide.title, 76.0 * s);
             if !slide.note.trim().is_empty() {
                 ui.scope(|ui| {
@@ -1310,10 +1334,15 @@ pub fn render_slide(
                 });
             }
             ui.add_space(36.0 * s);
-            // Kapitel-Marken ploppen nacheinander auf
+            // Kapitel-Marken ploppen nacheinander auf (abschaltbar)
+            let topics = if fx.title_topics {
+                slide.bullets.as_slice()
+            } else {
+                &[]
+            };
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0) * s;
-                for (i, (_, text, color, _, _)) in slide.bullets.iter().enumerate() {
+                for (i, (_, text, color, _, _)) in topics.iter().enumerate() {
                     let pop = progress(now, view.slide_time + 0.35 + i as f64 * 0.09, 0.4);
                     animating |= pop < 1.0;
                     // Feste Größe vorab, damit eine Marke als Ganzes in die nächste Zeile rutscht

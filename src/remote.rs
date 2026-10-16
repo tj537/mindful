@@ -2,14 +2,16 @@
 //! eigenen WLAN. Das Handy öffnet über den QR-Code eine Seite mit großen
 //! Knöpfen, Folientitel, Notizen und Stoppuhr – ohne App und ohne Cloud.
 //! Ein zufälliger Schlüssel in der Adresse sorgt dafür, dass nur wer den
-//! QR-Code sieht, mitsteuern kann.
+//! QR-Code sieht, mitsteuern kann. Endet der Vortrag, schließt sich der
+//! Server wieder (`stop`).
 
 use eframe::egui;
 use serde::Serialize;
 use std::hash::{BuildHasher, Hasher};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Was das Handy anzeigt
@@ -43,22 +45,57 @@ struct Shared {
 pub struct Remote {
     /// Adresse für den QR-Code
     pub url: String,
+    port: u16,
+    /// Gesetzt, wenn der Server aufhören soll
+    stopping: Arc<AtomicBool>,
     /// Schlüssel in der Adresse (nur Tests lesen ihn direkt)
     #[cfg_attr(not(test), allow(dead_code))]
     token: String,
     shared: Arc<Mutex<Shared>>,
 }
 
-static REMOTE: OnceLock<Result<Remote, String>> = OnceLock::new();
+/// Der laufende Server, falls einer läuft
+static REMOTE: Mutex<Option<Arc<Remote>>> = Mutex::new(None);
+/// Letzter Fehler beim Starten – nicht in jedem Frame neu versuchen
+static LAST_ERROR: Mutex<Option<(Instant, String)>> = Mutex::new(None);
 
-/// Server beim ersten Aufruf starten; danach immer derselbe
-pub fn start(ctx: &egui::Context) -> Result<&'static Remote, &'static String> {
-    REMOTE.get_or_init(|| Remote::start(ctx.clone())).as_ref()
+/// Server starten, falls er noch nicht läuft
+pub fn start(ctx: &egui::Context) -> Result<Arc<Remote>, String> {
+    let mut slot = REMOTE.lock().map_err(|e| e.to_string())?;
+    if let Some(remote) = slot.as_ref() {
+        return Ok(remote.clone());
+    }
+    let mut last_error = LAST_ERROR.lock().map_err(|e| e.to_string())?;
+    if let Some((when, error)) = last_error.as_ref() {
+        if when.elapsed() < Duration::from_secs(3) {
+            return Err(error.clone());
+        }
+    }
+    match Remote::start(ctx.clone()) {
+        Ok(remote) => {
+            let remote = Arc::new(remote);
+            *slot = Some(remote.clone());
+            *last_error = None;
+            Ok(remote)
+        }
+        Err(error) => {
+            *last_error = Some((Instant::now(), error.clone()));
+            Err(error)
+        }
+    }
 }
 
-/// Läuft der Server schon?
-pub fn running() -> Option<&'static Remote> {
-    REMOTE.get().and_then(|r| r.as_ref().ok())
+/// Läuft der Server gerade?
+pub fn running() -> Option<Arc<Remote>> {
+    REMOTE.lock().ok()?.clone()
+}
+
+/// Server beenden und den Port schließen (z. B. am Ende des Vortrags)
+pub fn stop() {
+    let remote = REMOTE.lock().ok().and_then(|mut slot| slot.take());
+    if let Some(remote) = remote {
+        remote.shutdown();
+    }
 }
 
 /// IP-Adresse im eigenen Netz (ohne etwas zu senden: UDP „verbindet“ nur)
@@ -90,9 +127,16 @@ impl Remote {
         let ip = local_ip().ok_or("not connected to a network")?;
         let token = random_token();
         let shared: Arc<Mutex<Shared>> = Arc::default();
-        let (server_token, server_shared) = (token.clone(), shared.clone());
+        let stopping: Arc<AtomicBool> = Arc::default();
+        let (server_token, server_shared, server_stopping) =
+            (token.clone(), shared.clone(), stopping.clone());
         std::thread::spawn(move || {
-            for stream in listener.incoming().flatten() {
+            for stream in listener.incoming() {
+                // Beim Beenden weckt eine Verbindung an uns selbst `incoming` auf
+                if server_stopping.load(Ordering::Relaxed) {
+                    break;
+                }
+                let Ok(stream) = stream else { continue };
                 let (token, shared, ctx) =
                     (server_token.clone(), server_shared.clone(), ctx.clone());
                 std::thread::spawn(move || {
@@ -102,9 +146,17 @@ impl Remote {
         });
         Ok(Remote {
             url: format!("http://{ip}:{port}/?t={token}"),
+            port,
+            stopping,
             token,
             shared,
         })
+    }
+
+    /// Server-Schleife beenden; danach ist der Port frei
+    fn shutdown(&self) {
+        self.stopping.store(true, Ordering::Relaxed);
+        let _ = TcpStream::connect(("127.0.0.1", self.port));
     }
 
     /// Aktuellen Stand fürs Handy hinterlegen
@@ -368,5 +420,11 @@ mod tests {
         let page = get(&format!("{local}/?t={}", remote.token()));
         assert!(page.contains("Mindful remote"));
         assert!(remote.qr().is_some());
+
+        // Nach dem Beenden nimmt der Port keine Anfragen mehr an
+        let addr = local.trim_start_matches("http://").to_string();
+        remote.shutdown();
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(TcpStream::connect(&addr).is_err());
     }
 }

@@ -390,7 +390,7 @@ The three charts read their numbers with `parse_datum`: the **last** number in a
 - `GET /state` returns `RemoteState` as JSON; the page polls it every second.
 - `POST /next` / `POST /prev` queue a `Command` and wake the UI with `ctx.request_repaint()`.
 
-Every frame `present::show` publishes the current state (`Remote::publish`, without icon glyphs, which the phone's fonts don't have) and turns queued commands into `Nav` presses. The server lives in a `OnceLock` for the rest of the session; the QR card only shows whether a phone was heard from in the last four seconds.
+Every frame `present::show` publishes the current state (`Remote::publish`, without icon glyphs, which the phone's fonts don't have) and turns queued commands into `Nav` presses. The running server is kept in a `Mutex<Option<Arc<Remote>>>`. When the presentation ends (`MindMapApp::set_mode` leaving `Mode::Present`), `remote::stop` sets a flag and connects to its own port once to wake the accept loop, which then exits and closes the port; the next presentation starts a new server with a new token. Start errors are cached for three seconds so the open QR card doesn't retry every frame. The card only shows whether a phone was heard from in the last four seconds.
 
 ## PDF export (`pdf.rs`)
 

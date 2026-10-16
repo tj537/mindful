@@ -3181,6 +3181,11 @@ impl MindMapApp {
         }
         self.close_note();
         self.doc_mut().set_mode(mode);
+        // Vortrag vorbei: Handy-Fernbedienung beenden, Port schließen
+        if was == Mode::Present {
+            crate::remote::stop();
+            self.doc_mut().remote_open = false;
+        }
         // Präsentation läuft im Vollbild
         if mode.is_presenting() || was.is_presenting() {
             self.fullscreen = mode.is_presenting();

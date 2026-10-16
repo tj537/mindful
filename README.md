@@ -61,7 +61,7 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 **Slides that look like slides**
 - Twelve slide layouts built from your bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (it counts up), quote – and **bar, pie and line charts** from points like `Solar: 42 %`, animated as they build up. Pick one with a right-click on the slide.
 - **Presenter view** (P): a second window with the current and next slide, your notes, a timer and the clock, while the audience sees only the slides.
-- **Your phone as a remote** (R): scan a QR code and your phone shows big Next/Back buttons, the slide title, your notes and the timer. It works in your own Wi-Fi with no app and no cloud.
+- **Your phone as a remote** (R): scan a QR code and your phone shows big Next/Back buttons, the slide title, your notes and the timer. It works in your own Wi-Fi with no app and no cloud, and it closes again when the presentation ends.
 - **Export the slides as PDF** to send or print them.
 - Pictures from your computer: drag them onto a node or a slide, or paste a screenshot. One picture sits beside the text, a single picture fills the slide, several become a gallery.
 - Checkboxes you can tick off during the talk, with confetti if you like.
