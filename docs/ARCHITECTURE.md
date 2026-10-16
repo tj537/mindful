@@ -258,6 +258,10 @@ Everything about pictures lives in `images.rs`:
 
 Nodes with a picture are drawn as a card: `nodes::thumb_size` / `with_thumb` add the thumbnail to the node size, `paint_thumb` draws it and returns the area left for text and checkbox.
 
+### Editing a node
+
+`Action::Rename` (double-click, F2, a new child) opens the text field with the whole text selected, so typing replaces it. A single click opens it straight away if the node still shows a placeholder (`model::is_placeholder`: empty, “New idea” or the “Central topic” of a new tab). Typing while a node is selected but not edited (`Event::Text` in `node_keys`) sends `Action::TypeInto`: the typed characters replace the text and the cursor goes to the end (`edit_cursor_end`). The selection is set through `TextEdit::load_state` / `TextCursorState::set_char_range` right after focusing. `placeholders_can_be_typed_over` in `snapshot.rs` drives this with simulated clicks and keys (`Offscreen::frame_with_events`).
+
 ### Checkboxes
 
 `nodes.rs` draws them (`paint_task`, `paint_label` for the struck-through text, `paint_checkbox` for free-standing boxes on slides and in the preview) and reserves `TASK_SPACE` on the left of the node. Clicking the box sends `Action::ToggleDone`, ⌘Enter `Action::CycleTask` (none → open → done → open), the context menu `Action::SetTask`.
@@ -597,6 +601,7 @@ cargo test
 | `icons_are_read_from_shortcodes` | `:rocket: Text` becomes an icon, unknown names stay text |
 | `versions_are_compared` | update check: `v0.3.0` is newer than `0.2.0`, nonsense is ignored |
 | `phone_requests_need_the_token_and_queue_commands` | the remote server rejects wrong tokens, serves the page and state, queues Next |
+| `placeholders_can_be_typed_over` | simulated click + typing replaces a placeholder; typing on a selected node replaces its text |
 | `chart_points_are_read_from_bullets` | “Solar: 42 %” etc. give label, value and unit |
 | `slides_become_pdf_pages` | the PDF has one image page per slide and a correct cross-reference table |
 | `render_app` (ignored, run on demand) | renders the whole window (mind map, Markdown, light theme, empty map) to PNG |

@@ -6,6 +6,14 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 pub const DEFAULT_TEXT: &str = "New idea";
+/// Text des Mittelpunkts in einem neuen, leeren Tab
+pub const ROOT_TEXT: &str = "Central topic";
+
+/// Steht im Knoten noch der Platzhalter? Dann wird er beim Anklicken gleich bearbeitet.
+pub fn is_placeholder(text: &str) -> bool {
+    let t = text.trim();
+    t.is_empty() || t == DEFAULT_TEXT || t == ROOT_TEXT
+}
 
 /// Zeilenhöhe beim automatischen Anordnen
 const ROW: f32 = 54.0;

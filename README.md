@@ -119,7 +119,8 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 |---|---|
 | **Mind map** | |
 | Tab · Enter | Add child · add sibling |
-| F2 · double-click | Rename |
+| Just type | Replace the selected node's text, like a spreadsheet cell |
+| F2 · double-click | Rename (the text is selected, so typing replaces it; placeholders open with a single click) |
 | Del | Delete node and its children |
 | Space | Collapse / expand |
 | ⌘Enter | Add checkbox / tick it off |
@@ -132,7 +133,7 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | ⌘E | Switch between Markdown and mind map |
 | F5 · F6 | Start presentation · start tour |
 | ⌘Z · ⇧⌘Z | Undo · redo |
-| ⌘T · ⌘W | New tab · close tab |
+| ⌘T · ⌘W | New tab · close tab (right-click a tab to duplicate it) |
 | Ctrl+Tab · ⌘1…9 | Switch tab |
 | ⌘S · ⇧⌘S · ⌘O | Save · save as · open |
 | **Presenting** | |

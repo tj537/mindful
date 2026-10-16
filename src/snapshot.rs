@@ -340,4 +340,61 @@ mod tests {
         }
         snap.save(&shapes, Path::new("target/snapshots/social-preview.png"));
     }
+
+    /// Klick auf den Platzhalter und Tippen ersetzt ihn; Lostippen auf einem
+    /// ausgewählten Knoten ersetzt dessen Text
+    #[test]
+    fn placeholders_can_be_typed_over() {
+        use crate::app::MindMapApp;
+        use eframe::egui::{Event, Key, Modifiers, PointerButton, Pos2};
+        let mut snap = Snapshot::new(1200.0, 800.0);
+        let mut app = MindMapApp::for_snapshot(&snap.ctx);
+        app.new_tab_for_snapshot();
+        let mut t = 0.0;
+        let mut step = |snap: &mut Snapshot, app: &mut MindMapApp, events: Vec<Event>| {
+            t += 0.1;
+            snap.frame_with_events(t, events, |ctx| app.show(ctx));
+        };
+        for _ in 0..4 {
+            step(&mut snap, &mut app, vec![]);
+        }
+        // Der Mittelpunkt steht nach dem Einpassen in der Mitte der Zeichenfläche
+        let center = Pos2::new(600.0, 430.0);
+        let click = |pressed| Event::PointerButton {
+            pos: center,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        step(
+            &mut snap,
+            &mut app,
+            vec![Event::PointerMoved(center), click(true)],
+        );
+        step(&mut snap, &mut app, vec![click(false)]);
+        step(&mut snap, &mut app, vec![]);
+        assert!(
+            app.root_for_test().1,
+            "clicking the placeholder starts editing"
+        );
+        step(&mut snap, &mut app, vec![Event::Text("Holiday".into())]);
+        let enter = |pressed| Event::Key {
+            key: Key::Enter,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        };
+        step(&mut snap, &mut app, vec![enter(true)]);
+        step(&mut snap, &mut app, vec![enter(false)]);
+        step(&mut snap, &mut app, vec![]);
+        assert_eq!(app.root_for_test(), ("Holiday".to_string(), false));
+
+        // Ausgewählt lassen und lostippen: ersetzt den Text, weitere Zeichen hängen sich an
+        step(&mut snap, &mut app, vec![Event::Text("M".into())]);
+        step(&mut snap, &mut app, vec![]);
+        step(&mut snap, &mut app, vec![Event::Text("ars".into())]);
+        step(&mut snap, &mut app, vec![]);
+        assert_eq!(app.root_for_test(), ("Mars".to_string(), true));
+    }
 }

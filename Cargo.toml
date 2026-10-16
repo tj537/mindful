@@ -1,6 +1,6 @@
 [package]
 name = "mindful"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "Mind maps, Markdown and presentations in one small desktop app"
 license = "MIT"

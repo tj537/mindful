@@ -51,9 +51,20 @@ impl Offscreen {
         time: f64,
         run_ui: impl FnMut(&egui::Context),
     ) -> Vec<ClippedPrimitive> {
+        self.frame_with_events(time, Vec::new(), run_ui)
+    }
+
+    /// Wie `frame`, aber mit Eingaben (Klicks, Tasten) – für Tests der Bedienung
+    pub fn frame_with_events(
+        &mut self,
+        time: f64,
+        events: Vec<egui::Event>,
+        run_ui: impl FnMut(&egui::Context),
+    ) -> Vec<ClippedPrimitive> {
         let mut input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, self.size)),
             time: Some(time),
+            events,
             ..Default::default()
         };
         input

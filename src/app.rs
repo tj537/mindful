@@ -2,7 +2,9 @@ use crate::document::ViewAnim;
 use crate::document::{Document, Mode};
 use crate::export::{self, ExportNode};
 use crate::images;
-use crate::model::{parse_outline, Clip, MindMap, SlideLayout, StoredImage, DEFAULT_TEXT};
+use crate::model::{
+    is_placeholder, parse_outline, Clip, MindMap, SlideLayout, StoredImage, DEFAULT_TEXT, ROOT_TEXT,
+};
 use crate::nodes::{
     label_job, node_size, node_style, paint_label, paint_node, paint_task, paint_thumb, thumb_size,
     with_thumb, NodeStyle, MIN_NODE, TASK_SPACE,
@@ -138,6 +140,8 @@ enum Command {
     SaveAs,
     Export(ExportKind),
     CloseTab(usize),
+    /// Tab samt Inhalt kopieren (Rechtsklick auf den Tab)
+    DuplicateTab(usize),
     SelectTab(usize),
     NextTab(i32),
     Undo,
@@ -173,6 +177,8 @@ enum Action {
     AddChild(u64),
     AddSibling(u64),
     Rename(u64),
+    /// Ausgewählter Knoten, und es wird einfach losgetippt: Text ersetzen
+    TypeInto(u64, String),
     Delete(u64),
     Toggle(u64),
     /// Checkbox anklicken: offen ↔ erledigt
@@ -697,6 +703,8 @@ pub struct MindMapApp {
     tab_switch: i32,
     /// Textfeld des Knotens soll im nächsten Frame den Fokus bekommen
     focus_pending: bool,
+    /// Beim Fokussieren: Cursor ans Ende (nach dem Lostippen) statt alles markieren
+    edit_cursor_end: bool,
     search: String,
     search_focus: bool,
     show_help: bool,
@@ -772,6 +780,7 @@ impl MindMapApp {
             tab_pressed: false,
             tab_switch: 0,
             focus_pending: false,
+            edit_cursor_end: false,
             search: String::new(),
             search_focus: false,
             show_help: false,
@@ -970,6 +979,17 @@ impl MindMapApp {
         self.new_tab();
     }
 
+    /// Für Tests: Text des Mittelpunkts und ob gerade bearbeitet wird
+    #[cfg(test)]
+    pub fn root_for_test(&self) -> (String, bool) {
+        let doc = self.doc();
+        let root = doc.map.root().and_then(|r| doc.map.get(r));
+        (
+            root.map(|n| n.text.clone()).unwrap_or_default(),
+            doc.editing.is_some(),
+        )
+    }
+
     fn doc(&self) -> &Document {
         &self.docs[self.active]
     }
@@ -985,9 +1005,27 @@ impl MindMapApp {
         if let Some(doc) = self.docs.get_mut(self.active) {
             doc.end_edit();
         }
-        self.docs
-            .push(Document::new(MindMap::new("Central topic"), None));
+        self.docs.push(Document::new(MindMap::new(ROOT_TEXT), None));
         self.active = self.docs.len() - 1;
+    }
+
+    /// Kopie eines Tabs direkt dahinter; ungespeichert, damit das Original unberührt bleibt
+    fn duplicate_tab(&mut self, i: usize) {
+        self.close_note();
+        let Some(source) = self.docs.get(i) else {
+            return;
+        };
+        let mut copy = Document::new(source.map.clone(), None);
+        copy.dirty = true;
+        let mode = if source.mode.is_presenting() {
+            Mode::Mindmap
+        } else {
+            source.mode
+        };
+        copy.set_mode(mode);
+        self.docs.insert(i + 1, copy);
+        self.active = i + 1;
+        self.status = format!("Duplicated “{}”", self.docs[i].title());
     }
 
     fn select_tab(&mut self, i: usize) {
@@ -1535,6 +1573,7 @@ impl MindMapApp {
             }
             Command::Export(kind) => self.export(ctx, kind),
             Command::CloseTab(i) => self.close_tab(i),
+            Command::DuplicateTab(i) => self.duplicate_tab(i),
             Command::SelectTab(i) => self.select_tab(i),
             Command::NextTab(step) => {
                 let n = self.docs.len() as i32;
@@ -1644,6 +1683,15 @@ impl MindMapApp {
             Action::Rename(id) => {
                 doc.begin_edit(id, true);
                 self.focus_pending = true;
+                self.edit_cursor_end = false;
+            }
+            Action::TypeInto(id, text) => {
+                doc.begin_edit(id, true);
+                if let Some(n) = doc.map.get_mut(id) {
+                    n.text = text;
+                }
+                self.focus_pending = true;
+                self.edit_cursor_end = true;
             }
             Action::Delete(id) => {
                 // Die Wurzel bleibt immer stehen
@@ -1858,6 +1906,7 @@ impl MindMapApp {
 
         let mut paste = None;
         let (mut copy, mut cut, mut v_released) = (false, false, false);
+        let mut typed = String::new();
         let now = ctx.input(|i| i.time);
         ctx.input(|i| {
             for event in &i.events {
@@ -1865,6 +1914,7 @@ impl MindMapApp {
                     egui::Event::Copy => copy = true,
                     egui::Event::Cut => cut = true,
                     egui::Event::Paste(text) => paste = Some(text.clone()),
+                    egui::Event::Text(text) => typed.push_str(text),
                     // Liegt nur ein Bild in der Zwischenablage, meldet egui kein „Paste“ –
                     // aber das Loslassen von V bei gedrückter ⌘-Taste kommt an
                     egui::Event::Key {
@@ -1914,6 +1964,11 @@ impl MindMapApp {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SC_TASK)) {
             return Some(Action::CycleTask(sel));
+        }
+        // Wie in einer Tabelle: auswählen und lostippen ersetzt den Text
+        // (ein einzelnes Leerzeichen bleibt „Einklappen“)
+        if !typed.trim().is_empty() {
+            return Some(Action::TypeInto(sel, typed));
         }
         if pressed(Key::Enter) {
             return Some(Action::AddSibling(sel));
@@ -2524,6 +2579,19 @@ impl MindMapApp {
                                         if label.middle_clicked() {
                                             out = Some(Command::CloseTab(i));
                                         }
+                                        label.context_menu(|ui| {
+                                            if ui
+                                                .button(format!("{}  Duplicate", icon::COPY))
+                                                .clicked()
+                                            {
+                                                out = Some(Command::DuplicateTab(i));
+                                                ui.close_menu();
+                                            }
+                                            if ui.button(format!("{}  Close", icon::X)).clicked() {
+                                                out = Some(Command::CloseTab(i));
+                                                ui.close_menu();
+                                            }
+                                        });
                                         if let Some(path) = &doc.path {
                                             label.on_hover_text(path.display().to_string());
                                         }
@@ -2709,7 +2777,8 @@ impl MindMapApp {
         let rows: Vec<(String, &str)> = vec![
             ("Tab".into(), "Add child (also while typing)"),
             ("Enter".into(), "Add sibling / finish typing"),
-            ("F2 · double-click".into(), "Rename"),
+            ("Type".into(), "Replace the selected node's text"),
+            ("F2 · double-click".into(), "Rename (text selected)"),
             ("Del".into(), "Delete node and its children"),
             ("Space".into(), "Collapse / expand"),
             (f(&SC_TASK), "Add checkbox / tick it off"),
@@ -2769,6 +2838,7 @@ impl MindMapApp {
         let theme = &THEMES[self.theme];
         let query = self.search.trim().to_lowercase();
         let focus_pending = &mut self.focus_pending;
+        let edit_cursor_end = &mut self.edit_cursor_end;
         let doc = &mut self.docs[self.active];
         let ctx = ui.ctx().clone();
         let (bg, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
@@ -2983,6 +3053,13 @@ impl MindMapApp {
             if resp.double_clicked() {
                 action = Some(Action::Rename(id));
             }
+            // Platzhalter („Central topic“, „New idea“) gleich zum Überschreiben öffnen
+            if resp.clicked()
+                && doc.editing != Some(id)
+                && doc.map.get(id).is_some_and(|n| is_placeholder(&n.text))
+            {
+                action = Some(Action::Rename(id));
+            }
             if resp.drag_started() {
                 doc.checkpoint();
                 doc.layout_anim = None;
@@ -3103,6 +3180,21 @@ impl MindMapApp {
                     );
                     if *focus_pending {
                         edit.request_focus();
+                        // Ganzen Text markieren, damit Tippen ihn ersetzt –
+                        // nach dem Lostippen dagegen den Cursor ans Ende setzen
+                        let len = node.text.chars().count();
+                        let range = if std::mem::take(edit_cursor_end) {
+                            egui::text::CCursorRange::one(egui::text::CCursor::new(len))
+                        } else {
+                            egui::text::CCursorRange::two(
+                                egui::text::CCursor::new(0),
+                                egui::text::CCursor::new(len),
+                            )
+                        };
+                        let mut state =
+                            egui::TextEdit::load_state(ui.ctx(), edit.id).unwrap_or_default();
+                        state.cursor.set_char_range(Some(range));
+                        state.store(ui.ctx(), edit.id);
                         *focus_pending = false;
                     } else if edit.lost_focus() {
                         // Enter, Esc oder Klick daneben beendet das Bearbeiten
