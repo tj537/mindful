@@ -45,8 +45,6 @@ pub struct PromptForm {
     pub language: String,
     pub description: String,
     pub scope: Scope,
-    /// Am Ende eine Checkliste anhängen lassen
-    pub checklist: bool,
     /// Die KI wählt für passende Abschnitte ein Folienlayout (Zeitstrahl, Kreislauf …)
     pub layouts: bool,
     /// Wann zuletzt kopiert wurde (für die kurze „Copied“-Rückmeldung)
@@ -61,7 +59,6 @@ impl Default for PromptForm {
             language: "English".into(),
             description: String::new(),
             scope: Scope::default(),
-            checklist: false,
             layouts: true,
             copied_at: None,
         }
@@ -95,7 +92,7 @@ Every "## " section also becomes a slide in Mindful's presentation mode. By defa
 - <!-- venn --> for 2 or 3 ideas that overlap. Give each idea as a short label of at most 3 words, then one more point saying what they have in common. No sub-points.
 - <!-- number --> for one striking figure. The first point must start with the number, e.g. "13.8 billion years ago: the Big Bang" or "$4.2 million in sales"; up to 3 sub-points or further points become small facts below it.
 - <!-- quote --> for a famous quotation. A single point holding the quote, with exactly one sub-point naming who said it. Only use real, well-known quotes and never invent who said them.
-Use a mix: about half of the sections should get a layout, each layout at most once or twice, and the rest stay plain bullet lists. Never put a layout tag on the "# " heading or on bullet points, and never add a layout to a checklist section.
+Use a mix: about half of the sections should get a layout, each layout at most once or twice, and the rest stay plain bullet lists. Never put a layout tag on the "# " heading or on bullet points.
 "###;
 
 /// Der fertige Prompt mit den Eingaben an den Platzhaltern
@@ -108,11 +105,6 @@ pub fn build_prompt(form: &PromptForm) -> String {
     let description = match form.description.trim() {
         "" => "No further details – use your own judgement about what matters most.",
         other => other,
-    };
-    let checklist = if form.checklist {
-        "- End with one more \"## \" section: a practical checklist whose points start with \"- [ ] \".\n"
-    } else {
-        ""
     };
     let (layout_guide, example_tag) = if form.layouts {
         (LAYOUT_GUIDE, " <!-- timeline -->")
@@ -134,7 +126,7 @@ Format rules:
 - Under each heading, the points as a bullet list starting with "- ". Indent sub-points by two spaces. Go at most three levels deep.
 - Keep every bullet point short (about 8 words at most) – they appear as boxes in a mind map and on slides.
 - If a bullet point needs an explanation, add a single line directly below it, indented two spaces further and without a dash. It becomes a note.
-{checklist}- No bold or italic text, links, tables, numbered lists, code blocks or emojis.
+- No bold or italic text, links, tables, numbered lists, code blocks or emojis.
 - Reply with the Markdown only: no introduction, no closing remarks, and do not wrap it in a code block.
 {layout_guide}
 Example of the format (the example is in English – write your answer in {language}):
@@ -370,12 +362,6 @@ pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction>
         "Use slide layouts",
         "The AI turns suitable sections into timelines, cycles, pyramids, comparisons and other diagrams",
     );
-    toggle(
-        ui,
-        &mut form.checklist,
-        "Add a checklist at the end",
-        "One more section whose points are checkboxes",
-    );
 
     ui.add_space(10.0);
     ui.separator();
@@ -482,7 +468,6 @@ mod tests {
             language: "Deutsch".into(),
             description: "For a school talk".into(),
             scope: Scope::Short,
-            checklist: true,
             layouts: true,
             copied_at: None,
         };
@@ -491,8 +476,6 @@ mod tests {
         assert!(prompt.contains("write everything in Deutsch"));
         assert!(prompt.contains("For a school talk"));
         assert!(prompt.contains("4 main branches"));
-        assert!(prompt.contains("- [ ] "));
-        assert!(!build_prompt(&PromptForm::default()).contains("- [ ] "));
         assert!(prompt.contains("<!-- cycle -->"));
         let plain = build_prompt(&PromptForm {
             layouts: false,

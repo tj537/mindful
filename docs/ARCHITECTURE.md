@@ -295,9 +295,9 @@ Undo: the first change of an editor session creates a snapshot, and everything a
 
 ## AI prompt (`ai_prompt.rs`)
 
-The *AI prompt* button next to the search field opens a popup (`egui::popup::popup_below_widget`) with a small form: topic, language (free text plus quick picks), description, scope, *Use slide layouts* (on by default) and an optional checklist. The form is stored with the app state, so it remembers the last entries.
+The *AI prompt* button next to the search field opens a popup (`egui::popup::popup_below_widget`) with a small form: topic, language (free text plus quick picks), description, scope and *Use slide layouts* (on by default). The form is stored with the app state, so it remembers the last entries.
 
-`build_prompt()` fills these into a fixed English prompt that explains Mindful's Markdown format to the AI – `#` central topic with an intro paragraph, `##` branches with a one-sentence note, short bullets, optional notes and `- [ ]` checkboxes, Markdown only – and ends with a short example. With *Use slide layouts*, `LAYOUT_GUIDE` is added: it explains each `<!-- layout -->` tag, what content it suits and how many points and sub-points it expects, so the AI picks fitting diagrams itself (about half of the sections, the rest plain lists); the example then carries a `timeline` tag. A test makes sure that example is itself valid Mindful Markdown.
+`build_prompt()` fills these into a fixed English prompt that explains Mindful's Markdown format to the AI – `#` central topic with an intro paragraph, `##` branches with a one-sentence note, short bullets, optional notes, Markdown only – and ends with a short example. With *Use slide layouts*, `LAYOUT_GUIDE` is added: it explains each `<!-- layout -->` tag, what content it suits and how many points and sub-points it expects, so the AI picks fitting diagrams itself (about half of the sections, the rest plain lists); the example then carries a `timeline` tag. A test makes sure that example is itself valid Mindful Markdown.
 
 *Copy prompt* puts the prompt on the clipboard. *New Markdown tab* opens an empty tab in the Markdown editor and focuses it, ready for pasting the answer; from there the usual Markdown sync turns it into a mind map.
 
