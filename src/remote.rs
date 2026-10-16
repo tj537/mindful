@@ -300,7 +300,9 @@ const PAGE: &str = r##"<!doctype html>
   #next { color:var(--weak); font-size:15px; }
   #notes { flex:1; overflow:auto; background:var(--card); border-radius:14px; padding:14px 16px; font-size:17px; line-height:1.45; }
   #notes h4 { margin:10px 0 2px; font-size:14px; color:var(--accent); }
-  #notes p { margin:0 0 8px; }
+  /* Line breaks and paragraphs of the speaker notes stay as written */
+  #notes p { margin:0 0 8px; white-space:pre-line; }
+  #notesLabel { color:var(--weak); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:-6px; }
   .empty { color:var(--weak); }
   .buttons { display:grid; grid-template-columns:1fr 2fr; gap:12px; height:30vh; min-height:150px; }
   button { border:0; border-radius:18px; font-size:22px; font-weight:600; color:#fff; }
@@ -315,7 +317,8 @@ const PAGE: &str = r##"<!doctype html>
   <header><div id="timer">00:00</div><div id="pos"></div></header>
   <div id="title">Connecting …</div>
   <div id="next"></div>
-  <div id="notes"><p class="empty">Notes appear here.</p></div>
+  <div id="notesLabel">Speaker notes</div>
+  <div id="notes"><p class="empty">Your speaker notes appear here.</p></div>
   <div class="buttons">
     <button id="prev">‹ Back</button>
     <button id="nextBtn">Next ›</button>
@@ -394,6 +397,7 @@ mod tests {
             title: "Stars".into(),
             total: 3,
             slide: 1,
+            notes: vec![(String::new(), "Line one\n\nLine two".into())],
             ..Default::default()
         });
         let base = remote
@@ -415,10 +419,13 @@ mod tests {
         let reply = get(&format!("{local}/next?t={}", remote.token()));
         assert!(reply.starts_with("HTTP/1.1 200"));
         assert!(reply.contains("\"title\":\"Stars\""));
+        // Speaker notes keep their paragraphs on the way to the phone
+        assert!(reply.contains("Line one\\n\\nLine two"));
         assert_eq!(remote.take_commands(), vec![Command::Next]);
         assert!(remote.connected());
         let page = get(&format!("{local}/?t={}", remote.token()));
         assert!(page.contains("Mindful remote"));
+        assert!(page.contains("white-space:pre-line"));
         assert!(remote.qr().is_some());
 
         // After stopping, the port no longer accepts requests
