@@ -59,6 +59,16 @@ pub enum Backdrop {
     Bokeh,
 }
 
+/// How the camera tour looks
+#[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize, Debug)]
+pub enum TourStyle {
+    /// Through the mind map itself: nodes, connections, spotlight
+    #[default]
+    MindMap,
+    /// Free-floating cards in space, the camera flies from station to station
+    Free,
+}
+
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Effects {
@@ -95,6 +105,8 @@ pub struct Effects {
     pub depth_of_field: bool,
     /// Tour: sparks circle the current branch
     pub orbit: bool,
+    /// Tour: through the mind map or as free-floating cards
+    pub tour_style: TourStyle,
     /// Version of the settings; missing in older saved data (= 0)
     #[serde(default)]
     pub version: u32,
@@ -123,6 +135,7 @@ impl Default for Effects {
             warp: false,
             depth_of_field: false,
             orbit: false,
+            tour_style: TourStyle::MindMap,
             version: EFFECTS_VERSION,
         }
     }
@@ -199,14 +212,33 @@ pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: boo
             if tour {
                 ui.separator();
                 ui.strong("Tour");
-                ui.checkbox(&mut fx.step_levels, "Reveal levels one by one (Space / →)");
+                ui.horizontal(|ui| {
+                    for (value, label, tip) in [
+                        (
+                            TourStyle::MindMap,
+                            "Mind map",
+                            "Fly through the mind map itself: nodes, connections and a spotlight",
+                        ),
+                        (
+                            TourStyle::Free,
+                            "Free flight",
+                            "Every branch is a card floating in space, its points float around it – the camera flies from one to the next",
+                        ),
+                    ] {
+                        ui.selectable_value(&mut fx.tour_style, value, label)
+                            .on_hover_text(tip);
+                    }
+                });
+                if fx.tour_style == TourStyle::MindMap {
+                    ui.checkbox(&mut fx.step_levels, "Reveal levels one by one (Space / →)");
+                    ui.checkbox(&mut fx.pulses, "Light pulses along connections");
+                    ui.checkbox(&mut fx.orbit, "Sparks orbiting the current branch");
+                    ui.checkbox(&mut fx.depth_of_field, "Depth of field");
+                    ui.checkbox(&mut fx.bounce, "Camera bounce on arrival");
+                }
                 ui.checkbox(&mut fx.ripple, "Ripple on arrival");
                 ui.checkbox(&mut fx.glow, "Glow around the current branch");
-                ui.checkbox(&mut fx.pulses, "Light pulses along connections");
-                ui.checkbox(&mut fx.orbit, "Sparks orbiting the current branch");
-                ui.checkbox(&mut fx.depth_of_field, "Depth of field");
                 ui.checkbox(&mut fx.warp, "Warp streaks while flying");
-                ui.checkbox(&mut fx.bounce, "Camera bounce on arrival");
                 ui.checkbox(&mut fx.drift, "Slow camera drift");
             }
             ui.separator();
@@ -937,7 +969,13 @@ impl Slide {
 
 /// Blurred shadow under `rect`: offset downwards by `drop`,
 /// with a soft edge of width `blur`
-fn soft_shadow(rect: Rect, radius: f32, drop: f32, blur: f32, color: Color32) -> egui::Shape {
+pub(crate) fn soft_shadow(
+    rect: Rect,
+    radius: f32,
+    drop: f32,
+    blur: f32,
+    color: Color32,
+) -> egui::Shape {
     let shadow = egui::epaint::Shadow {
         offset: [0, drop.round().clamp(0.0, 127.0) as i8],
         blur: blur.round().clamp(0.0, 255.0) as u8,
@@ -1617,7 +1655,12 @@ pub fn render_slide(
 }
 
 /// Slide title; an icon at the start (Phosphor glyph) in the slide's colour
-fn title_job(text: &str, size: f32, ink: Color32, accent: Color32) -> egui::text::LayoutJob {
+pub(crate) fn title_job(
+    text: &str,
+    size: f32,
+    ink: Color32,
+    accent: Color32,
+) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     let format = |color| egui::TextFormat::simple(FontId::proportional(size), color);
     let mut chars = text.chars();

@@ -6,6 +6,7 @@ mod app;
 mod diagrams;
 mod document;
 mod export;
+mod flight;
 mod icons;
 mod images;
 mod logo;

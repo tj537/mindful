@@ -56,7 +56,7 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 | **Markdown** | Write fast: `#` central topic, `##` main branches, `-` points, plain lines as descriptions, with a live preview |
 | **Presentation** | A title slide plus one slide per main branch; bullet points appear one by one |
 | **Mind map** | Collect and arrange ideas: drag, color, collapse, auto layout |
-| **Tour** | Present on the mind map itself: the camera flies from branch to branch and reveals what's below |
+| **Tour** | Present on the mind map itself: the camera flies from branch to branch and reveals what's below – or switch to *Free flight*: every branch becomes a card floating in space, its points float around it, and the camera flies through space from one to the next |
 
 **Slides that look like slides**
 - Twelve slide layouts built from your bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (it counts up), quote – and **bar, pie and line charts** from points like `Solar: 42 %`, animated as they build up. Pick one with a right-click on the slide.
@@ -260,6 +260,7 @@ src/
 ├── present.rs         presentation mode
 ├── diagrams.rs        slide layouts
 ├── tour.rs            camera tour
+├── flight.rs          tour style "Free flight": cards floating in space
 ├── images.rs          inserting, scaling and drawing pictures
 ├── icons.rs           icons on nodes
 ├── search.rs          search: matches in text, descriptions and speaker notes

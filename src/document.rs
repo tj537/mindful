@@ -61,6 +61,10 @@ pub struct TourState {
     pub level: usize,
     /// Camera in the last frame (for warp streaks)
     pub last_cam: Option<(Camera, f64)>,
+    /// Free flight: camera position in space at the start of the current flight
+    pub from3: [f32; 3],
+    /// Free flight: camera in the last frame (for warp streaks)
+    pub last_cam3: Option<([f32; 3], f64)>,
 }
 
 fn one() -> f32 {

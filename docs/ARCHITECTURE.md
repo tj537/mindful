@@ -430,6 +430,23 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 
 **Subtitle:** the note of the current stop (central topic at the start, the branch afterwards) fades in as a card at the bottom once the camera has arrived.
 
+**Shared parts:** the keys (`navigate`), the subtitle (`subtitle`), the stop label (`stop_label`), the corner buttons, quick-jump strip, vignette, confetti and laser pointer (`controls`) and ticking off (`tick`) are functions of their own, so the second tour style below uses exactly the same controls.
+
+### Free flight (`flight.rs`)
+
+*Effects → Tour → Free flight* (`Effects::tour_style`, `TourStyle::Free`; `tour::show` hands over to `flight::show`) leaves the mind map behind: every stop becomes a card floating in space, and the camera flies through it with a real perspective.
+
+- **Space:** `Vec3` with x to the right, y down and z into the screen. A point at depth `dz` in front of the camera appears at `area.center() + (xy − cam.xy) · focal / dz` with `focal` = window height, so every card scales with its distance. Cards closer than `NEAR` are not drawn.
+- **Stations** (`build_world`): the title card, then one per main branch, on a spiral into the depth (`station_center`: x and y on two sine waves, `STEP_Z` = 2600 apart). The sub-points float as cards of their own in two loose columns left and right of their branch card, each with a pseudo-random offset (`hash`), a depth between −170 and +250 (parallax while flying) and a phase for the gentle bobbing. Deeper levels are listed inside these cards (up to five lines, with check marks for tasks); a sub-point with a checkbox can be ticked off directly.
+- **Cards** (`layout_card`, `paint_card`): laid out at the current scale – picture, title with icon (`present::title_job`), description, sub-point list – with a soft shadow, a thin border and a coloured bar on top (station) or on the left (sub-point). Layout at scale 1 gives the size in world units, used to place everything.
+- **Camera** (`station_camera`): in front of the station at the distance where the whole group fills the usable area. `fly3` glides there with ease-in-out and pulls back and up in an arc on long ways (up to 5200 units), so stations in between rush past. A new flight starts where the camera is (`TourState::from3`); `FLIGHT` is 1.8 s. With *drift* the camera creeps closer and wanders a little after arriving. If the tour switches to this style mid-way, the camera starts at the current stop.
+- **Haze:** cards fade out just in front of the camera (we fly through them) and fade into the dark in the distance (`fog`); stops other than the current one are dimmed to 42 %. A faint dotted trail shows the route.
+- **Sub-points** appear with the same timing as in the mind map tour (`tour::growth`): they fly out of their card with a slight overshoot.
+- **Finale** (`finale`): the title and all branch cards fly from their stations – most of them from behind the camera – into a grid in front of it, staggered one after another. Each row is as tall as its tallest card; pictures are scaled so a card is at most 420 units tall.
+- **Background:** the animated backdrop with warp streaks from the camera's speed (`TourState::last_cam3`) – always a little, stronger with *Warp streaks*.
+
+The description is on each card, so there is no subtitle. *Ripple*, *Glow*, *Warp streaks* and *Slow camera drift* apply to both styles; the effects that only make sense on a mind map (levels one by one, pulses, sparks, depth of field, bounce) are only offered for the mind map style.
+
 ---
 
 ## Search (`search.rs`)
@@ -640,6 +657,8 @@ cargo test
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
 | `render_slides` (ignored, run on demand) | renders every slide of both examples, the presenter view and a tour overview to PNG for a visual check |
 | `speaker_notes_round_trip_apart_from_the_description` | `<!-- notes: … -->` (one line and a block, under headings and bullets) is read into `speaker_notes`, kept apart from the description, survives editing and is written back exactly |
+| `free_flight_arcs_and_lands_exactly` | the free-flight camera starts and lands exactly, pulls back and rises half way; stations lie deeper and deeper |
+| `every_branch_becomes_a_station_with_floating_sub_points` | the universe example gives the title plus 16 stations, the sub-points float beside their card, and the finale grid has a place in front of the camera for every card |
 | `sounds_are_short_quiet_and_end_softly` | every sound is 0.05–0.6 s long, peaks between 0.02 and 0.5, ends without a click; the whoosh moves from left to right; with sound off nothing starts |
 | `matches_ignore_case_and_find_notes` | search ignores case, keeps byte positions after umlauts, finds text, description and speaker notes in outline order and marks only the match in a `LayoutJob` |
 | `icons_are_read_from_shortcodes` | `:rocket: Text` becomes an icon, unknown names stay text |

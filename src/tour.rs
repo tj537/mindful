@@ -6,6 +6,9 @@
 //! – optionally level by level on a key press. The stop's note
 //! appears as a subtitle. Optional extras: glow, a wave on arrival,
 //! light pulses on the connections and a slight spring of the camera.
+//!
+//! The other tour style, *Free flight*, lives in `flight.rs`; it shares the stops,
+//! the keyboard handling, the subtitle and the controls from here.
 
 use crate::document::{Camera, Document, TourState};
 use crate::model::MindMap;
@@ -15,7 +18,7 @@ use crate::nodes::{
 use crate::present::{
     backdrop, color_of, confetti_burst, confetti_draw, corner_buttons, ease_in_out_cubic,
     ease_out_back, ease_out_cubic, filmstrip, laser, read_nav, strip_keys, vignette, Backdrop,
-    Effects, Event, StripItem, StripKey,
+    Effects, Event, Nav, StripItem, StripKey, TourStyle,
 };
 use crate::theme::Theme;
 use eframe::egui::{
@@ -24,7 +27,7 @@ use eframe::egui::{
 use std::collections::{HashMap, HashSet};
 
 /// Duration of a camera flight in seconds
-const FLIGHT: f64 = 1.1;
+pub(crate) const FLIGHT: f64 = 1.1;
 /// When (after the flight starts) the sub-points start to grow
 const GROW_DELAY: f64 = 0.7;
 /// When revealing level by level it starts sooner
@@ -41,13 +44,13 @@ const BOTTOM_SPACE: f32 = 150.0;
 const RIPPLE: f32 = 1.4;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-enum Stop {
+pub(crate) enum Stop {
     Overview,
     Branch(u64),
     Finale,
 }
 
-fn stops(map: &MindMap) -> Vec<Stop> {
+pub(crate) fn stops(map: &MindMap) -> Vec<Stop> {
     let Some(root) = map.root() else {
         return vec![Stop::Overview];
     };
@@ -78,7 +81,14 @@ fn max_level(map: &MindMap, branch: u64) -> usize {
 
 /// How visible a node is at the current stop (0 = not at all, 1 = fully).
 /// `stepwise`: sub-points are revealed level by level (`tour.level`).
-fn growth(map: &MindMap, all: &[Stop], tour: &TourState, id: u64, now: f64, stepwise: bool) -> f32 {
+pub(crate) fn growth(
+    map: &MindMap,
+    all: &[Stop],
+    tour: &TourState,
+    id: u64,
+    now: f64,
+    stepwise: bool,
+) -> f32 {
     if map.depth(id) <= 1 {
         return 1.0;
     }
@@ -247,7 +257,7 @@ fn brightness(map: &MindMap, stop: Stop, id: u64, cache: &mut HashMap<u64, HashS
     }
 }
 
-fn title_of(map: &MindMap, stop: Stop) -> String {
+pub(crate) fn title_of(map: &MindMap, stop: Stop) -> String {
     match stop {
         Stop::Overview => map
             .root()
@@ -286,6 +296,9 @@ pub fn show(
     theme: &Theme,
     fx: &mut Effects,
 ) -> Option<Event> {
+    if fx.tour_style == TourStyle::Free {
+        return crate::flight::show(ui, doc, theme, fx);
+    }
     let ctx = ui.ctx().clone();
     let area = ui.max_rect();
     let now = ui.input(|i| i.time);
@@ -312,85 +325,9 @@ pub fn show(
 
     let to = target(map, all[doc.tour.stop], level_opt(&doc.tour), &sizes, area);
     let cam = camera(&doc.tour, to, now, area, fx);
-    // Level a stop starts with on arrival
-    let entry_level = |stop: usize, backwards: bool| match all[stop] {
-        Stop::Branch(b) if stepwise && backwards => max_level(map, b),
-        _ => 0,
-    };
-
     let nav = read_nav(ui);
-    let mut event = None;
-
-    // Flying is keyboard only – clicks are for ticking off
-    let current = doc.tour.stop;
-    let branch_here = match all[current] {
-        Stop::Branch(b) => Some(b),
-        _ => None,
-    };
-    if doc.strip {
-        match strip_keys(&nav, &mut doc.strip_cursor, last) {
-            StripKey::Jump(i) => {
-                if i != current {
-                    fly_to(&mut doc.tour, i, 0, i < current, cam, now);
-                }
-                doc.strip = false;
-            }
-            StripKey::Close => doc.strip = false,
-            StripKey::Stay => {}
-        }
-    } else {
-        if nav.next() {
-            match branch_here {
-                // First reveal the next level, then fly on
-                Some(b) if stepwise && doc.tour.level < max_level(map, b) => {
-                    let level = doc.tour.level + 1;
-                    fly_to(&mut doc.tour, current, level, false, cam, now);
-                }
-                _ if current < last => {
-                    fly_to(
-                        &mut doc.tour,
-                        current + 1,
-                        entry_level(current + 1, false),
-                        false,
-                        cam,
-                        now,
-                    );
-                }
-                _ => {}
-            }
-        }
-        if nav.left {
-            if stepwise && branch_here.is_some() && doc.tour.level > 0 {
-                let level = doc.tour.level - 1;
-                fly_to(&mut doc.tour, current, level, true, cam, now);
-            } else if current > 0 {
-                fly_to(
-                    &mut doc.tour,
-                    current - 1,
-                    entry_level(current - 1, true),
-                    true,
-                    cam,
-                    now,
-                );
-            }
-        }
-        if nav.home && current != 0 {
-            fly_to(&mut doc.tour, 0, 0, true, cam, now);
-        }
-        if nav.end && current != last {
-            fly_to(&mut doc.tour, last, 0, false, cam, now);
-        }
-        if nav.escape {
-            event = Some(Event::Exit);
-        }
-        if nav.strip {
-            doc.strip = true;
-            doc.strip_cursor = doc.tour.stop;
-        }
-    }
-    if nav.fullscreen {
-        event = Some(Event::ToggleFullscreen);
-    }
+    let mut event = navigate(doc, &all, &nav, cam, now, stepwise);
+    let map = &doc.map;
 
     // The camera may just have changed because of a key press
     let t = ((now - doc.tour.started) / FLIGHT).clamp(0.0, 1.0) as f32;
@@ -640,9 +577,41 @@ pub fn show(
         }
     }
 
-    // Subtitle with the note, fades in after arrival
-    let note = note_of(map, all[doc.tour.stop]);
-    let fade = (((now - doc.tour.started) - FLIGHT * 0.6) / 0.4).clamp(0.0, 1.0) as f32;
+    subtitle(
+        &painter,
+        area,
+        theme,
+        map,
+        all[doc.tour.stop],
+        doc.tour.started,
+        now,
+        FLIGHT,
+    );
+    stop_label(&painter, area, theme, map, &all, &doc.tour, stepwise);
+    if let Some(e) = controls(ui, area, doc, theme, fx, &all, &nav, cam, now) {
+        event = Some(e);
+    }
+    if let Some((id, pos)) = ticked {
+        tick(&ctx, doc, theme, fx, id, pos, now);
+    }
+
+    event
+}
+
+/// Subtitle with the note of the stop, fades in towards the end of the flight
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn subtitle(
+    painter: &egui::Painter,
+    area: Rect,
+    theme: &Theme,
+    map: &MindMap,
+    stop: Stop,
+    started: f64,
+    now: f64,
+    flight: f64,
+) {
+    let note = note_of(map, stop);
+    let fade = (((now - started) - flight * 0.6) / 0.4).clamp(0.0, 1.0) as f32;
     if !note.is_empty() && fade > 0.0 {
         let width = (area.width() - 160.0).min(900.0);
         let mut p = painter.clone();
@@ -661,7 +630,7 @@ pub fn show(
             Color32::from_black_alpha(60),
         );
         p.rect_filled(card, 14.0, theme.card);
-        let accent = match all[doc.tour.stop] {
+        let accent = match stop {
             Stop::Branch(b) => color_of(map, theme, b),
             _ => theme.root,
         };
@@ -675,27 +644,56 @@ pub fn show(
         );
         p.galley(card.min + Vec2::new(24.0, 14.0), galley, theme.text);
     }
+}
 
-    // Stop at the top left (with the level when revealing)
-    let mut label = match all[doc.tour.stop] {
+/// Which stop we are at, top left (with the level when revealing)
+pub(crate) fn stop_label(
+    painter: &egui::Painter,
+    area: Rect,
+    theme: &Theme,
+    map: &MindMap,
+    all: &[Stop],
+    tour: &TourState,
+    stepwise: bool,
+) {
+    let last = all.len() - 1;
+    let mut label = match all[tour.stop] {
         Stop::Overview => "Start".to_string(),
         Stop::Finale => "End".to_string(),
-        Stop::Branch(_) => format!("{} / {}", doc.tour.stop, last - 1),
+        Stop::Branch(_) => format!("{} / {}", tour.stop, last - 1),
     };
-    if let (true, Stop::Branch(b)) = (stepwise, all[doc.tour.stop]) {
+    if let (true, Stop::Branch(b)) = (stepwise, all[tour.stop]) {
         let max = max_level(map, b);
         if max > 0 {
-            label.push_str(&format!("   ·   level {} of {max}", doc.tour.level));
+            label.push_str(&format!("   ·   level {} of {max}", tour.level));
         }
     }
     painter.text(
         area.left_top() + Vec2::new(24.0, 22.0),
         Align2::LEFT_TOP,
-        format!("{label}   ·   {}", title_of(map, all[doc.tour.stop])),
+        format!("{label}   ·   {}", title_of(map, all[tour.stop])),
         FontId::proportional(15.0),
         theme.text.gamma_multiply(0.7),
     );
+}
 
+/// Vignette, the buttons at the top right, the quick-jump strip, confetti and laser pointer
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn controls(
+    ui: &mut egui::Ui,
+    area: Rect,
+    doc: &mut Document,
+    theme: &Theme,
+    fx: &mut Effects,
+    all: &[Stop],
+    nav: &Nav,
+    cam: Camera,
+    now: f64,
+) -> Option<Event> {
+    let ctx = ui.ctx().clone();
+    let painter = ui.painter().clone();
+    let last = all.len() - 1;
+    let mut event = None;
     if fx.vignette {
         vignette(&painter, area);
     }
@@ -711,6 +709,7 @@ pub fn show(
     }
 
     // Stops as quick jump, confetti and laser pointer on top
+    let map = &doc.map;
     let items: Vec<StripItem> = all
         .iter()
         .enumerate()
@@ -745,15 +744,119 @@ pub fn show(
     }
     confetti_draw(&ctx, now);
     laser(ui, nav.laser, now);
+    event
+}
 
-    if let Some((id, pos)) = ticked {
-        doc.checkpoint();
-        if let Some(n) = doc.map.get_mut(id) {
-            n.task = n.task.map(|done| !done);
-            if n.task == Some(true) && fx.confetti {
-                confetti_burst(&ctx, pos, &theme.branches, now);
+/// Tick a checkbox clicked during the tour, with confetti if wanted
+pub(crate) fn tick(
+    ctx: &egui::Context,
+    doc: &mut Document,
+    theme: &Theme,
+    fx: &Effects,
+    id: u64,
+    pos: Pos2,
+    now: f64,
+) {
+    doc.checkpoint();
+    if let Some(n) = doc.map.get_mut(id) {
+        n.task = n.task.map(|done| !done);
+        if n.task == Some(true) {
+            crate::sound::play(crate::sound::Sound::Done);
+            if fx.confetti {
+                confetti_burst(ctx, pos, &theme.branches, now);
             }
         }
+    }
+}
+
+/// Keys during the tour (both styles): next/back (level by level when revealing),
+/// first/last, quick jump, end and full screen
+pub(crate) fn navigate(
+    doc: &mut Document,
+    all: &[Stop],
+    nav: &Nav,
+    cam: Camera,
+    now: f64,
+    stepwise: bool,
+) -> Option<Event> {
+    let map = &doc.map;
+    let last = all.len() - 1;
+    let mut event = None;
+    // Level a stop starts with on arrival
+    let entry_level = |stop: usize, backwards: bool| match all[stop] {
+        Stop::Branch(b) if stepwise && backwards => max_level(map, b),
+        _ => 0,
+    };
+
+    // Flying is keyboard only – clicks are for ticking off
+    let current = doc.tour.stop;
+    let branch_here = match all[current] {
+        Stop::Branch(b) => Some(b),
+        _ => None,
+    };
+    if doc.strip {
+        match strip_keys(nav, &mut doc.strip_cursor, last) {
+            StripKey::Jump(i) => {
+                if i != current {
+                    fly_to(&mut doc.tour, i, 0, i < current, cam, now);
+                }
+                doc.strip = false;
+            }
+            StripKey::Close => doc.strip = false,
+            StripKey::Stay => {}
+        }
+    } else {
+        if nav.next() {
+            match branch_here {
+                // First reveal the next level, then fly on
+                Some(b) if stepwise && doc.tour.level < max_level(map, b) => {
+                    let level = doc.tour.level + 1;
+                    fly_to(&mut doc.tour, current, level, false, cam, now);
+                }
+                _ if current < last => {
+                    fly_to(
+                        &mut doc.tour,
+                        current + 1,
+                        entry_level(current + 1, false),
+                        false,
+                        cam,
+                        now,
+                    );
+                }
+                _ => {}
+            }
+        }
+        if nav.left {
+            if stepwise && branch_here.is_some() && doc.tour.level > 0 {
+                let level = doc.tour.level - 1;
+                fly_to(&mut doc.tour, current, level, true, cam, now);
+            } else if current > 0 {
+                fly_to(
+                    &mut doc.tour,
+                    current - 1,
+                    entry_level(current - 1, true),
+                    true,
+                    cam,
+                    now,
+                );
+            }
+        }
+        if nav.home && current != 0 {
+            fly_to(&mut doc.tour, 0, 0, true, cam, now);
+        }
+        if nav.end && current != last {
+            fly_to(&mut doc.tour, last, 0, false, cam, now);
+        }
+        if nav.escape {
+            event = Some(Event::Exit);
+        }
+        if nav.strip {
+            doc.strip = true;
+            doc.strip_cursor = doc.tour.stop;
+        }
+    }
+    if nav.fullscreen {
+        event = Some(Event::ToggleFullscreen);
     }
 
     event

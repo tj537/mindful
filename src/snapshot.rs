@@ -150,6 +150,89 @@ mod tests {
             &shapes,
             Path::new(&format!("target/snapshots/{name}_tour.png")),
         );
+
+        // Free flight: title, a station, a jump over several stations, pictures, the grid
+        if name == "universe" {
+            use eframe::egui::{Event, Key, Modifiers};
+            let key = |key: Key| {
+                [true, false].map(|pressed| Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers: Modifiers::NONE,
+                })
+            };
+            fx.tour_style = crate::present::TourStyle::Free;
+            fx.glow = true;
+            let flight = |snap: &mut Snapshot,
+                          doc: &mut crate::document::Document,
+                          fx: &mut crate::present::Effects,
+                          frames: &[(f64, Vec<Event>)],
+                          file: &str| {
+                let mut shapes = Vec::new();
+                for (t, events) in frames {
+                    shapes = snap.frame_with_events(*t, events.clone(), |ctx| {
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::default().fill(theme.background))
+                            .show(ctx, |ui| crate::tour::show(ui, doc, theme, fx));
+                    });
+                }
+                snap.save(&shapes, Path::new(&format!("target/snapshots/{file}.png")));
+            };
+            let settle = |t: f64| vec![(t, vec![]), (t + 4.0, vec![]), (t + 6.0, vec![])];
+            doc.tour = Default::default();
+            doc.tour.needs_init = true;
+            flight(
+                &mut snap,
+                &mut doc,
+                &mut fx,
+                &settle(2000.0),
+                "flight_title",
+            );
+            let mut frames = vec![(2010.0, key(Key::ArrowRight).to_vec())];
+            frames.extend(settle(2011.0));
+            flight(&mut snap, &mut doc, &mut fx, &frames, "flight_station");
+            // G opens the quick jump, → → → and Enter jump three stations ahead –
+            // one key per frame, as when typing
+            let mut frames: Vec<(f64, Vec<Event>)> = vec![(2030.0, key(Key::G).to_vec())];
+            for i in 1..=3 {
+                frames.push((2030.0 + i as f64 * 0.1, key(Key::ArrowRight).to_vec()));
+            }
+            frames.push((2030.4, key(Key::Enter).to_vec()));
+            frames.push((2031.0, vec![]));
+            flight(&mut snap, &mut doc, &mut fx, &frames, "flight_jump");
+            flight(
+                &mut snap,
+                &mut doc,
+                &mut fx,
+                &settle(2032.0),
+                "flight_station_4",
+            );
+            doc.tour.stop = 2;
+            doc.tour.needs_init = true;
+            flight(
+                &mut snap,
+                &mut doc,
+                &mut fx,
+                &settle(2040.0),
+                "flight_pictures",
+            );
+            flight(
+                &mut snap,
+                &mut doc,
+                &mut fx,
+                &[(2050.0, key(Key::End).to_vec()), (2050.9, vec![])],
+                "flight_finale_on_the_way",
+            );
+            flight(
+                &mut snap,
+                &mut doc,
+                &mut fx,
+                &settle(2052.0),
+                "flight_finale",
+            );
+        }
     }
 
     /// Render the whole window in all views and a few colour schemes
