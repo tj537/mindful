@@ -149,6 +149,9 @@ pub struct Document {
     /// Start der Stoppuhr in der Referentenansicht
     #[serde(skip)]
     pub presenter_start: Option<f64>,
+    /// QR-Code für die Handy-Fernbedienung wird angezeigt
+    #[serde(skip)]
+    pub remote_open: bool,
 }
 
 impl Document {
@@ -183,6 +186,7 @@ impl Document {
             tour: TourState::default(),
             presenter: false,
             presenter_start: None,
+            remote_open: false,
         }
     }
 

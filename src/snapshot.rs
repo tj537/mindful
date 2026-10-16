@@ -96,6 +96,18 @@ mod tests {
                 });
             }
             window.save(&shapes, Path::new("target/snapshots/presenter_window.png"));
+            // QR-Code für die Handy-Fernbedienung
+            doc.presenter = false;
+            doc.remote_open = true;
+            for t in [2020.0, 2021.0, 2022.0] {
+                shapes = wide.frame(t, |ctx| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::default().fill(theme.background))
+                        .show(ctx, |ui| present::show(ui, &mut doc, theme, true, &mut fx));
+                });
+            }
+            wide.save(&shapes, Path::new("target/snapshots/remote.png"));
+            doc.remote_open = false;
             doc.presenter = false;
         }
 

@@ -228,6 +228,7 @@ fn shortcuts_list(ui: &mut egui::Ui, tour: bool) {
                 ("G", "Quick jump (← → Enter)"),
                 ("L", "Laser pointer"),
                 ("P", "Presenter view (slides only)"),
+                ("R", "Phone as remote control (slides only)"),
                 ("F", "Full screen"),
                 ("Esc", "End"),
             ] {
@@ -290,6 +291,8 @@ pub struct Nav {
     pub laser: bool,
     /// P: Referentenansicht ein/aus
     pub presenter: bool,
+    /// R: QR-Code für die Handy-Fernbedienung
+    pub remote: bool,
 }
 
 pub fn read_nav(ui: &mut egui::Ui) -> Nav {
@@ -307,6 +310,7 @@ pub fn read_nav(ui: &mut egui::Ui) -> Nav {
             strip: any(&[Key::G]),
             laser: any(&[Key::L]),
             presenter: any(&[Key::P]),
+            remote: any(&[Key::R]),
         }
     })
 }
@@ -330,6 +334,7 @@ impl Nav {
             strip: self.strip || o.strip,
             laser: self.laser || o.laser,
             presenter: self.presenter || o.presenter,
+            remote: self.remote || o.remote,
         }
     }
 }
@@ -372,12 +377,12 @@ pub fn corner_buttons(
     exit_tip: &str,
     fx: &mut Effects,
     tour: bool,
-) -> (Option<Event>, bool, bool) {
+) -> Corner {
     let mut corner = ui.new_child(
         UiBuilder::new()
             .max_rect(Rect::from_min_size(
-                area.right_top() + Vec2::new(-250.0, 10.0),
-                Vec2::new(240.0, 36.0),
+                area.right_top() + Vec2::new(-300.0, 10.0),
+                Vec2::new(290.0, 36.0),
             ))
             .layout(Layout::right_to_left(Align::Center)),
     );
@@ -406,6 +411,11 @@ pub fn corner_buttons(
             .button(big(icon::PROJECTOR_SCREEN))
             .on_hover_text("Presenter view: notes, next slide and timer in a second window (P)")
             .clicked();
+    let remote = !tour
+        && corner
+            .button(big(icon::DEVICE_MOBILE))
+            .on_hover_text("Use your phone as a remote control (R)")
+            .clicked();
     corner
         .menu_button(big(icon::GEAR), |ui| {
             effects_menu(ui, fx, !tour, tour);
@@ -414,7 +424,20 @@ pub fn corner_buttons(
         })
         .response
         .on_hover_text("Settings and shortcuts");
-    (event, strip, presenter)
+    Corner {
+        event,
+        strip,
+        presenter,
+        remote,
+    }
+}
+
+/// Was in der Knopfleiste oben rechts angeklickt wurde
+pub struct Corner {
+    pub event: Option<Event>,
+    pub strip: bool,
+    pub presenter: bool,
+    pub remote: bool,
 }
 
 /// Animierter Hintergrund hinter Folie bzw. Mindmap.
@@ -1936,6 +1959,23 @@ pub fn show(
     if nav.presenter {
         doc.presenter = !doc.presenter;
     }
+    // Handy-Fernbedienung: Knöpfe vom Handy wie Pfeiltasten behandeln
+    if let Some(remote) = crate::remote::running() {
+        for command in remote.take_commands() {
+            match command {
+                crate::remote::Command::Next => nav.right = true,
+                crate::remote::Command::Prev => nav.left = true,
+            }
+        }
+    }
+    if nav.remote {
+        doc.remote_open = !doc.remote_open;
+    }
+    // Esc schließt zuerst das QR-Fenster, erst dann den Vortrag
+    if doc.remote_open && nav.escape {
+        doc.remote_open = false;
+        nav.escape = false;
+    }
     let area = ui.max_rect();
     let ctx = ui.ctx().clone();
 
@@ -2043,10 +2083,17 @@ pub fn show(
         animating,
     } = render_slide(ui, card, &view, &doc.map, theme, fx, build_bullets);
 
-    let (corner_event, strip_clicked, presenter_clicked) =
-        corner_buttons(ui, area, "End presentation (Esc)", fx, false);
+    let Corner {
+        event: corner_event,
+        strip: strip_clicked,
+        presenter: presenter_clicked,
+        remote: remote_clicked,
+    } = corner_buttons(ui, area, "End presentation (Esc)", fx, false);
     if presenter_clicked {
         doc.presenter = !doc.presenter;
+    }
+    if remote_clicked {
+        doc.remote_open = !doc.remote_open;
     }
     if corner_event.is_some() {
         event = corner_event;
@@ -2111,7 +2158,142 @@ pub fn show(
     confetti_draw(&ctx, now);
     laser(ui, nav.laser, now);
 
+    // Stand fürs Handy, und das QR-Fenster
+    if let Some(remote) = crate::remote::running() {
+        let slide = &slides[doc.slide];
+        let start = *doc.presenter_start.get_or_insert(now);
+        // Symbole aus der Phosphor-Schrift kennt das Handy nicht
+        let plain = |text: &str| {
+            text.chars()
+                .filter(|c| !('\u{E000}'..='\u{F8FF}').contains(c))
+                .collect::<String>()
+                .trim()
+                .to_string()
+        };
+        remote.publish(crate::remote::RemoteState {
+            title: plain(&slide.title),
+            next: slides
+                .get(doc.slide + 1)
+                .map(|s| plain(&s.title))
+                .unwrap_or_default(),
+            slide: doc.slide,
+            total: slides.len(),
+            point: doc.build,
+            points: if build_bullets { slide.groups() } else { 0 },
+            notes: speaker_notes(&doc.map, slide),
+            elapsed: (now - start).max(0.0) as u64,
+        });
+    }
+    if doc.remote_open && !remote_overlay(ui, area, theme) {
+        doc.remote_open = false;
+    }
+
     event
+}
+
+/// Fenster mit QR-Code für die Handy-Fernbedienung. Gibt `false` zurück,
+/// wenn es geschlossen wurde.
+fn remote_overlay(ui: &mut egui::Ui, area: Rect, theme: &Theme) -> bool {
+    let ctx = ui.ctx().clone();
+    // Solange es offen ist, regelmäßig prüfen, ob sich ein Handy meldet
+    ctx.request_repaint_after(std::time::Duration::from_millis(500));
+    // Abdunkeln über der Folie, aber unter dem Fenster
+    let painter = ctx.layer_painter(LayerId::new(Order::Middle, Id::new("remote_dim")));
+    painter.rect_filled(area, 0.0, Color32::from_black_alpha(150));
+    let card = Rect::from_center_size(area.center(), Vec2::new(420.0, 540.0));
+    let mut open = true;
+    egui::Area::new(Id::new("remote_overlay"))
+        .order(Order::Foreground)
+        .fixed_pos(card.min)
+        .show(&ctx, |ui| {
+            egui::Frame::default()
+                .fill(theme.card)
+                .corner_radius(18.0)
+                .inner_margin(egui::Margin::same(24))
+                .show(ui, |ui| {
+                    ui.set_width(card.width() - 48.0);
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!("{}  Phone remote", icon::DEVICE_MOBILE))
+                                .size(20.0)
+                                .strong(),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui.button(RichText::new(icon::X).size(16.0)).clicked() {
+                                open = false;
+                            }
+                        });
+                    });
+                    ui.add_space(6.0);
+                    match crate::remote::start(&ctx) {
+                        Ok(remote) => {
+                            ui.label(
+                                RichText::new(
+                                    "Scan the code with your phone's camera. Your phone must be in the same Wi-Fi.",
+                                )
+                                .color(theme.text.gamma_multiply(0.7)),
+                            );
+                            ui.add_space(12.0);
+                            if let Some((width, dark)) = remote.qr() {
+                                let side = 300.0;
+                                let (rect, _) = ui.allocate_exact_size(
+                                    Vec2::new(ui.available_width(), side),
+                                    Sense::hover(),
+                                );
+                                let qr = Rect::from_center_size(rect.center(), Vec2::splat(side));
+                                let p = ui.painter();
+                                p.rect_filled(qr, 14.0, Color32::WHITE);
+                                // Ruhezone von 4 Feldern rundherum
+                                let cell = side / (width + 8) as f32;
+                                for (i, is_dark) in dark.iter().enumerate() {
+                                    if *is_dark {
+                                        let (x, y) = ((i % width + 4) as f32, (i / width + 4) as f32);
+                                        p.rect_filled(
+                                            Rect::from_min_size(
+                                                qr.min + Vec2::new(x, y) * cell,
+                                                Vec2::splat(cell + 0.3),
+                                            ),
+                                            0.0,
+                                            Color32::BLACK,
+                                        );
+                                    }
+                                }
+                            }
+                            ui.add_space(12.0);
+                            ui.vertical_centered(|ui| {
+                                ui.label(RichText::new(&remote.url).monospace().size(12.0).weak());
+                                ui.add_space(8.0);
+                                if remote.connected() {
+                                    ui.label(
+                                        RichText::new(format!("{}  Phone connected", icon::CHECK_CIRCLE))
+                                            .color(theme.branches[2 % theme.branches.len()])
+                                            .size(16.0),
+                                    );
+                                } else {
+                                    ui.label(
+                                        RichText::new("Waiting for your phone …")
+                                            .color(theme.text.gamma_multiply(0.6)),
+                                    );
+                                }
+                                ui.add_space(4.0);
+                                ui.label(
+                                    RichText::new("R or Esc closes this window – the remote keeps working.")
+                                        .size(12.0)
+                                        .color(theme.text.gamma_multiply(0.5)),
+                                );
+                            });
+                        }
+                        Err(e) => {
+                            ui.label(format!("The remote could not start: {e}."));
+                            ui.label(
+                                RichText::new("Connect to a Wi-Fi network and try again.")
+                                    .color(theme.text.gamma_multiply(0.6)),
+                            );
+                        }
+                    }
+                });
+        });
+    open
 }
 
 #[cfg(test)]

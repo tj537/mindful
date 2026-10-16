@@ -692,6 +692,8 @@ struct SavedState {
     effects: present::Effects,
     #[serde(default)]
     prompt: ai_prompt::PromptForm,
+    #[serde(default = "yes")]
+    check_updates: bool,
 }
 
 fn yes() -> bool {
@@ -707,6 +709,7 @@ struct SavedStateRef<'a> {
     build_bullets: bool,
     effects: present::Effects,
     prompt: &'a ai_prompt::PromptForm,
+    check_updates: bool,
 }
 
 pub struct MindMapApp {
@@ -752,6 +755,14 @@ pub struct MindMapApp {
     effects: present::Effects,
     /// Eingaben im „AI prompt“-Formular
     prompt: ai_prompt::PromptForm,
+    /// Beim Start nach einer neuen Version fragen
+    check_updates: bool,
+    /// Laufende oder fertige Update-Prüfung
+    update_check: Option<crate::update::Check>,
+    /// Gefundene neuere Version
+    update: Option<crate::update::Update>,
+    /// Prüfung per Menü angestoßen: auch „aktuell“ melden
+    manual_update_check: bool,
 }
 
 impl MindMapApp {
@@ -804,6 +815,10 @@ impl MindMapApp {
             build_bullets: true,
             effects: present::Effects::default(),
             prompt: ai_prompt::PromptForm::default(),
+            check_updates: true,
+            update_check: None,
+            update: None,
+            manual_update_check: false,
         };
 
         if let Some(state) = saved {
@@ -829,11 +844,17 @@ impl MindMapApp {
             app.effects = state.effects;
             app.effects.migrate();
             app.prompt = state.prompt;
+            app.check_updates = state.check_updates;
         }
         if app.docs.is_empty() {
             app.new_tab();
         }
         app.active = app.active.min(app.docs.len() - 1);
+        // Nicht in Tests: dort soll nichts ins Netz
+        if app.check_updates && !cfg!(test) {
+            let ctx = ctx.clone();
+            app.update_check = Some(crate::update::start(move || ctx.request_repaint()));
+        }
         // Gespeicherten Modus wiederherstellen, aber nie direkt in die Präsentation
         for doc in &mut app.docs {
             let mode = if doc.mode.is_presenting() {
@@ -849,6 +870,7 @@ impl MindMapApp {
     /// Ein Frame der ganzen Oberfläche
     pub fn show(&mut self, ctx: &egui::Context) {
         self.poll_pdf_export(ctx);
+        self.poll_update_check();
         if self.applied_theme != Some(self.theme) {
             ctx.set_visuals(visuals_for(&THEMES[self.theme]));
             self.applied_theme = Some(self.theme);
@@ -1162,6 +1184,29 @@ impl MindMapApp {
             }
         });
         self.pdf_job = Some(job);
+    }
+
+    /// Ergebnis der Update-Prüfung übernehmen
+    fn poll_update_check(&mut self) {
+        let Some(check) = &self.update_check else {
+            return;
+        };
+        let Some(result) = check.lock().ok().and_then(|mut r| r.take()) else {
+            return;
+        };
+        self.update_check = None;
+        let manual = std::mem::take(&mut self.manual_update_check);
+        match result {
+            Ok(Some(update)) => {
+                self.status = format!("Mindful {} is available", update.version);
+                self.update = Some(update);
+            }
+            Ok(None) if manual => {
+                self.status = format!("Mindful {} is up to date", env!("CARGO_PKG_VERSION"));
+            }
+            Err(e) if manual => self.status = format!("Could not check for updates ({e})"),
+            _ => {}
+        }
     }
 
     /// Fortschritt des PDF-Exports in der Statuszeile
@@ -2135,6 +2180,18 @@ impl MindMapApp {
                 );
                 ui.separator();
                 ui.checkbox(&mut self.show_welcome, "Tips on empty mind maps");
+                ui.checkbox(&mut self.check_updates, "Check for updates on startup")
+                    .on_hover_text("Asks GitHub once per start whether a newer version exists");
+                if ui
+                    .button(format!("{}  Check for updates now", icon::ARROWS_CLOCKWISE))
+                    .clicked()
+                {
+                    let ctx = ui.ctx().clone();
+                    self.update_check = Some(crate::update::start(move || ctx.request_repaint()));
+                    self.status = "Checking for updates …".into();
+                    self.manual_update_check = true;
+                    ui.close_menu();
+                }
             });
 
             // Werkzeugleiste
@@ -2475,10 +2532,33 @@ impl MindMapApp {
         let show_hint = width >= 1050.0;
         let right = if show_hint { 560.0 } else { 300.0 };
         ui.horizontal(|ui| {
+            // Neue Version: farbiger Knopf ganz links, öffnet die Download-Seite
+            let mut used = 0.0;
+            if let Some(update) = &self.update {
+                let accent = ui.visuals().selection.stroke.color;
+                let pill = ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new(format!(
+                                "{}  Update to {}",
+                                icon::ARROW_CIRCLE_UP,
+                                update.version
+                            ))
+                            .color(Color32::WHITE),
+                        )
+                        .fill(accent)
+                        .corner_radius(10.0),
+                    )
+                    .on_hover_text("Opens the download page of the new version");
+                if pill.clicked() {
+                    crate::update::open_url(&update.url);
+                }
+                used = pill.rect.width() + 8.0;
+            }
             let status = egui::RichText::new(self.status.as_str())
                 .color(ui.visuals().text_color().gamma_multiply(fade));
             ui.allocate_ui(
-                Vec2::new((width - right).max(40.0), ui.available_height()),
+                Vec2::new((width - right - used).max(40.0), ui.available_height()),
                 |ui| {
                     ui.add(egui::Label::new(status).truncate())
                         .on_hover_text(self.status.as_str());
@@ -3207,6 +3287,7 @@ impl eframe::App for MindMapApp {
             build_bullets: self.build_bullets,
             effects: self.effects,
             prompt: &self.prompt,
+            check_updates: self.check_updates,
         };
         eframe::set_value(storage, eframe::APP_KEY, &state);
     }

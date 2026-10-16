@@ -14,10 +14,12 @@ mod nodes;
 mod offscreen;
 mod pdf;
 mod present;
+mod remote;
 #[cfg(test)]
 mod snapshot;
 mod theme;
 mod tour;
+mod update;
 
 use eframe::egui;
 

@@ -382,6 +382,16 @@ The three charts read their numbers with `parse_datum`: the **last** number in a
 
 **P** (or the projector button at the top right while presenting) toggles `doc.presenter`. `presenter_window` then opens a second native window with `ctx.show_viewport_immediate`: a timer (`doc.presenter_start`, reset with the button and on every start), the time of day (`chrono`), the position (“slide 5 of 16 · point 2 of 4”), the current and the next slide, and the notes of the branch and its bullets (`speaker_notes`). Keys pressed in that window come back as a `Nav` and are merged with the main window's (`Nav::merge`), so you can drive the talk from either window. Closing the window (or P again) turns it off. Where a platform can't open a second window, egui reports `ViewportClass::Embedded` and the view appears as a window inside Mindful instead.
 
+### Phone remote (`remote.rs`)
+
+**R** (or the phone button while presenting) opens a card with a QR code. The first time, `remote::start` launches a tiny HTTP server on port 8765 (or the next free one), listening on all network interfaces, with plain `std::net` and one thread per request. The address is the computer's IP in the local network (found with the UDP “connect without sending” trick) plus a random token, e.g. `http://192.168.1.20:8765/?t=3fa2…`. Requests without the right token get a 403.
+
+- `GET /` serves one self-contained HTML page (`PAGE`): timer, slide title, next slide, notes and two big buttons; it also reacts to swipes and vibrates on tap.
+- `GET /state` returns `RemoteState` as JSON; the page polls it every second.
+- `POST /next` / `POST /prev` queue a `Command` and wake the UI with `ctx.request_repaint()`.
+
+Every frame `present::show` publishes the current state (`Remote::publish`, without icon glyphs, which the phone's fonts don't have) and turns queued commands into `Nav` presses. The server lives in a `OnceLock` for the rest of the session; the QR card only shows whether a phone was heard from in the last four seconds.
+
 ## PDF export (`pdf.rs`)
 
 *Export → Slides as PDF* runs in a background thread (`MindMapApp::start_pdf_export`; the status bar shows “slide 3 of 16”, polled by `poll_pdf_export`). `pdf::export` creates its own egui context with the app's fonts and theme, renders each slide with `draw_static` at 1280 × 720 points × 1.5 (1920 × 1080 pixels) through `Offscreen`, encodes it as JPEG and writes the pages with a tiny PDF writer of its own (`write_pdf`: catalog, page tree, info, and per page a JPEG image object plus one drawing command). Pages are 960 × 540 pt, like PowerPoint's widescreen format. The text in the PDF is part of the image, so it isn't selectable.
@@ -413,6 +423,14 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 **Subtitle:** the note of the current stop (central topic at the start, the branch afterwards) fades in as a card at the bottom once the camera has arrived.
 
 ---
+
+## Icons on nodes (`icons.rs`)
+
+`Node::icon` holds a short name from `ICONS` (64 entries: name, Phosphor glyph, label). In Markdown it is written as a GitHub-style shortcode before the text – `## :rocket: Spaceflight`, `- :bulb: Idea` – and read back by `split_icon` (unknown names and things like `10:30:` stay text). `nodes::label_job` puts the glyph in front of the label (in the branch colour on outlined nodes), `icons::label` does the same for slides, the preview and the presenter view, and slide titles colour the glyph in the slide colour (`title_job`). The context menu has an *Icon* picker (`icons::picker`, `Action::SetIcon`).
+
+## Update check (`update.rs`)
+
+Once per start (if *Help → Check for updates on startup* is on, stored as `check_updates`) a background thread asks `api.github.com/repos/tj537/mindful/releases/latest` with the system's `curl` – no HTTP library needed. If the tag is newer than `CARGO_PKG_VERSION` (`is_newer` compares `major.minor.patch`), the status bar shows an *Update to x.y.z* button that opens the release page. *Help → Check for updates now* also reports “up to date” or errors.
 
 ## Saving, restoring, file format
 
@@ -567,6 +585,9 @@ cargo test
 | `slide_layouts_in_markdown` | layout comments are read and written back |
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
 | `render_slides` (ignored, run on demand) | renders every slide of both examples, the presenter view and a tour overview to PNG for a visual check |
+| `icons_are_read_from_shortcodes` | `:rocket: Text` becomes an icon, unknown names stay text |
+| `versions_are_compared` | update check: `v0.3.0` is newer than `0.2.0`, nonsense is ignored |
+| `phone_requests_need_the_token_and_queue_commands` | the remote server rejects wrong tokens, serves the page and state, queues Next |
 | `chart_points_are_read_from_bullets` | “Solar: 42 %” etc. give label, value and unit |
 | `slides_become_pdf_pages` | the PDF has one image page per slide and a correct cross-reference table |
 | `render_app` (ignored, run on demand) | renders the whole window (mind map, Markdown, light theme, empty map) to PNG |

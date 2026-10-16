@@ -59,13 +59,16 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 **Slides that look like slides**
 - Twelve slide layouts built from your bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (it counts up), quote – and **bar, pie and line charts** from points like `Solar: 42 %`, animated as they build up. Pick one with a right-click on the slide.
 - **Presenter view** (P): a second window with the current and next slide, your notes, a timer and the clock, while the audience sees only the slides.
+- **Your phone as a remote** (R): scan a QR code and your phone shows big Next/Back buttons, the slide title, your notes and the timer. It works in your own Wi-Fi with no app and no cloud.
 - **Export the slides as PDF** to send or print them.
 - Pictures from your computer: drag them onto a node or a slide, or paste a screenshot. One picture sits beside the text, a single picture fills the slide, several become a gallery.
 - Checkboxes you can tick off during the talk, with confetti if you like.
 - Transitions, bullet effects, animated backgrounds (a starfield by default), a laser pointer and a quick-jump strip. Everything is optional under ⚙︎.
 
 **Writing and organizing**
+- **Icons on nodes:** 64 icons from the right-click menu, written as `:rocket:` in Markdown and shown in the branch colour on the mind map and the slides. Typed emojis work too.
 - Tabs, undo/redo, search, copy & paste, notes on every node, 8 color themes.
+- Mindful tells you when a new version is out (one request to GitHub per start; can be switched off under *Help*).
 - Templates (brainstorming, project plan, SWOT, weekly plan, meeting notes, book summary) and a complete example to explore: **File → Open example → The Universe** (also in German).
 - **AI prompt:** describe a topic, copy the generated prompt into ChatGPT, Claude or any other assistant and paste the answer into a new tab. The prompt teaches the AI Mindful's format, including when to use which slide layout.
 - Save as `.mindmap` (one file, pictures included), import Markdown and plain-text outlines, export the mind map as PNG, SVG or Markdown and the slides as PDF.
@@ -131,6 +134,7 @@ On the Mac use ⌘, on Windows and Linux use Ctrl.
 | G | Quick jump to any slide |
 | L | Laser pointer |
 | P | Presenter view (notes, next slide, timer) |
+| R | Phone as a remote control |
 | F · Esc | Full screen · end |
 
 Navigation while presenting is keyboard-only, so clicking a checkbox never skips a slide.
@@ -154,6 +158,7 @@ The comment after the heading picks a slide layout (optional).
 - [x] A done task
 - A point with a picture
   ![](beach.jpg)
+- :bulb: A point with an icon
 ```
 
 A picture belongs to the line directly above it. Mindful stores the picture data inside the mind map. Exported Markdown carries it in a comment block at the end, so the file stays complete. When you import Markdown, picture paths next to the file are read in automatically.
@@ -221,6 +226,9 @@ src/
 ├── diagrams.rs        slide layouts
 ├── tour.rs            camera tour
 ├── images.rs          inserting, scaling and drawing pictures
+├── icons.rs           icons on nodes
+├── remote.rs          phone remote (small web server)
+├── update.rs          update check
 ├── nodes.rs           how nodes are drawn
 ├── ai_prompt.rs       the AI prompt form
 ├── export.rs          SVG and PNG export
@@ -240,6 +248,7 @@ Bug reports and ideas are welcome in the [issues](https://github.com/tj537/mindf
 - Double-clicking a `.mindmap` file in the Finder doesn't open Mindful yet.
 - Slides with a diagram layout don't show pictures. Animated GIFs show their first frame. Pictures are left out of the PNG/SVG export.
 - Windows and Linux use egui's built-in font; the Mac uses the system font.
+- The phone remote needs your phone in the same network. If the macOS firewall is on, allow Mindful to accept incoming connections when asked.
 
 ## License
 
