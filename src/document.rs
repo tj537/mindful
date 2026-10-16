@@ -117,6 +117,12 @@ pub struct Document {
     /// Text in the Markdown editor
     #[serde(skip)]
     pub md_text: String,
+    /// Search in the Markdown editor: byte position of the current match
+    #[serde(skip)]
+    pub md_find: Option<usize>,
+    /// The editor should scroll to `md_find` in the next frame
+    #[serde(skip)]
+    pub md_find_scroll: bool,
     /// The Markdown editor should get the focus in the next frame
     #[serde(skip)]
     pub md_focus: bool,
@@ -175,6 +181,8 @@ impl Document {
             layout_anim: None,
             view_anim: None,
             md_text: String::new(),
+            md_find: None,
+            md_find_scroll: false,
             md_focus: false,
             md_checkpointed: false,
             slide: 0,

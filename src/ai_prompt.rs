@@ -130,6 +130,7 @@ Format rules:
 - Under each heading, the points as a bullet list starting with "- ". Indent sub-points by two spaces. Go at most three levels deep.
 - Keep every bullet point short (about 8 words at most) – they appear as boxes in a mind map and on slides.
 - If a bullet point needs an explanation, add a single line directly below it, indented two spaces further and without a dash. It becomes a note.
+- Speaker notes: after the note of each "## " heading, add a blank line and one line "<!-- notes: … -->" with 1–2 sentences the presenter could say. They are only shown to the speaker, never on the slides.
 - No bold or italic text, links, tables, numbered lists, code blocks or emojis.
 - Reply with the Markdown only: no introduction, no closing remarks, and do not wrap it in a code block.
 {layout_guide}
@@ -143,6 +144,8 @@ How a small bean became the world's favourite drink.
 
 Coffee travelled from Ethiopia to the rest of the world.
 
+<!-- notes: Tell the legend of Kaldi, the goat herder whose goats danced after eating the berries. -->
+
 - 1400s
   - Monks in Yemen brew it to stay awake
 - 1550s
@@ -153,6 +156,8 @@ Coffee travelled from Ethiopia to the rest of the world.
 ## Brewing
 
 There are many ways to turn beans into coffee.
+
+<!-- notes: Ask the audience how they make their coffee at home. -->
 
 - Espresso
   Hot water pressed through finely ground beans.
@@ -485,7 +490,11 @@ mod tests {
             layouts: false,
             ..form
         });
-        assert!(!plain.contains("<!--"));
+        // No layout comments – speaker notes are fine
+        assert!(SlideLayout::ALL
+            .iter()
+            .all(|l| !plain.contains(&format!("<!-- {} -->", l.name()))));
+        assert!(plain.contains("<!-- notes:"));
     }
 
     #[test]
@@ -499,6 +508,9 @@ mod tests {
             map.children(root).next().unwrap().layout,
             Some(SlideLayout::Timeline)
         );
+        assert!(map
+            .children(root)
+            .all(|b| !b.note.is_empty() && !b.speaker_notes.is_empty()));
         assert_eq!(map.to_markdown(), example);
     }
 }

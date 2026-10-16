@@ -7,7 +7,7 @@ use crate::model::{
 };
 use crate::nodes::{
     label_job, node_size, node_style, paint_label, paint_node, paint_task, paint_thumb, thumb_size,
-    with_thumb, NodeStyle, MIN_NODE, TASK_SPACE,
+    with_thumb, NodeStyle, MIN_NODE, SEARCH, TASK_SPACE,
 };
 use crate::present::ease_in_out_cubic;
 use crate::theme::{
@@ -161,6 +161,8 @@ enum Command {
     Fit,
     Find,
     FindNext,
+    /// Search text changed: jump to the first match
+    FindFirst,
     InsertImage,
     PasteImage,
     Help,
@@ -174,6 +176,15 @@ enum Command {
     NewMarkdownTab,
     OpenExample(usize),
     OpenTemplate(usize),
+}
+
+/// The two kinds of longer text on a node
+#[derive(Clone, Copy, PartialEq)]
+enum NoteKind {
+    /// On the slide, in the tour and as a paragraph in Markdown
+    Description,
+    /// Only for the speaker: presenter view and phone remote
+    Speaker,
 }
 
 /// Changes to single nodes of the active mind map
@@ -207,7 +218,7 @@ enum Action {
     AutoLayout,
     Fit,
     SetTheme(usize),
-    EditNote(u64),
+    EditNote(u64, NoteKind),
     OpenExample(usize),
     OpenTemplate(usize),
     HideWelcome,
@@ -564,9 +575,17 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     action_item(
         ui,
         true,
-        &l(icon::NOTE_PENCIL, "Note …"),
+        &l(icon::NOTE_PENCIL, "Description …"),
         "",
-        Action::EditNote(id),
+        Action::EditNote(id, NoteKind::Description),
+        out,
+    );
+    action_item(
+        ui,
+        true,
+        &l(icon::CHAT_CIRCLE_TEXT, "Speaker notes …"),
+        "",
+        Action::EditNote(id, NoteKind::Speaker),
         out,
     );
     let current_icon = map.get(id).and_then(|n| n.icon.clone());
@@ -775,7 +794,7 @@ pub struct MindMapApp {
     /// Preview next to the Markdown editor
     md_preview: bool,
     /// Open note window: node and previous state (for undo)
-    note_edit: Option<(u64, MindMap)>,
+    note_edit: Option<(u64, NoteKind, MindMap)>,
     fullscreen: bool,
     /// Time of the last pasted text (⌘V without text = paste a picture)
     last_paste: f64,
@@ -997,9 +1016,13 @@ impl MindMapApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::default().fill(theme.background))
             .show(ctx, |ui| match mode {
-                Mode::Markdown => {
-                    markdown_view::show(ui, &mut self.docs[self.active], theme, self.md_preview)
-                }
+                Mode::Markdown => markdown_view::show(
+                    ui,
+                    &mut self.docs[self.active],
+                    theme,
+                    self.md_preview,
+                    &self.search,
+                ),
                 _ => {
                     if let Some(a) = self.canvas(ui) {
                         action = Some(a);
@@ -1020,11 +1043,17 @@ impl MindMapApp {
         self.update_title(ctx);
     }
 
-    /// Save all tabs including unsaved changes; on the next start
-    /// everything is back.
+    /// For screenshots in tests: switch the view
     #[cfg(test)]
     pub fn set_mode_for_snapshot(&mut self, mode: Mode) {
         self.doc_mut().set_mode(mode);
+    }
+
+    /// For screenshots in tests: type into the search box (jumps to the first match)
+    #[cfg(test)]
+    pub fn search_for_snapshot(&mut self, query: &str) {
+        self.search = query.into();
+        self.find(true);
     }
 
     #[cfg(test)]
@@ -1642,33 +1671,52 @@ impl MindMapApp {
         }
     }
 
-    fn find_next(&mut self) {
-        let query = self.search.trim().to_lowercase();
+    /// Jump to the next match – or, with `restart`, to the first one (while typing).
+    /// In the mind map the matching node is selected, opened up and brought into view;
+    /// in the Markdown editor the text scrolls to the match.
+    fn find(&mut self, restart: bool) {
+        let query = self.search.trim().to_string();
         if query.is_empty() {
             return;
         }
         let doc = &mut self.docs[self.active];
-        let hits: Vec<u64> = doc
-            .map
-            .nodes
-            .iter()
-            .filter(|n| n.text.to_lowercase().contains(&query))
-            .map(|n| n.id)
-            .collect();
-        if hits.is_empty() {
-            self.status = format!("Nothing found for “{}”", self.search.trim());
+        if doc.mode == Mode::Markdown {
+            let found = crate::search::ranges(&doc.md_text, &query);
+            if found.is_empty() {
+                doc.md_find = None;
+                self.status = format!("Nothing found for “{query}”");
+                return;
+            }
+            let next = match (restart, doc.md_find) {
+                (false, Some(pos)) => found.iter().position(|r| r.start > pos).unwrap_or(0),
+                _ => 0,
+            };
+            doc.md_find = Some(found[next].start);
+            doc.md_find_scroll = true;
+            self.status = format!("Match {} of {}", next + 1, found.len());
             return;
         }
-        let next = doc
-            .selected
-            .and_then(|s| hits.iter().position(|h| *h == s))
-            .map(|i| (i + 1) % hits.len())
-            .unwrap_or(0);
+        let hits = crate::search::hits(&doc.map, &query);
+        if hits.is_empty() {
+            self.status = format!("Nothing found for “{query}”");
+            return;
+        }
+        let next = match (restart, doc.selected) {
+            (false, Some(s)) => hits
+                .iter()
+                .position(|h| *h == s)
+                .map_or(0, |i| (i + 1) % hits.len()),
+            _ => 0,
+        };
         let id = hits[next];
         doc.map.expand_to(id);
         doc.selected = Some(id);
         doc.reveal = Some(id);
-        self.status = format!("Match {} of {}", next + 1, hits.len());
+        let place = doc
+            .map
+            .get(id)
+            .map_or("", |n| crate::search::hit(n, &query).place());
+        self.status = format!("Match {} of {}{place}", next + 1, hits.len());
     }
 
     fn run(&mut self, ctx: &egui::Context, cmd: Command) {
@@ -1740,7 +1788,8 @@ impl MindMapApp {
             }
             Command::Fit => self.apply(ctx, Action::Fit),
             Command::Find => self.search_focus = true,
-            Command::FindNext => self.find_next(),
+            Command::FindNext => self.find(false),
+            Command::FindFirst => self.find(true),
             Command::Help => self.show_help = !self.show_help,
             Command::OpenGitHub => crate::update::open_url(crate::update::REPOSITORY),
             Command::Theme(i) => self.theme = i,
@@ -1940,10 +1989,14 @@ impl MindMapApp {
                 self.show_welcome = false;
                 self.status = "Tips hidden – turn them back on in the Help menu".into();
             }
-            Action::EditNote(id) => {
+            Action::EditNote(id, kind) => {
                 doc.end_edit();
                 doc.selected = Some(id);
-                self.note_edit = Some((id, doc.map.clone()));
+                // A window that is already open becomes its own undo step
+                if let Some((_, _, before)) = self.note_edit.take() {
+                    doc.record(before);
+                }
+                self.note_edit = Some((id, kind, doc.map.clone()));
             }
         }
     }
@@ -2547,6 +2600,9 @@ impl MindMapApp {
                 if std::mem::take(&mut self.search_focus) {
                     resp.request_focus();
                 }
+                if resp.changed() {
+                    out = Some(Command::FindFirst);
+                }
                 if resp.lost_focus() {
                     if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter)) {
                         out = Some(Command::FindNext);
@@ -2558,14 +2614,14 @@ impl MindMapApp {
                 if width >= 900.0 {
                     ui.label(egui::RichText::new(icon::MAGNIFYING_GLASS).size(16.0));
                 }
-                let query = self.search.trim().to_lowercase();
+                let query = self.search.trim();
                 if !query.is_empty() {
-                    let n = self.docs[active]
-                        .map
-                        .nodes
-                        .iter()
-                        .filter(|n| n.text.to_lowercase().contains(&query))
-                        .count();
+                    let doc = &self.docs[active];
+                    let n = if doc.mode == Mode::Markdown {
+                        crate::search::ranges(&doc.md_text, query).len()
+                    } else {
+                        crate::search::hits(&doc.map, query).len()
+                    };
                     ui.weak(count(n, "match").replace("matchs", "matches"));
                 }
                 ui.separator();
@@ -2962,7 +3018,7 @@ impl MindMapApp {
 
     fn canvas(&mut self, ui: &mut egui::Ui) -> Option<Action> {
         let theme = &self.current_theme();
-        let query = self.search.trim().to_lowercase();
+        let query = self.search.trim().to_string();
         let focus_pending = &mut self.focus_pending;
         let edit_cursor_end = &mut self.edit_cursor_end;
         let doc = &mut self.docs[self.active];
@@ -3098,7 +3154,9 @@ impl MindMapApp {
             .filter(|n| !doc.map.is_hidden(n.id))
             .map(|n| {
                 let style = node_style(&doc.map, theme, n.id);
-                let galley = painter.layout_job(label_job(n, &style, style.font_size * zoom));
+                let mut job = label_job(n, &style, style.font_size * zoom);
+                crate::search::mark(&mut job, &query, SEARCH.gamma_multiply(0.55));
+                let galley = painter.layout_job(job);
                 let task_space = if n.task.is_some() { TASK_SPACE } else { 0.0 };
                 let mut size = (galley.size()
                     + (style.padding + Vec2::new(task_space, 0.0)) * zoom)
@@ -3121,7 +3179,15 @@ impl MindMapApp {
                     style,
                     collapsed: n.collapsed && doc.map.has_children(n.id),
                     side,
-                    hit: !query.is_empty() && n.text.to_lowercase().contains(&query),
+                    // Collapsed nodes also light up when a match is hidden below them
+                    hit: crate::search::hit(n, &query).any()
+                        || (n.collapsed
+                            && !query.is_empty()
+                            && doc.map.subtree(n.id).into_iter().skip(1).any(|id| {
+                                doc.map
+                                    .get(id)
+                                    .is_some_and(|c| crate::search::hit(c, &query).any())
+                            })),
                     task: n.task,
                     card: thumb.is_some(),
                 }
@@ -3236,26 +3302,52 @@ impl MindMapApp {
                 }
             }
 
-            // Note icon at the top right; the note appears on hover
-            let note = doc
+            // Badges at the top right for description and speaker notes;
+            // both appear on hover
+            let (note, speaker) = doc
                 .map
                 .get(id)
-                .map(|n| n.note.trim().to_string())
+                .map(|n| {
+                    (
+                        n.note.trim().to_string(),
+                        n.speaker_notes.trim().to_string(),
+                    )
+                })
                 .unwrap_or_default();
-            if !note.is_empty() {
-                let c = rect.right_top() + Vec2::new(-10.0, 2.0) * zoom;
+            let mut badge_x = -10.0;
+            for (ic, text) in [(icon::NOTE, &note), (icon::CHAT_CIRCLE_TEXT, &speaker)] {
+                if text.is_empty() {
+                    continue;
+                }
+                let c = rect.right_top() + Vec2::new(badge_x, 2.0) * zoom;
                 painter.circle_filled(c, 9.0 * zoom, theme.card);
                 painter.circle_stroke(c, 9.0 * zoom, Stroke::new(1.5 * zoom, l.style.accent));
                 painter.text(
                     c,
                     Align2::CENTER_CENTER,
-                    icon::NOTE,
+                    ic,
                     FontId::proportional(10.0 * zoom),
                     l.style.accent,
                 );
-                if doc.editing != Some(id) && !resp.dragged() {
-                    resp.on_hover_text(note);
-                }
+                badge_x -= 21.0;
+            }
+            if (!note.is_empty() || !speaker.is_empty())
+                && doc.editing != Some(id)
+                && !resp.dragged()
+            {
+                resp.on_hover_ui(|ui| {
+                    ui.set_max_width(320.0);
+                    if !note.is_empty() {
+                        ui.label(&note);
+                    }
+                    if !speaker.is_empty() {
+                        if !note.is_empty() {
+                            ui.separator();
+                        }
+                        ui.weak(format!("{}  Speaker notes", icon::CHAT_CIRCLE_TEXT));
+                        ui.label(&speaker);
+                    }
+                });
             }
 
             // Counter for collapsed sub-points; a click expands them
@@ -3477,13 +3569,13 @@ impl MindMapApp {
     }
 
     fn close_note(&mut self) {
-        if let Some((_, before)) = self.note_edit.take() {
+        if let Some((_, _, before)) = self.note_edit.take() {
             self.doc_mut().record(before);
         }
     }
 
     fn note_window(&mut self, ctx: &egui::Context) {
-        let Some(id) = self.note_edit.as_ref().map(|(id, _)| *id) else {
+        let Some((id, kind)) = self.note_edit.as_ref().map(|(id, kind, _)| (*id, *kind)) else {
             return;
         };
         let doc = &mut self.docs[self.active];
@@ -3493,18 +3585,34 @@ impl MindMapApp {
         };
         let mut open = true;
         let mut changed = false;
-        egui::Window::new(format!("{}  {}", icon::NOTE_PENCIL, node.text))
+        let (ic, what, text, hint, info) = match kind {
+            NoteKind::Description => (
+                icon::NOTE_PENCIL,
+                "Description",
+                &mut node.note,
+                "Description for this node …",
+                "Shown below the title on its slide, as the subtitle in the tour and as a paragraph in Markdown.",
+            ),
+            NoteKind::Speaker => (
+                icon::CHAT_CIRCLE_TEXT,
+                "Speaker notes",
+                &mut node.speaker_notes,
+                "What you want to say about this point …",
+                "Only for you: shown in the presenter view (P) and on the phone remote, never on the slides.",
+            ),
+        };
+        egui::Window::new(format!("{ic}  {what}: {}", node.text))
             .id(egui::Id::new("note_window"))
             .open(&mut open)
             .collapsible(false)
             .default_width(380.0)
             .show(ctx, |ui| {
-                let edit = egui::TextEdit::multiline(&mut node.note)
+                let edit = egui::TextEdit::multiline(text)
                     .desired_rows(8)
                     .desired_width(f32::INFINITY)
-                    .hint_text("Note for this node …");
+                    .hint_text(hint);
                 changed = ui.add(edit).changed();
-                ui.weak("Shown in the Markdown editor and on the slides.");
+                ui.weak(info);
             });
         if changed {
             doc.dirty = true;

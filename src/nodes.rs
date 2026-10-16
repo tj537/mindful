@@ -7,6 +7,9 @@ use crate::model::{MindMap, Node};
 use crate::theme::Theme;
 use eframe::egui::{self, text::LayoutJob, Color32, FontId, Pos2, Rect, Stroke, TextFormat, Vec2};
 
+/// Colour of search matches – the same in every theme, so matches stand out
+pub const SEARCH: Color32 = Color32::from_rgb(255, 190, 40);
+
 /// Minimum size of a node at zoom 1
 pub const MIN_NODE: Vec2 = Vec2::new(90.0, 34.0);
 
@@ -180,11 +183,19 @@ pub fn paint_node(
         Color32::from_black_alpha(if theme.dark { 90 } else { 30 }),
     );
     if hit {
-        let grow = 9.0 * zoom;
+        // Soft glow plus a clear ring, still visible when zoomed far out
+        let grow = 12.0 * zoom;
         painter.rect_filled(
             rect.expand(grow),
             radius + grow,
-            theme.selection.gamma_multiply(0.35),
+            SEARCH.gamma_multiply(0.22),
+        );
+        let ring = 7.0 * zoom;
+        painter.rect_stroke(
+            rect.expand(ring),
+            radius + ring,
+            Stroke::new((3.0 * zoom).max(1.5), SEARCH),
+            egui::StrokeKind::Outside,
         );
     }
     if selected {

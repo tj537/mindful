@@ -82,7 +82,7 @@ mod tests {
             wide.ctx.set_visuals(visuals_for(theme));
             wide.ctx.style_mut(apply_spacing);
             doc.presenter = true;
-            doc.slide = 9;
+            doc.slide = 8;
             doc.build = 1;
             doc.slide_time = 2000.0;
             doc.presenter_start = Some(2000.0 - 754.0);
@@ -170,6 +170,21 @@ mod tests {
                 Path::new(&format!("target/snapshots/app_{name}.png")),
             );
         }
+        // Search: matches marked in the mind map and in the Markdown editor
+        for (name, mode) in [("mindmap", Mode::Mindmap), ("markdown", Mode::Markdown)] {
+            app.set_mode_for_snapshot(mode);
+            app.search_for_snapshot("star");
+            let mut shapes = Vec::new();
+            for t in [12.0, 12.5, 15.0] {
+                shapes = snap.frame(t, |ctx| app.show(ctx));
+            }
+            snap.save(
+                &shapes,
+                Path::new(&format!("target/snapshots/app_search_{name}.png")),
+            );
+        }
+        app.search_for_snapshot("");
+
         // Light colour scheme and an empty mind map with the tip card
         app.set_mode_for_snapshot(Mode::Mindmap);
         app.set_theme_for_snapshot(0);

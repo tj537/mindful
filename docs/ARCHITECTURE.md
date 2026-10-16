@@ -15,7 +15,7 @@ This document explains how Mindful is built inside – for everyone working on t
 9. [Presentation](#presentation-presentrs) and [camera tour](#camera-tour-tourrs)
 10. [Saving, restoring, file format](#saving-restoring-file-format)
 11. [Export](#export-exportrs)
-12. [Themes and style](#themes-and-style-themers)
+12. [Themes and style](#themes-and-style-themers) · [Search](#search-searchrs)
 13. [Platform specifics](#platform-specifics)
 14. [How do I add …?](#how-do-i-add-)
     (see also [AI prompt](#ai-prompt-ai_promptrs))
@@ -111,7 +111,7 @@ Important: **changes are executed at the end of the frame**, not while drawing. 
 | Type | Used for | Examples |
 |---|---|---|
 | `Command` | everything that concerns the **app** | new tab, save, export, zoom, switch view |
-| `Action` | changes to **nodes** of the active mind map | add child, delete, color, note, paste |
+| `Action` | changes to **nodes** of the active mind map | add child, delete, color, description / speaker notes (`EditNote(id, NoteKind)`), paste |
 
 Menus, buttons and shortcuts only return a `Command` or an `Action`. They are executed together at the end of `update` in `run()` and `apply()`.
 
@@ -127,7 +127,8 @@ Menus, buttons and shortcuts only return a `Command` or an `Action`. They are ex
 |---|---|---|
 | `id` | `u64` | unique within a mind map, never reused |
 | `text` | `String` | label |
-| `note` | `String` | longer text: Markdown paragraph, slide note, tooltip |
+| `note` | `String` | description: Markdown paragraph, text below the slide title, tour subtitle, tooltip |
+| `speaker_notes` | `String` | only for the speaker: presenter view and phone remote; `<!-- notes: … -->` in Markdown |
 | `pos` | `[f32; 2]` | position relative to the center of the canvas (world coordinates) |
 | `parent` | `Option<u64>` | parent node, `None` only for the root |
 | `collapsed` | `bool` | children hidden |
@@ -230,7 +231,7 @@ screen = center of canvas + pan + pos × zoom
 3. Draw the background with its dot grid
 4. Compute size and screen rectangle for every visible node (`Laid`)
 5. Draw connections as cubic Bézier curves
-6. For each node: handle click, drag and right-click, then draw it (shadow, selection, outline, fill, note icon, counter for collapsed children)
+6. For each node: handle click, drag and right-click, then draw it (shadow, search ring, selection, outline, fill, badges for description and speaker notes, counter for collapsed children)
 7. While renaming, place a text field over the node
 8. Tips card and the context menu of the empty canvas
 
@@ -278,10 +279,11 @@ Nodes with a picture are drawn as a card: `nodes::thumb_size` / `with_thumb` add
 | `## Text` | main branch |
 | `### Text` etc. | deeper level |
 | `- Text` (indented) | child; indentation = level below the last heading |
-| plain line | note on the entry above |
+| plain line | description of the entry above |
+| `<!-- notes: … -->` (one line, or several up to `-->`) | speaker notes of the entry above |
 | `- [ ] Text` / `- [x] Text` | checkbox, open / done (also works on headings: `## [x] Text`) |
 
-`to_markdown` writes exactly this format. `parse_outline` reads it and understands a bit more: numbered lists, `*`/`+` bullets, checkboxes. If a text contains **no** headings or bullets at all (e.g. pasted from another program), every line becomes a node and indentation decides the level. The indentation width (2 spaces, 4, tab) is detected automatically.
+`to_markdown` writes exactly this format (`push_note`, then `push_speaker_notes`; a `-->` inside the notes is written as `->` so it can't end the comment). Before classifying, `classify_lines` merges a speaker-notes comment over several lines into one `Line::Notes`, removing only the comment's own indentation. `parse_outline` reads it and understands a bit more: numbered lists, `*`/`+` bullets, checkboxes. If a text contains **no** headings or bullets at all (e.g. pasted from another program), every line becomes a node and indentation decides the level. The indentation width (2 spaces, 4, tab) is detected automatically.
 
 ### Live sync without losing data
 
@@ -301,7 +303,7 @@ Undo: the first change of an editor session creates a snapshot, and everything a
 
 The *AI prompt* button next to the search field opens a popup (`egui::popup::popup_below_widget`) with a small form: topic, language (free text plus quick picks), description, scope and *Use slide layouts* (on by default). The form is stored with the app state, so it remembers the last entries.
 
-`build_prompt()` fills these into a fixed English prompt that explains Mindful's Markdown format to the AI – `#` central topic with an intro paragraph, `##` branches with a one-sentence note, short bullets, optional notes, Markdown only – and ends with a short example. With *Use slide layouts*, `LAYOUT_GUIDE` is added: it explains each `<!-- layout -->` tag, what content it suits and how many points and sub-points it expects, so the AI picks fitting diagrams itself (about half of the sections, the rest plain lists); the example then carries a `timeline` tag. A test makes sure that example is itself valid Mindful Markdown.
+`build_prompt()` fills these into a fixed English prompt that explains Mindful's Markdown format to the AI – `#` central topic with an intro paragraph, `##` branches with a one-sentence note, short bullets, optional descriptions, one `<!-- notes: … -->` line of speaker notes per section, Markdown only – and ends with a short example. With *Use slide layouts*, `LAYOUT_GUIDE` is added: it explains each `<!-- layout -->` tag, what content it suits and how many points and sub-points it expects, so the AI picks fitting diagrams itself (about half of the sections, the rest plain lists); the example then carries a `timeline` tag. A test makes sure that example is itself valid Mindful Markdown.
 
 *Copy prompt* puts the prompt on the clipboard. *New Markdown tab* opens an empty tab in the Markdown editor and focuses it, ready for pasting the answer; from there the usual Markdown sync turns it into a mind map.
 
@@ -384,13 +386,15 @@ The three charts read their numbers with `parse_datum`: the **last** number in a
 
 ### Presenter view
 
-**P** (or the projector button at the top right while presenting) toggles `doc.presenter`. `presenter_window` then opens a second native window with `ctx.show_viewport_immediate`: a timer (`doc.presenter_start`, reset with the button and on every start), the time of day (`chrono`), the position (“slide 5 of 16 · point 2 of 4”), the current and the next slide, and the notes of the branch and its bullets (`speaker_notes`). Keys pressed in that window come back as a `Nav` and are merged with the main window's (`Nav::merge`), so you can drive the talk from either window. Closing the window (or P again) turns it off. Where a platform can't open a second window, egui reports `ViewportClass::Embedded` and the view appears as a window inside Mindful instead.
+**P** (or the projector button at the top right while presenting) toggles `doc.presenter`. `presenter_window` then opens a second native window: a timer (`doc.presenter_start`, reset with the button and on every start), the time of day (`chrono`), the position (“slide 5 of 16 · point 2 of 4”), the current and the next slide, and the **speaker notes** of the branch and its bullets (`speaker_notes()` – only `Node::speaker_notes`; the descriptions are on the slide already).
+
+The window is a **deferred viewport** (`ctx.show_viewport_deferred`). An immediate viewport is drawn inside every frame of the main window; with the animated background running at 60 fps both windows then waited for the screen refresh one after the other and the presenter view stuttered. Now the two windows share an `Arc<Mutex<PresenterShared>>` (kept in `ctx.data`): every main frame compares what the presenter view shows with the document (`PresenterState::shows`, no copy) and hands over a new `PresenterState` – and asks the presenter window to repaint – only when something changed. The presenter window repaints on its own for running animations and once a second for the clock. Each window has its own egui clock, so the shared state also carries the main window's time (`PresenterShared::now`). Keys pressed in the presenter window, *Reset* and closing are stored in the shared state, the main window is woken with `request_repaint_of(ViewportId::ROOT)` and picks them up (`Nav::merge`), so you can drive the talk from either window. Closing the window (or P again) turns it off. Where a platform can't open a second window, egui reports `ViewportClass::Embedded` and the view appears as a window inside Mindful instead.
 
 ### Phone remote (`remote.rs`)
 
 **R** (or the phone button while presenting) opens a card with a QR code. The first time, `remote::start` launches a tiny HTTP server on port 8765 (or the next free one), listening on all network interfaces, with plain `std::net` and one thread per request. The address is the computer's IP in the local network (found with the UDP “connect without sending” trick) plus a random token, e.g. `http://192.168.1.20:8765/?t=3fa2…`. Requests without the right token get a 403.
 
-- `GET /` serves one self-contained HTML page (`PAGE`): timer, slide title, next slide, notes and two big buttons; it also reacts to swipes and vibrates on tap.
+- `GET /` serves one self-contained HTML page (`PAGE`): timer, slide title, next slide, speaker notes and two big buttons; it also reacts to swipes and vibrates on tap.
 - `GET /state` returns `RemoteState` as JSON; the page polls it every second.
 - `POST /next` / `POST /prev` queue a `Command` and wake the UI with `ctx.request_repaint()`.
 
@@ -427,6 +431,14 @@ The tour presents directly on the mind map with its own camera (`Camera { center
 **Subtitle:** the note of the current stop (central topic at the start, the branch afterwards) fades in as a card at the bottom once the camera has arrived.
 
 ---
+
+## Search (`search.rs`)
+
+The search box sits in the menu bar (⌘F focuses it). A node matches when its text, description or speaker notes contain the query, ignoring case (`search::hit`, which also says *where*, shown in the status bar as “Match 2 of 5 (in the description)”). `search::ranges` compares char by char, so the byte positions stay those of the original text even after umlauts.
+
+- **While typing** (`Command::FindFirst`) Mindful jumps to the first match; **Enter** (`Command::FindNext`) goes to the next one. `search::hits` lists the matches depth-first in outline order, the same order as in the Markdown text. A jump selects the node, opens collapsed ancestors (`expand_to`) and brings it into view (`doc.reveal`).
+- **In the mind map** every match gets a glow and a ring in `nodes::SEARCH` (amber in every theme, at least 1.5 px wide, so it stays visible when zoomed far out), and `search::mark` gives the matching part of the label a background. A collapsed node lights up too when a match is hidden below it.
+- **In the Markdown editor** the layouter marks every match the same way; Enter scrolls to the next one (`doc.md_find`, `md_find_scroll`, scrolled with the galley position of that character) while the focus stays in the search box.
 
 ## Icons on nodes (`icons.rs`)
 
@@ -613,6 +625,8 @@ cargo test
 | `slide_layouts_in_markdown` | layout comments are read and written back |
 | `numbers_are_split_and_formatted_like_the_original` | big-number layout: splitting and count-up formatting (English and German) |
 | `render_slides` (ignored, run on demand) | renders every slide of both examples, the presenter view and a tour overview to PNG for a visual check |
+| `speaker_notes_round_trip_apart_from_the_description` | `<!-- notes: … -->` (one line and a block, under headings and bullets) is read into `speaker_notes`, kept apart from the description, survives editing and is written back exactly |
+| `matches_ignore_case_and_find_notes` | search ignores case, keeps byte positions after umlauts, finds text, description and speaker notes in outline order and marks only the match in a `LayoutJob` |
 | `icons_are_read_from_shortcodes` | `:rocket: Text` becomes an icon, unknown names stay text |
 | `logo_is_found_in_the_app_icon` | `assets/icon.svg` has a `logo` group that renders without the icon background |
 | `versions_are_compared` | update check: `v0.3.0` is newer than `0.2.0`, nonsense is ignored |

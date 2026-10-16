@@ -17,6 +17,7 @@ use eframe::egui::{
 };
 use egui_phosphor::regular as icon;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 
 pub enum Event {
     Exit,
@@ -328,6 +329,22 @@ pub fn read_nav(ui: &mut egui::Ui) -> Nav {
 impl Nav {
     pub fn next(&self) -> bool {
         self.right || self.space || self.enter
+    }
+
+    /// Was any key pressed?
+    fn any(&self) -> bool {
+        self.right
+            || self.left
+            || self.space
+            || self.enter
+            || self.home
+            || self.end
+            || self.escape
+            || self.fullscreen
+            || self.strip
+            || self.laser
+            || self.presenter
+            || self.remote
     }
 
     /// Merge the keys from two windows
@@ -1615,42 +1632,113 @@ fn title_job(text: &str, size: f32, ink: Color32, accent: Color32) -> egui::text
     job
 }
 
-/// Notes for the slide: those of the branch and of its bullets
+/// Speaker notes for the slide: those of the branch and of its bullets.
+/// The descriptions are left out – they are on the slide anyway.
 fn speaker_notes(map: &MindMap, slide: &Slide) -> Vec<(String, String)> {
     let mut notes = Vec::new();
     let node = slide.branch.or_else(|| map.root());
     let Some(node) = node.and_then(|id| map.get(id)) else {
         return notes;
     };
-    if !node.note.trim().is_empty() {
-        notes.push((String::new(), node.note.trim().to_string()));
+    if !node.speaker_notes.trim().is_empty() {
+        notes.push((String::new(), node.speaker_notes.trim().to_string()));
     }
     if slide.branch.is_some() {
         for id in map.subtree(node.id).into_iter().skip(1) {
-            if let Some(n) = map.get(id).filter(|n| !n.note.trim().is_empty()) {
-                notes.push((n.text.clone(), n.note.trim().to_string()));
+            if let Some(n) = map.get(id).filter(|n| !n.speaker_notes.trim().is_empty()) {
+                notes.push((n.text.clone(), n.speaker_notes.trim().to_string()));
             }
         }
     }
     notes
 }
 
-/// Contents of the presenter view; returns the keys pressed
-#[allow(clippy::too_many_arguments)]
+/// What the presenter window shows. The main window hands it over whenever it
+/// changes; the presenter window draws from it at its own pace.
+#[derive(Clone, PartialEq)]
+struct PresenterState {
+    map: MindMap,
+    slide: usize,
+    build: usize,
+    build_time: f64,
+    slide_time: f64,
+    /// Start of the stopwatch
+    start: f64,
+    theme: Theme,
+    fx: Effects,
+    build_bullets: bool,
+}
+
+impl PresenterState {
+    fn of(doc: &Document, theme: &Theme, fx: &Effects, build_bullets: bool, start: f64) -> Self {
+        Self {
+            map: doc.map.clone(),
+            slide: doc.slide,
+            build: doc.build,
+            build_time: doc.build_time,
+            slide_time: doc.slide_time,
+            start,
+            theme: *theme,
+            fx: *fx,
+            build_bullets,
+        }
+    }
+
+    /// Same content as `doc` etc.? (Compares without copying the mind map.)
+    fn shows(
+        &self,
+        doc: &Document,
+        theme: &Theme,
+        fx: &Effects,
+        bullets: bool,
+        start: f64,
+    ) -> bool {
+        self.slide == doc.slide
+            && self.build == doc.build
+            && self.build_time == doc.build_time
+            && self.slide_time == doc.slide_time
+            && self.start == start
+            && self.theme == *theme
+            && self.fx == *fx
+            && self.build_bullets == bullets
+            && self.map == doc.map
+    }
+}
+
+/// Shared between the main window and the presenter window
+#[derive(Default)]
+struct PresenterShared {
+    state: Option<PresenterState>,
+    /// Main window's clock (`egui` time) at `at` – every window has a clock of its own
+    main_time: f64,
+    at: Option<std::time::Instant>,
+    /// Keys pressed in the presenter window, picked up by the main window
+    nav: Nav,
+    reset_timer: bool,
+    closed: bool,
+}
+
+impl PresenterShared {
+    /// The main window's time right now
+    fn now(&self) -> f64 {
+        self.main_time + self.at.map_or(0.0, |at| at.elapsed().as_secs_f64())
+    }
+}
+
+/// Contents of the presenter view; returns the keys pressed and whether the timer was reset
 fn presenter_body(
     ui: &mut egui::Ui,
-    doc: &mut Document,
+    state: &PresenterState,
     slides: &[Slide],
-    theme: &Theme,
-    fx: &Effects,
-    build_bullets: bool,
     now: f64,
-    start: f64,
-) -> Nav {
+) -> (Nav, bool) {
+    let (theme, fx, build_bullets, start) =
+        (&state.theme, &state.fx, state.build_bullets, state.start);
+    let mut reset = false;
     let weak = theme.text.gamma_multiply(0.55);
     let nav = read_nav(ui);
     let last = slides.len() - 1;
-    let slide = &slides[doc.slide.min(last)];
+    let slide = &slides[state.slide.min(last)];
 
     // Header: stopwatch, clock, position
     ui.horizontal(|ui| {
@@ -1666,7 +1754,7 @@ fn presenter_body(
             .on_hover_text("Start the timer again")
             .clicked()
         {
-            doc.presenter_start = Some(now);
+            reset = true;
         }
         ui.separator();
         ui.label(
@@ -1682,11 +1770,11 @@ fn presenter_body(
             let mut position = if slide.is_title {
                 format!("Title slide · {} slides", last)
             } else {
-                format!("Slide {} of {}", doc.slide, last)
+                format!("Slide {} of {}", state.slide, last)
             };
             let groups = slide.groups();
             if build_bullets && groups > 0 {
-                position.push_str(&format!("  ·  point {} of {groups}", doc.build));
+                position.push_str(&format!("  ·  point {} of {groups}", state.build));
             }
             ui.label(RichText::new(position).size(18.0).color(weak));
         });
@@ -1717,13 +1805,13 @@ fn presenter_body(
     label(ui, current.left_top() - Vec2::new(0.0, 4.0), "NOW");
     let view = SlideView {
         slides,
-        index: doc.slide.min(last),
-        build: doc.build,
-        build_time: doc.build_time,
-        slide_time: doc.slide_time,
+        index: state.slide.min(last),
+        build: state.build,
+        build_time: state.build_time,
+        slide_time: state.slide_time,
         now,
         appear: 1.0,
-        progress: (doc.slide + 1) as f32 / slides.len() as f32,
+        progress: (state.slide + 1) as f32 / slides.len() as f32,
         interactive: false,
         page: false,
     };
@@ -1732,7 +1820,7 @@ fn presenter_body(
         &mut child,
         current,
         &view,
-        &doc.map,
+        &state.map,
         theme,
         fx,
         build_bullets,
@@ -1748,8 +1836,8 @@ fn presenter_body(
     );
     let next = Rect::from_min_size(right.min, Vec2::new(right_w, right_w * 9.0 / 16.0));
     label(ui, next.left_top() - Vec2::new(0.0, 4.0), "NEXT");
-    if doc.slide < last {
-        let index = doc.slide + 1;
+    if state.slide < last {
+        let index = state.slide + 1;
         let view = SlideView {
             slides,
             index,
@@ -1763,7 +1851,15 @@ fn presenter_body(
             page: false,
         };
         let mut child = ui.new_child(UiBuilder::new().max_rect(next).id_salt("presenter_next"));
-        render_slide(&mut child, next, &view, &doc.map, theme, fx, build_bullets);
+        render_slide(
+            &mut child,
+            next,
+            &view,
+            &state.map,
+            theme,
+            fx,
+            build_bullets,
+        );
     } else {
         ui.painter().rect_filled(next, 14.0, theme.card);
         ui.painter().text(
@@ -1796,11 +1892,11 @@ fn presenter_body(
                         .max_height(inner.y)
                         .auto_shrink(false)
                         .show(ui, |ui| {
-                            let notes = speaker_notes(&doc.map, slide);
+                            let notes = speaker_notes(&state.map, slide);
                             if notes.is_empty() {
                                 ui.label(
                                     RichText::new(
-                                        "No notes on this slide. Add them in the mind map: right-click a node → Note …",
+                                        "No speaker notes on this slide. Add them in the mind map: right-click a node → Speaker notes …",
                                     )
                                     .size(15.0)
                                     .color(weak),
@@ -1828,7 +1924,7 @@ fn presenter_body(
         FontId::proportional(13.0),
         weak,
     );
-    nav
+    (nav, reset)
 }
 
 /// For tests: draw the presenter view straight into `ui`
@@ -1837,64 +1933,113 @@ pub fn presenter_snapshot(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, 
     let slides = slides(&doc.map, theme);
     let now = ui.input(|i| i.time);
     let start = doc.presenter_start.unwrap_or(now);
-    presenter_body(ui, doc, &slides, theme, fx, true, now, start);
+    let state = PresenterState::of(doc, theme, fx, true, start);
+    presenter_body(ui, &state, &slides, now);
 }
 
 /// Presenter view in a window of its own: current and next slide,
 /// notes, stopwatch and clock. Returns the keys pressed there.
+///
+/// The window is a deferred viewport: it repaints on its own and only when needed
+/// (new slide or point, the clock, a running animation). Drawn in lock-step with the
+/// animated main window, both windows waited for the screen refresh one after the
+/// other and ran at half the frame rate.
 fn presenter_window(
     ctx: &egui::Context,
     doc: &mut Document,
-    slides: &[Slide],
     theme: &Theme,
     fx: &Effects,
     build_bullets: bool,
     now: f64,
 ) -> Nav {
+    let id = egui::ViewportId::from_hash_of("mindful_presenter");
     let start = *doc.presenter_start.get_or_insert(now);
+    let shared: Arc<Mutex<PresenterShared>> = ctx.data_mut(|d| {
+        d.get_temp_mut_or_default::<Arc<Mutex<PresenterShared>>>(egui::Id::new(id))
+            .clone()
+    });
+    {
+        let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
+        s.main_time = now;
+        s.at = Some(std::time::Instant::now());
+        // Hand over only what changed (comparing is cheap, copying the map less so)
+        if !s
+            .state
+            .as_ref()
+            .is_some_and(|st| st.shows(doc, theme, fx, build_bullets, start))
+        {
+            s.state = Some(PresenterState::of(doc, theme, fx, build_bullets, start));
+            ctx.request_repaint_of(id);
+        }
+    }
     let builder = egui::ViewportBuilder::default()
         .with_title("Mindful – Presenter view")
         .with_inner_size([1100.0, 700.0])
         .with_min_inner_size([640.0, 420.0]);
-    ctx.show_viewport_immediate(
-        egui::ViewportId::from_hash_of("mindful_presenter"),
-        builder,
-        |ctx, class| {
-            if ctx.input(|i| i.viewport().close_requested()) {
-                doc.presenter = false;
+    let window = shared.clone();
+    ctx.show_viewport_deferred(id, builder, move |ctx, class| {
+        let mut s = window.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(state) = s.state.clone() else {
+            return;
+        };
+        let now = s.now();
+        if ctx.input(|i| i.viewport().close_requested()) {
+            s.closed = true;
+        }
+        // Update the stopwatch and clock at the next full second
+        let secs = (now - state.start).max(0.0);
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+            1.0 - secs.fract() + 0.01,
+        ));
+        let slides = slides(&state.map, &state.theme);
+        let mut out = (Nav::default(), false);
+        let mut body = |ui: &mut egui::Ui| {
+            out = presenter_body(ui, &state, &slides, now);
+        };
+        if class == egui::ViewportClass::Embedded {
+            // No second window possible: as a window inside the app
+            let mut open = true;
+            egui::Window::new("Presenter view")
+                .open(&mut open)
+                .resizable(false)
+                .fixed_size([960.0, 600.0])
+                .frame(egui::Frame::window(&ctx.style()).fill(state.theme.background))
+                .show(ctx, |ui| {
+                    // The body only paints, so reserve the window's size first
+                    ui.set_min_size(Vec2::new(960.0, 600.0));
+                    body(ui);
+                });
+            if !open {
+                s.closed = true;
             }
-            // Update the stopwatch and clock every second
-            ctx.request_repaint_after(std::time::Duration::from_millis(500));
-            let mut nav = Nav::default();
-            let mut body = |ui: &mut egui::Ui| {
-                nav = presenter_body(ui, doc, slides, theme, fx, build_bullets, now, start);
-            };
-            if class == egui::ViewportClass::Embedded {
-                // No second window possible: as a window inside the app
-                let mut open = true;
-                egui::Window::new("Presenter view")
-                    .open(&mut open)
-                    .resizable(false)
-                    .fixed_size([960.0, 600.0])
-                    .frame(egui::Frame::window(&ctx.style()).fill(theme.background))
-                    .show(ctx, |ui| {
-                        body(ui);
-                    });
-                if !open {
-                    doc.presenter = false;
-                }
-            } else {
-                egui::CentralPanel::default()
-                    .frame(
-                        egui::Frame::default()
-                            .fill(theme.background)
-                            .inner_margin(egui::Margin::same(18)),
-                    )
-                    .show(ctx, |ui| body(ui));
-            }
-            nav
-        },
-    )
+        } else {
+            egui::CentralPanel::default()
+                .frame(
+                    egui::Frame::default()
+                        .fill(state.theme.background)
+                        .inner_margin(egui::Margin::same(18)),
+                )
+                .show(ctx, |ui| body(ui));
+        }
+        let (nav, reset) = out;
+        let pressed = nav.any() || reset || s.closed;
+        s.nav = std::mem::take(&mut s.nav).merge(nav);
+        s.reset_timer |= reset;
+        if pressed {
+            // The main window acts on it
+            ctx.request_repaint_of(egui::ViewportId::ROOT);
+        }
+    });
+    // Keys, reset and close from the presenter window (in a window of its own
+    // they arrive with a later frame, embedded right away)
+    let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
+    if std::mem::take(&mut s.reset_timer) {
+        doc.presenter_start = Some(now);
+    }
+    if std::mem::take(&mut s.closed) {
+        doc.presenter = false;
+    }
+    std::mem::take(&mut s.nav)
 }
 
 /// For tests: draw slide `index` fully built up as a card (with shadow) in `card`
@@ -1988,7 +2133,7 @@ pub fn show(
     let mut nav = read_nav(ui);
     // Presenter view in the second window; keys pressed there count too
     if doc.presenter {
-        let keys = presenter_window(ui.ctx(), doc, &slides, theme, fx, build_bullets, now);
+        let keys = presenter_window(ui.ctx(), doc, theme, fx, build_bullets, now);
         nav = nav.merge(keys);
     }
     if nav.presenter {

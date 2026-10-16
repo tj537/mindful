@@ -86,9 +86,14 @@ impl SlideLayout {
 pub struct Node {
     pub id: u64,
     pub text: String,
-    /// Longer text for the node (Markdown paragraphs, presentation note)
+    /// Description: longer text for the node (Markdown paragraphs, below the title on a
+    /// slide, subtitle in the tour)
     #[serde(default)]
     pub note: String,
+    /// Speaker notes: only shown in the presenter view and on the phone remote.
+    /// In Markdown written as `<!-- notes: … -->`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub speaker_notes: String,
     /// Position relative to the centre of the canvas
     pub pos: [f32; 2],
     pub parent: Option<u64>,
@@ -153,6 +158,7 @@ impl Node {
             id,
             text: text.into(),
             note: String::new(),
+            speaker_notes: String::new(),
             pos: [pos.x, pos.y],
             parent,
             collapsed: false,
@@ -188,6 +194,7 @@ pub struct OutlineItem {
     pub level: usize,
     pub text: String,
     pub note: String,
+    pub speaker_notes: String,
     pub task: Option<bool>,
     pub layout: Option<SlideLayout>,
     pub image: Option<String>,
@@ -568,6 +575,7 @@ impl MindMap {
         ));
         push_image(root, None, &mut out);
         push_note(&root.note, None, &mut out);
+        push_speaker_notes(&root.speaker_notes, None, &mut out);
         for branch in self.children(root.id) {
             out.push_str(&format!(
                 "\n## {}{}{}{}\n",
@@ -578,6 +586,7 @@ impl MindMap {
             ));
             push_image(branch, None, &mut out);
             push_note(&branch.note, None, &mut out);
+            push_speaker_notes(&branch.speaker_notes, None, &mut out);
             if self.has_children(branch.id) {
                 out.push('\n');
                 self.markdown_bullets(branch.id, 0, &mut out);
@@ -597,6 +606,7 @@ impl MindMap {
             ));
             push_image(child, Some(&format!("{indent}  ")), out);
             push_note(&child.note, Some(&format!("{indent}  ")), out);
+            push_speaker_notes(&child.speaker_notes, Some(&format!("{indent}  ")), out);
             self.markdown_bullets(child.id, level + 1, out);
         }
     }
@@ -671,6 +681,7 @@ impl MindMap {
             let id = self.add_child_text(p, &item.text);
             if let Some(n) = self.get_mut(id) {
                 n.note = item.note.clone();
+                n.speaker_notes = item.speaker_notes.clone();
                 n.task = item.task;
                 n.layout = item.layout;
                 n.image = item.image.clone();
@@ -700,25 +711,33 @@ impl MindMap {
         let min = items.iter().map(|i| i.level).min().unwrap_or(0);
         let single_root = items.first().is_some_and(|i| i.level == min)
             && items.iter().filter(|i| i.level == min).count() == 1;
-        let (root_text, root_note, root_task, root_image, root_icon, rest) = match items.first() {
-            Some(first) if single_root => (
-                first.text.clone(),
-                first.note.clone(),
-                first.task,
-                first.image.clone(),
-                first.icon.clone(),
-                &items[1..],
-            ),
-            Some(_) => (
-                "Mind map".to_string(),
-                String::new(),
-                None,
-                None,
-                None,
-                &items[..],
-            ),
-            None => (String::new(), String::new(), None, None, None, &items[..]),
-        };
+        let (root_text, (root_note, root_speaker), root_task, root_image, root_icon, rest) =
+            match items.first() {
+                Some(first) if single_root => (
+                    first.text.clone(),
+                    (first.note.clone(), first.speaker_notes.clone()),
+                    first.task,
+                    first.image.clone(),
+                    first.icon.clone(),
+                    &items[1..],
+                ),
+                Some(_) => (
+                    "Mind map".to_string(),
+                    (String::new(), String::new()),
+                    None,
+                    None,
+                    None,
+                    &items[..],
+                ),
+                None => (
+                    String::new(),
+                    (String::new(), String::new()),
+                    None,
+                    None,
+                    None,
+                    &items[..],
+                ),
+            };
 
         let images = std::mem::take(&mut self.images);
         let old = std::mem::replace(
@@ -735,6 +754,7 @@ impl MindMap {
             Some(r) => Node {
                 text: root_text,
                 note: root_note,
+                speaker_notes: root_speaker,
                 task: root_task,
                 image: root_image,
                 icon: root_icon,
@@ -744,6 +764,7 @@ impl MindMap {
                 let mut n = Node::new(self.next_id, &root_text, Vec2::ZERO, None);
                 self.next_id += 1;
                 n.note = root_note;
+                n.speaker_notes = root_speaker;
                 n.task = root_task;
                 n.image = root_image;
                 n.icon = root_icon;
@@ -779,6 +800,7 @@ impl MindMap {
                     self.nodes.push(Node {
                         text: item.text.clone(),
                         note: item.note.clone(),
+                        speaker_notes: item.speaker_notes.clone(),
                         task: item.task,
                         layout: item.layout,
                         image: item.image.clone(),
@@ -792,6 +814,7 @@ impl MindMap {
                     let id = self.add_child_text(parent, &item.text);
                     if let Some(n) = self.get_mut(id) {
                         n.note = item.note.clone();
+                        n.speaker_notes = item.speaker_notes.clone();
                         n.task = item.task;
                         n.layout = item.layout;
                         n.image = item.image.clone();
@@ -823,6 +846,37 @@ fn push_note(note: &str, indent: Option<&str>, out: &mut String) {
             out.push('\n');
         }
     }
+}
+
+/// Start of a speaker-notes comment: `<!-- notes: … -->`
+const NOTES_START: &str = "<!-- notes:";
+
+/// Writes speaker notes as an HTML comment, so other Markdown programs don't show them.
+/// One line stays one line; longer notes become a block that ends with `-->`.
+fn push_speaker_notes(notes: &str, indent: Option<&str>, out: &mut String) {
+    let notes = notes.trim();
+    if notes.is_empty() {
+        return;
+    }
+    // "-->" inside the text would end the comment early
+    let notes = notes.replace("-->", "->");
+    let pad = indent.unwrap_or("");
+    if indent.is_none() {
+        out.push('\n');
+    }
+    if !notes.contains('\n') {
+        out.push_str(&format!("{pad}{NOTES_START} {notes} -->\n"));
+        return;
+    }
+    out.push_str(&format!("{pad}{NOTES_START}\n"));
+    for line in notes.lines() {
+        if line.trim().is_empty() {
+            out.push('\n');
+        } else {
+            out.push_str(&format!("{pad}{}\n", line.trim_end()));
+        }
+    }
+    out.push_str(&format!("{pad}-->\n"));
 }
 
 /// Picture as its own line `![](key)` directly below the entry
@@ -886,6 +940,8 @@ fn split_task(text: &str) -> (Option<bool>, String) {
 
 enum Line {
     Heading(usize, String, Option<bool>, Option<SlideLayout>),
+    /// Speaker notes from a `<!-- notes: … -->` comment (possibly over several lines)
+    Notes(String),
     Bullet(usize, String, Option<bool>),
     Plain(usize, String),
     Image(String),
@@ -929,13 +985,65 @@ fn classify(line: &str) -> Line {
     Line::Plain(indent, trimmed.to_string())
 }
 
+/// Is this line the start of a speaker-notes comment? Then returns its indentation.
+pub fn notes_start(line: &str) -> Option<usize> {
+    let trimmed = line.trim_start();
+    let head = trimmed.get(..NOTES_START.len())?;
+    head.eq_ignore_ascii_case(NOTES_START)
+        .then(|| line.len() - trimmed.len())
+}
+
+/// Classifies all lines; a speaker-notes comment over several lines becomes one `Line::Notes`
+fn classify_lines(text: &str) -> Vec<Line> {
+    let mut lines = Vec::new();
+    let mut rest = text.lines();
+    while let Some(line) = rest.next() {
+        let Some(indent) = notes_start(line) else {
+            lines.push(classify(line));
+            continue;
+        };
+        let first = &line.trim_start()[NOTES_START.len()..];
+        let mut body: Vec<String> = Vec::new();
+        let mut closed = false;
+        let take = |part: &str, body: &mut Vec<String>| match part.find("-->") {
+            Some(end) => {
+                body.push(part[..end].trim_end().to_string());
+                true
+            }
+            None => {
+                body.push(part.trim_end().to_string());
+                false
+            }
+        };
+        if take(first.trim_start(), &mut body) {
+            closed = true;
+        }
+        while !closed {
+            let Some(next) = rest.next() else { break };
+            // Only remove the indentation the comment itself has
+            let cut = next
+                .char_indices()
+                .take_while(|(i, c)| *i < indent && c.is_whitespace())
+                .count();
+            closed = take(&next[cut..], &mut body);
+        }
+        let notes = body.join("\n").trim().to_string();
+        lines.push(if notes.is_empty() {
+            Line::Blank
+        } else {
+            Line::Notes(notes)
+        });
+    }
+    lines
+}
+
 /// Splits Markdown or indented text into an outline.
 ///
 /// If the text contains headings or bullets, it counts as Markdown:
 /// plain lines are then notes for the entry before them. Otherwise every line
 /// is an entry and the indentation decides the level.
 pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
-    let lines: Vec<Line> = text.lines().map(classify).collect();
+    let lines = classify_lines(text);
     let markdown = lines
         .iter()
         .any(|l| matches!(l, Line::Heading(..) | Line::Bullet(..)));
@@ -958,6 +1066,7 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
             level,
             text,
             note: String::new(),
+            speaker_notes: String::new(),
             task,
             layout: None,
             image: None,
@@ -993,6 +1102,14 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
             Line::Image(target) => {
                 if let Some(last) = items.last_mut() {
                     last.image.get_or_insert(target);
+                }
+            }
+            Line::Notes(notes) => {
+                if let Some(last) = items.last_mut() {
+                    if !last.speaker_notes.is_empty() {
+                        last.speaker_notes.push_str("\n\n");
+                    }
+                    last.speaker_notes.push_str(&notes);
                 }
             }
             Line::Blank => {}
@@ -1089,6 +1206,34 @@ mod tests {
         // Unknown comments stay part of the text
         let map = MindMap::from_outline("# A\n\n## B <!-- hello -->\n").unwrap();
         assert!(map.nodes.iter().any(|n| n.text == "B <!-- hello -->"));
+    }
+
+    #[test]
+    fn speaker_notes_round_trip_apart_from_the_description() {
+        let md = "# Talk\n\nWelcome everyone.\n\n<!-- notes: Introduce yourself first. -->\n\n## Mars\n\nThe red planet.\n\n<!-- notes:\nMention the rover.\n\nThen ask a question.\n-->\n\n- Size\n  Half of Earth\n  <!-- notes: Compare with the Moon. -->\n- Moons\n";
+        let map = MindMap::from_outline(md).unwrap();
+        let find = |t: &str| map.nodes.iter().find(|n| n.text == t).unwrap();
+        assert_eq!(find("Talk").note, "Welcome everyone.");
+        assert_eq!(find("Talk").speaker_notes, "Introduce yourself first.");
+        assert_eq!(find("Mars").note, "The red planet.");
+        assert_eq!(
+            find("Mars").speaker_notes,
+            "Mention the rover.\n\nThen ask a question."
+        );
+        assert_eq!(find("Size").note, "Half of Earth");
+        assert_eq!(find("Size").speaker_notes, "Compare with the Moon.");
+        assert_eq!(find("Moons").speaker_notes, "");
+        assert_eq!(map.to_markdown(), md);
+        // Notes survive editing in the Markdown editor
+        let mut edited = map.clone();
+        edited.apply_outline(&md.replace("## Mars", "## Mars!"));
+        let mars = edited.nodes.iter().find(|n| n.text == "Mars!").unwrap();
+        assert_eq!(mars.speaker_notes, find("Mars").speaker_notes);
+        // "-->" in the notes must not end the comment early
+        let mut map = MindMap::new("A");
+        map.get_mut(0).unwrap().speaker_notes = "a --> b".into();
+        let again = MindMap::from_outline(&map.to_markdown()).unwrap();
+        assert_eq!(again.nodes[0].speaker_notes, "a -> b");
     }
 
     #[test]
@@ -1202,6 +1347,14 @@ mod example_tests {
             .find(|b| b.text == "Stargazing Checklist")
             .unwrap();
         assert_eq!(map.task_progress(checklist.id), Some((2, 6)));
+        // Speaker notes on the title, on four slides and on two bullets
+        assert_eq!(
+            map.nodes
+                .iter()
+                .filter(|n| !n.speaker_notes.is_empty())
+                .count(),
+            7
+        );
         assert!(branches
             .iter()
             .all(|b| !b.note.is_empty() && (map.has_children(b.id) || b.image.is_some())));
@@ -1217,6 +1370,13 @@ mod example_tests {
         let branches: Vec<&Node> = map.children(root).collect();
         assert_eq!(branches.len(), 16);
         assert_eq!(map.nodes.iter().filter(|n| n.image.is_some()).count(), 5);
+        assert_eq!(
+            map.nodes
+                .iter()
+                .filter(|n| !n.speaker_notes.is_empty())
+                .count(),
+            7
+        );
         assert_eq!(
             branches.iter().filter(|b| b.layout.is_some()).count(),
             SlideLayout::ALL.len()

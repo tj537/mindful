@@ -30,7 +30,7 @@ Mindful keeps **one source**: an outline that you can write as plain Markdown. T
 - **Slides that design themselves.** Twelve layouts – timelines, cycles, pyramids, comparisons, Venn diagrams, bar, pie and line charts – are built from ordinary bullet points. Choose a layout with a right-click; no dragging boxes or fiddling with chart editors.
 - **Plain text you own.** Markdown in, Markdown out. It works with Git, with any text editor and with AI assistants. A `.mindmap` file is a single file, pictures included.
 - **Made for AI.** The built-in prompt teaches ChatGPT, Claude & co. Mindful's format, including which slide layout fits which content. Paste the answer and you have a structured talk with diagrams in a minute.
-- **Presenting built in.** Presenter view with notes and timer, PDF export, checkboxes you tick off live, keyboard-only navigation and a camera flight through the mind map as an alternative to slides.
+- **Presenting built in.** Presenter view with speaker notes and timer, PDF export, checkboxes you tick off live, keyboard-only navigation and a camera flight through the mind map as an alternative to slides.
 - **Small and fast.** A native app written in Rust: about 11 MB on disk, a 5 MB download, starts instantly and runs offline. No account, no cloud, no tracking, no subscription.
 - **Open source.** MIT licensed – use it, change it, build on it.
 
@@ -53,15 +53,15 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 
 | View | What it's for |
 |---|---|
-| **Markdown** | Write fast: `#` central topic, `##` main branches, `-` points, plain lines as notes, with a live preview |
+| **Markdown** | Write fast: `#` central topic, `##` main branches, `-` points, plain lines as descriptions, with a live preview |
 | **Presentation** | A title slide plus one slide per main branch; bullet points appear one by one |
 | **Mind map** | Collect and arrange ideas: drag, color, collapse, auto layout |
 | **Tour** | Present on the mind map itself: the camera flies from branch to branch and reveals what's below |
 
 **Slides that look like slides**
 - Twelve slide layouts built from your bullet points: timeline, cycle, pyramid, funnel, comparison, 2×2 matrix, Venn diagram, big number (it counts up), quote – and **bar, pie and line charts** from points like `Solar: 42 %`, animated as they build up. Pick one with a right-click on the slide.
-- **Presenter view** (P): a second window with the current and next slide, your notes, a timer and the clock, while the audience sees only the slides.
-- **Your phone as a remote** (R): scan a QR code and your phone shows big Next/Back buttons, the slide title, your notes and the timer. It works in your own Wi-Fi with no app and no cloud, and it closes again when the presentation ends.
+- **Presenter view** (P): a second window with the current and next slide, your speaker notes, a timer and the clock, while the audience sees only the slides. Speaker notes are separate from the text on the slide (right-click a node → *Speaker notes …*), so you never read out what everyone can already see.
+- **Your phone as a remote** (R): scan a QR code and your phone shows big Next/Back buttons, the slide title, your speaker notes and the timer. It works in your own Wi-Fi with no app and no cloud, and it closes again when the presentation ends.
 - **Export the slides as PDF** to send or print them.
 - Pictures from your computer: drag them onto a node or a slide, or paste a screenshot. One picture sits beside the text, a single picture fills the slide, several become a gallery.
 - Checkboxes you can tick off during the talk, with confetti if you like.
@@ -69,7 +69,8 @@ Mindful doesn't try to replace PowerPoint for pixel-perfect corporate decks. It 
 
 **Writing and organizing**
 - **Icons on nodes:** 64 icons from the right-click menu, written as `:rocket:` in Markdown and shown in the branch colour on the mind map and the slides. Typed emojis work too.
-- Tabs, undo/redo, search, copy & paste, notes on every node, 16 colour themes (from Light and Dark to Nord, Dracula, Tokyo Night, Gruvbox, Solarized and Catppuccin) plus a colour editor for your own – all behind the gear at the top right.
+- Tabs, undo/redo, copy & paste, a description and speaker notes on every node, 16 colour themes (from Light and Dark to Nord, Dracula, Tokyo Night, Gruvbox, Solarized and Catppuccin) plus a colour editor for your own – all behind the gear at the top right.
+- **Search** (⌘F) looks through the text, descriptions and speaker notes, jumps to the first match while you type and marks every match – in the mind map with a ring (also on collapsed branches that hide one), in the Markdown editor with a highlight. Enter goes to the next match.
 - The status bar at the bottom holds zoom, *Fit to window* and *Auto layout*; *Help → Mindful on GitHub* opens the project page.
 - Mindful tells you when a new version is out (one request to GitHub per start; can be switched off in the settings).
 - Templates (brainstorming, project plan, SWOT, weekly plan, meeting notes, book summary) and a complete example to explore: **File → Open example → The Universe** (also in German).
@@ -128,7 +129,7 @@ The table uses Mac keys. On Windows and Linux use Ctrl instead of ⌘ (and Shift
 | Arrow keys | Move selection |
 | ⌘C · ⌘X · ⌘V · ⌘D | Copy · cut · paste · duplicate (⌘V also pastes images) |
 | ⌘L | Auto layout |
-| ⌘F | Find (Enter: next match) |
+| ⌘F | Search text, descriptions and speaker notes (Enter: next match) |
 | ⌘0 · ⌘+ · ⌘− | Fit to window · zoom |
 | **General** | |
 | ⌘E | Switch between Markdown and mind map |
@@ -142,7 +143,7 @@ The table uses Mac keys. On Windows and Linux use Ctrl instead of ⌘ (and Shift
 | Home · End | First · last slide (fn← · fn→ on a Mac) |
 | G | Quick jump to any slide |
 | L | Laser pointer |
-| P | Presenter view (notes, next slide, timer) |
+| P | Presenter view (speaker notes, next slide, timer) |
 | R | Phone as a remote control |
 | F · Esc | Full screen · end |
 
@@ -157,11 +158,14 @@ Introduction (becomes the subtitle of the title slide).
 
 ## A main branch <!-- timeline -->
 
-A note on the branch, shown below the slide title.
+A description of the branch, shown below the slide title.
 The comment after the heading picks a slide layout (optional).
 
+<!-- notes: Speaker notes – only in the presenter view and on the phone. -->
+
 - A point
-  A note on the point
+  A description of the point
+  <!-- notes: What to say about this point -->
   - A sub-point
 - [ ] An open task
 - [x] A done task
@@ -189,7 +193,7 @@ A picture belongs to the line directly above it. Mindful stores the picture data
 | `pie` | parts of a whole | 2–6 points like `Dark energy: 68 %` |
 | `line` | a trend over time | 3–8 points like `2015: 1,950`, in order |
 
-Notes on a node (right-click → *Note …*) appear in the presenter view.
+**Description and speaker notes are two different things.** Plain lines below a heading or point are its *description*: they appear in the Markdown preview, below the slide title and as the subtitle in the camera tour. *Speaker notes* are written as an HTML comment, `<!-- notes: … -->` – one line, or a block over several lines that ends with `-->`. They appear only in the presenter view and on the phone remote, never on a slide, and other Markdown programs don't show them either. In the mind map both have their own entry in the right-click menu (*Description …*, *Speaker notes …*) and their own badge on the node.
 
 ## Building from source
 
@@ -257,6 +261,7 @@ src/
 ├── tour.rs            camera tour
 ├── images.rs          inserting, scaling and drawing pictures
 ├── icons.rs           icons on nodes
+├── search.rs          search: matches in text, descriptions and speaker notes
 ├── logo.rs            the Mindful mark (from assets/icon.svg)
 ├── remote.rs          phone remote (small web server)
 ├── update.rs          update check

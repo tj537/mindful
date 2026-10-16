@@ -2,9 +2,13 @@
 
 Eine Reise von unserer Sonne bis an den Rand des beobachtbaren Universums.
 
+<!-- notes: Willkommen! Diese Sprechernotizen siehst nur du: in der Referentenansicht (P) und auf dem Handy (R). -->
+
 ## :sunny: Unser Sonnensystem <!-- compare -->
 
 Acht Planeten und unzählige kleinere Körper kreisen um einen gewöhnlichen Stern: die Sonne.
+
+<!-- notes: Mit einer Frage anfangen: Wer kann alle acht Planeten aufzählen? -->
 
 - Gesteinsplaneten
   - Merkur, Venus, Erde, Mars
@@ -19,6 +23,7 @@ Acht Planeten und unzählige kleinere Körper kreisen um einen gewöhnlichen Ste
   - Wasser-, Ammoniak- und Methaneis
   - Kalt, stürmisch und weit draußen
 - Zwergplaneten
+  <!-- notes: Pluto verlor den Status durch eine Abstimmung der Internationalen Astronomischen Union in Prag. -->
   - Pluto, Ceres, Eris und mehr
   - Zu klein, um ihre Bahn freizuräumen
   - Pluto verlor 2006 den Planetenstatus
@@ -110,9 +115,16 @@ Sterne leben nicht allein – sie sammeln sich in riesigen Sternsystemen mit vie
 
 Orte, an denen die Schwerkraft so stark ist, dass nicht einmal Licht entkommt.
 
+<!-- notes:
+Schwarze Löcher saugen nichts an wie ein Staubsauger.
+
+Aus der Ferne ziehen sie genauso wie jedes andere Objekt mit derselben Masse.
+-->
+
 - Entstehen, wenn sehr massereiche Sterne kollabieren
 - Ereignishorizont: der Punkt ohne Wiederkehr
   Was ihn überschreitet, kommt nie wieder heraus.
+  <!-- notes: Von außen gesehen scheint die Zeit am Horizont stillzustehen. -->
 - Sagittarius A*
   - Im Zentrum der Milchstraße
   - Etwa 4 Millionen Sonnenmassen
@@ -141,6 +153,8 @@ Alles, was wir sehen können – Sterne, Planeten, wir –, ist nur ein kleiner 
 ## :rocket: Raumfahrt <!-- timeline -->
 
 In wenigen Jahrzehnten vom ersten Satelliten bis zum Blick ins frühe Universum.
+
+<!-- notes: Betonen: Zwischen Sputnik und der Mondlandung lagen nur zwölf Jahre. -->
 
 - 1957
   - Sputnik 1, der erste Satellit
@@ -208,6 +222,8 @@ Dinge, die du mit eigenen Augen sehen kannst – meist reicht eine klare Nacht.
 ## :quote: Ein letzter Gedanke <!-- quote -->
 
 Der größte Teil der Materie in deinem Körper wurde vor langer Zeit in Sternen geschmiedet.
+
+<!-- notes: Nach dem Zitat kurz Pause machen, dann bedanken und Fragen beantworten. -->
 
 - Der Kosmos ist in uns. Wir sind aus Sternenstaub gemacht.
   - Carl Sagan

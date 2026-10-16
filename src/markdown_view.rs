@@ -4,7 +4,7 @@
 use crate::document::Document;
 use crate::icons;
 use crate::images;
-use crate::model::{MindMap, Node};
+use crate::model::{notes_start, MindMap, Node};
 use crate::nodes::paint_checkbox;
 use crate::theme::Theme;
 use eframe::egui::{
@@ -26,8 +26,9 @@ fn bullet_len(trimmed: &str) -> Option<usize> {
 }
 
 /// Colours headings and bullets – in the colour of the
-/// main branch they belong to, as in the mind map.
-fn highlight(text: &str, theme: &Theme) -> LayoutJob {
+/// main branch they belong to, as in the mind map. Speaker notes
+/// (`<!-- notes: … -->`) are set apart in italics, search matches get a background.
+fn highlight(text: &str, theme: &Theme, query: &str) -> LayoutJob {
     let mut job = LayoutJob::default();
     let fmt = |size: f32, color: Color32| TextFormat {
         font_id: FontId::proportional(size),
@@ -35,15 +36,25 @@ fn highlight(text: &str, theme: &Theme) -> LayoutJob {
         ..Default::default()
     };
     let note_color = theme.text.gamma_multiply(0.72);
+    let notes_fmt = TextFormat {
+        italics: true,
+        ..fmt(BODY, theme.text.gamma_multiply(0.5))
+    };
     let mut branch_color = theme.root;
     let mut branch = 0;
+    let mut in_notes = false;
 
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim_start();
         let indent = line.len() - trimmed.len();
         let hashes = trimmed.chars().take_while(|&c| c == '#').count();
 
-        if hashes > 0 && trimmed[hashes..].starts_with(' ') {
+        if in_notes || notes_start(line).is_some() {
+            // Comment ends on this line? (On the first line only after `<!--`)
+            let body = if in_notes { line } else { &trimmed[4..] };
+            in_notes = !body.contains("-->");
+            job.append(line, 0.0, notes_fmt.clone());
+        } else if hashes > 0 && trimmed[hashes..].starts_with(' ') {
             let size = match hashes {
                 1 => 26.0,
                 2 => 20.0,
@@ -87,10 +98,11 @@ fn highlight(text: &str, theme: &Theme) -> LayoutJob {
             job.append(line, 0.0, fmt(BODY, note_color));
         }
     }
+    crate::search::mark(&mut job, query, crate::nodes::SEARCH.gamma_multiply(0.45));
     job
 }
 
-pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool) {
+pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool, query: &str) {
     if preview {
         egui::SidePanel::right("md_preview")
             .resizable(true)
@@ -117,7 +129,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool)
                 .auto_shrink([false; 2])
                 .show(ui, |ui| {
                     let mut layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
-                        let mut job = highlight(text, theme);
+                        let mut job = highlight(text, theme, query);
                         job.wrap.max_width = wrap_width;
                         ui.fonts(|f| f.layout_job(job))
                     };
@@ -129,7 +141,20 @@ pub fn show(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, preview: bool)
                         .lock_focus(true)
                         .hint_text("# Topic\n\n## Branch\n\nA note about the branch\n\n- Child\n  - deeper")
                         .layouter(&mut layouter);
-                    let resp = ui.add(editor);
+                    let output = editor.show(ui);
+                    let resp = output.response;
+                    // Search: scroll to the current match once
+                    if std::mem::take(&mut doc.md_find_scroll) {
+                        if let Some(pos) = doc.md_find {
+                            let index = doc.md_text.get(..pos).map_or(0, |t| t.chars().count());
+                            let cursor = egui::text::CCursor::new(index);
+                            let at = output.galley.pos_from_ccursor(cursor);
+                            ui.scroll_to_rect(
+                                at.translate(output.galley_pos.to_vec2()).expand(40.0),
+                                Some(egui::Align::Center),
+                            );
+                        }
+                    }
                     if std::mem::take(&mut doc.md_focus) {
                         resp.request_focus();
                     }
@@ -184,6 +209,26 @@ fn note(ui: &mut egui::Ui, note: &str, indent: f32) {
     });
 }
 
+/// Speaker notes in the preview: small, italic, with a speech bubble
+fn speaker(ui: &mut egui::Ui, notes: &str, indent: f32) {
+    if notes.trim().is_empty() {
+        return;
+    }
+    ui.horizontal_top(|ui| {
+        ui.add_space(indent);
+        ui.add(
+            egui::Label::new(
+                RichText::new(format!("{}  {}", icon::CHAT_CIRCLE_TEXT, notes.trim()))
+                    .small()
+                    .italics()
+                    .weak(),
+            )
+            .wrap(),
+        )
+        .on_hover_text("Speaker notes – only in the presenter view");
+    });
+}
+
 fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
     let Some(root) = map.root().and_then(|r| map.get(r)) else {
         return;
@@ -197,6 +242,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
     ui.add(egui::Label::new(RichText::new(icons::label(root)).size(26.0).strong()).wrap());
     thumb(ui, map, root, 0.0);
     note(ui, &root.note, 0.0);
+    speaker(ui, &root.speaker_notes, 0.0);
 
     for branch in map.children(root.id) {
         let color = branch_color(map, theme, branch.id);
@@ -217,6 +263,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
         });
         thumb(ui, map, branch, 12.0);
         note(ui, &branch.note, 12.0);
+        speaker(ui, &branch.speaker_notes, 12.0);
         bullets(ui, map, branch.id, 0, color);
     }
 }
@@ -246,6 +293,7 @@ fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color
         });
         thumb(ui, map, child, indent + 16.0);
         note(ui, &child.note, indent + 16.0);
+        speaker(ui, &child.speaker_notes, indent + 16.0);
         bullets(ui, map, child.id, depth + 1, color);
     }
 }

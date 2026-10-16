@@ -16,6 +16,7 @@ mod offscreen;
 mod pdf;
 mod present;
 mod remote;
+mod search;
 #[cfg(test)]
 mod snapshot;
 mod theme;

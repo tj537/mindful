@@ -2,9 +2,13 @@
 
 A journey from our Sun to the edge of the observable universe.
 
+<!-- notes: Welcome everyone. These speaker notes are only visible to you: in the presenter view (P) and on your phone (R). -->
+
 ## :sunny: Our Solar System <!-- compare -->
 
 Eight planets and countless smaller bodies circle an ordinary star: the Sun.
+
+<!-- notes: Start with a question: who can name all eight planets? -->
 
 - Rocky planets
   - Mercury, Venus, Earth, Mars
@@ -19,6 +23,7 @@ Eight planets and countless smaller bodies circle an ordinary star: the Sun.
   - Water, ammonia and methane ice
   - Cold, windy and far away
 - Dwarf planets
+  <!-- notes: Pluto lost its status in a vote of the International Astronomical Union in Prague. -->
   - Pluto, Ceres, Eris and more
   - Too small to clear their orbit
   - Pluto was reclassified in 2006
@@ -110,9 +115,16 @@ Stars don't live alone – they gather in vast star systems of four main shapes.
 
 Regions where gravity is so strong that not even light can escape.
 
+<!-- notes:
+Black holes don't suck things in like a vacuum cleaner.
+
+From far away they pull just like any other object of the same mass.
+-->
+
 - Form when very massive stars collapse
 - Event horizon: the point of no return
   Anything that crosses it can never come back out.
+  <!-- notes: Seen from outside, time seems to stand still at the horizon. -->
 - Sagittarius A*
   - At the centre of the Milky Way
   - About 4 million solar masses
@@ -141,6 +153,8 @@ Everything we can see – stars, planets, us – is only a small part of it.
 ## :rocket: Spaceflight <!-- timeline -->
 
 Within a few decades, from the first satellite to a view of the early universe.
+
+<!-- notes: Point out that only twelve years passed between Sputnik and the Moon landing. -->
 
 - 1957
   - Sputnik 1, the first satellite
@@ -208,6 +222,8 @@ Things to see with your own eyes – most of them need nothing but a clear night
 ## :quote: One Last Thought <!-- quote -->
 
 Most of the matter in your body was forged inside stars long ago.
+
+<!-- notes: Pause after the quote, then thank the audience and take questions. -->
 
 - The cosmos is within us. We are made of star-stuff.
   - Carl Sagan
