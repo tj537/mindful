@@ -1,3 +1,4 @@
+use crate::icons;
 use base64::Engine;
 use eframe::egui::Vec2;
 use serde::{Deserialize, Serialize};
@@ -97,6 +98,9 @@ pub struct Node {
     /// Bild zum Knoten: Schlüssel in `MindMap::images`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
+    /// Symbol vor dem Text (Kurzname aus `icons::ICONS`, z. B. „rocket“)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 /// Ein eingefügtes Bild, fertig verkleinert und kodiert (JPEG oder PNG).
@@ -148,6 +152,7 @@ impl Node {
             task: None,
             layout: None,
             image: None,
+            icon: None,
         }
     }
 }
@@ -178,6 +183,7 @@ pub struct OutlineItem {
     pub task: Option<bool>,
     pub layout: Option<SlideLayout>,
     pub image: Option<String>,
+    pub icon: Option<String>,
 }
 
 impl MindMap {
@@ -546,13 +552,19 @@ impl MindMap {
         let Some(root) = self.root().and_then(|r| self.get(r)) else {
             return out;
         };
-        out.push_str(&format!("# {}{}\n", task_box(root.task), root.text));
+        out.push_str(&format!(
+            "# {}{}{}\n",
+            task_box(root.task),
+            icons::prefix(root.icon.as_deref()),
+            root.text
+        ));
         push_image(root, None, &mut out);
         push_note(&root.note, None, &mut out);
         for branch in self.children(root.id) {
             out.push_str(&format!(
-                "\n## {}{}{}\n",
+                "\n## {}{}{}{}\n",
                 task_box(branch.task),
+                icons::prefix(branch.icon.as_deref()),
                 branch.text,
                 layout_comment(branch.layout)
             ));
@@ -570,8 +582,9 @@ impl MindMap {
         for child in self.children(id) {
             let indent = "  ".repeat(level);
             out.push_str(&format!(
-                "{indent}- {}{}\n",
+                "{indent}- {}{}{}\n",
                 task_box(child.task),
+                icons::prefix(child.icon.as_deref()),
                 child.text
             ));
             push_image(child, Some(&format!("{indent}  ")), out);
@@ -653,6 +666,7 @@ impl MindMap {
                 n.task = item.task;
                 n.layout = item.layout;
                 n.image = item.image.clone();
+                n.icon = item.icon.clone();
             }
             if stack.is_empty() {
                 top.push(id);
@@ -678,12 +692,13 @@ impl MindMap {
         let min = items.iter().map(|i| i.level).min().unwrap_or(0);
         let single_root = items.first().is_some_and(|i| i.level == min)
             && items.iter().filter(|i| i.level == min).count() == 1;
-        let (root_text, root_note, root_task, root_image, rest) = match items.first() {
+        let (root_text, root_note, root_task, root_image, root_icon, rest) = match items.first() {
             Some(first) if single_root => (
                 first.text.clone(),
                 first.note.clone(),
                 first.task,
                 first.image.clone(),
+                first.icon.clone(),
                 &items[1..],
             ),
             Some(_) => (
@@ -691,9 +706,10 @@ impl MindMap {
                 String::new(),
                 None,
                 None,
+                None,
                 &items[..],
             ),
-            None => (String::new(), String::new(), None, None, &items[..]),
+            None => (String::new(), String::new(), None, None, None, &items[..]),
         };
 
         let images = std::mem::take(&mut self.images);
@@ -713,6 +729,7 @@ impl MindMap {
                 note: root_note,
                 task: root_task,
                 image: root_image,
+                icon: root_icon,
                 ..r.clone()
             },
             None => {
@@ -721,6 +738,7 @@ impl MindMap {
                 n.note = root_note;
                 n.task = root_task;
                 n.image = root_image;
+                n.icon = root_icon;
                 n
             }
         };
@@ -756,6 +774,7 @@ impl MindMap {
                         task: item.task,
                         layout: item.layout,
                         image: item.image.clone(),
+                        icon: item.icon.clone(),
                         parent: Some(parent),
                         ..n
                     });
@@ -768,6 +787,7 @@ impl MindMap {
                         n.task = item.task;
                         n.layout = item.layout;
                         n.image = item.image.clone();
+                        n.icon = item.icon.clone();
                     }
                     id
                 }
@@ -924,13 +944,17 @@ pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
         .min()
         .unwrap_or(2);
 
-    let item = |level: usize, text: String, task: Option<bool>| OutlineItem {
-        level,
-        text,
-        note: String::new(),
-        task,
-        layout: None,
-        image: None,
+    let item = |level: usize, text: String, task: Option<bool>| {
+        let (icon, text) = icons::split_icon(&text);
+        OutlineItem {
+            level,
+            text,
+            note: String::new(),
+            task,
+            layout: None,
+            image: None,
+            icon,
+        }
     };
     let mut items: Vec<OutlineItem> = Vec::new();
     let mut heading_level = 0;

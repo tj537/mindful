@@ -6,6 +6,7 @@
 
 use crate::diagrams::{draw as draw_diagram, layout_menu, Item};
 use crate::document::Document;
+use crate::icons;
 use crate::images::{self, Fit};
 use crate::model::{MindMap, SlideLayout, StoredImage};
 use crate::nodes::paint_checkbox;
@@ -1038,7 +1039,7 @@ fn picture_grid(
 
 fn collect(map: &MindMap, id: u64, depth: usize, color: Color32, out: &mut Vec<Bullet>) {
     for child in map.children(id) {
-        out.push((depth, child.text.clone(), color, child.task, child.id));
+        out.push((depth, icons::label(child), color, child.task, child.id));
         if depth < 2 {
             collect(map, child.id, depth + 1, color, out);
         }
@@ -1050,11 +1051,11 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
         return Vec::new();
     };
     let mut out = vec![Slide {
-        title: root.text.clone(),
+        title: icons::label(root),
         note: root.note.clone(),
         bullets: map
             .children(root.id)
-            .map(|c| (0, c.text.clone(), color_of(map, theme, c.id), c.task, c.id))
+            .map(|c| (0, icons::label(c), color_of(map, theme, c.id), c.task, c.id))
             .collect(),
         color: theme.root,
         is_title: true,
@@ -1097,7 +1098,7 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
         }
         out.push(Slide {
             images,
-            title: branch.text.clone(),
+            title: icons::label(branch),
             note: branch.note.clone(),
             bullets,
             color,
@@ -1243,10 +1244,8 @@ pub fn render_slide(
             let rect = ui
                 .scope(|ui| {
                     ui.multiply_opacity(title_in);
-                    ui.add(
-                        egui::Label::new(RichText::new(text).size(size).strong().color(ink)).wrap(),
-                    )
-                    .rect
+                    ui.add(egui::Label::new(title_job(text, size, ink, slide.color)).wrap())
+                        .rect
                 })
                 .inner;
             // Lichtschimmer: ein heller, schräger Streifen zieht einmal über den Titel
@@ -1540,6 +1539,22 @@ pub fn render_slide(
         new_layout,
         animating,
     }
+}
+
+/// Folientitel; ein Symbol am Anfang (Phosphor-Zeichen) in der Farbe der Folie
+fn title_job(text: &str, size: f32, ink: Color32, accent: Color32) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let format = |color| egui::TextFormat::simple(FontId::proportional(size), color);
+    let mut chars = text.chars();
+    match chars.next() {
+        // Phosphor liegt im Bereich für private Zeichen
+        Some(c) if ('\u{E000}'..='\u{F8FF}').contains(&c) => {
+            job.append(&c.to_string(), 0.0, format(accent));
+            job.append(chars.as_str(), 0.0, format(ink));
+        }
+        _ => job.append(text, 0.0, format(ink)),
+    }
+    job
 }
 
 /// Notizen zur Folie: die des Zweigs und die seiner Stichpunkte

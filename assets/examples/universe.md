@@ -1,8 +1,8 @@
-# The Universe
+# :comet: The Universe
 
 A journey from our Sun to the edge of the observable universe.
 
-## Our Solar System <!-- compare -->
+## :sunny: Our Solar System <!-- compare -->
 
 Eight planets and countless smaller bodies circle an ordinary star: the Sun.
 
@@ -23,7 +23,7 @@ Eight planets and countless smaller bodies circle an ordinary star: the Sun.
   - Too small to clear their orbit
   - Pluto was reclassified in 2006
 
-## Planet Portraits
+## :camera: Planet Portraits
 
 Three kinds of worlds – painted by the computer, not photographed.
 
@@ -34,7 +34,7 @@ Three kinds of worlds – painted by the computer, not photographed.
 - A giant with rings
   ![](ringed-planet.jpg)
 
-## Planet Sizes <!-- bars -->
+## :bar_chart: Planet Sizes <!-- bars -->
 
 Diameter in thousand kilometres – Jupiter is eleven times as wide as Earth.
 
@@ -47,7 +47,7 @@ Diameter in thousand kilometres – Jupiter is eleven times as wide as Earth.
 - Uranus: 50.7
 - Neptune: 49.2
 
-## How Big Is Space? <!-- pyramid -->
+## :globe: How Big Is Space? <!-- pyramid -->
 
 Each step up the ladder is thousands of times larger than the one before.
 
@@ -62,13 +62,13 @@ Each step up the ladder is thousands of times larger than the one before.
 - Observable universe
   - 93 billion light-years across
 
-## Where Stars Are Born
+## :sparkles: Where Stars Are Born
 
 ![](nebula.jpg)
 
 In vast clouds of gas and dust, gravity slowly lights up new suns.
 
-## The Life of a Star <!-- cycle -->
+## :star: The Life of a Star <!-- cycle -->
 
 Stars are born, shine and die – and their remains build the next generation.
 
@@ -83,7 +83,7 @@ Stars are born, shine and die – and their remains build the next generation.
 - Supernova or white dwarf
   - Scatters new material into space
 
-## Galaxies <!-- matrix -->
+## :spiral: Galaxies <!-- matrix -->
 
 Stars don't live alone – they gather in vast star systems of four main shapes.
 
@@ -104,7 +104,7 @@ Stars don't live alone – they gather in vast star systems of four main shapes.
   - Example: the Magellanic Clouds
   - Often shaped by collisions
 
-## Black Holes
+## :half: Black Holes
 
 ![](black-hole.jpg)
 
@@ -120,7 +120,7 @@ Regions where gravity is so strong that not even light can escape.
   - 2019: M87*
   - 2022: Sagittarius A*
 
-## The Big Bang <!-- number -->
+## :zap: The Big Bang <!-- number -->
 
 The universe had a beginning – and it is still expanding today.
 
@@ -130,7 +130,7 @@ The universe had a beginning – and it is still expanding today.
 - Since 1998 we know the expansion is speeding up
   Dark energy, which nobody fully understands yet, is thought to drive it.
 
-## What the Universe Is Made Of <!-- pie -->
+## :atom: What the Universe Is Made Of <!-- pie -->
 
 Everything we can see – stars, planets, us – is only a small part of it.
 
@@ -138,7 +138,7 @@ Everything we can see – stars, planets, us – is only a small part of it.
 - Dark matter: 27 %
 - Ordinary matter: 5 %
 
-## Spaceflight <!-- timeline -->
+## :rocket: Spaceflight <!-- timeline -->
 
 Within a few decades, from the first satellite to a view of the early universe.
 
@@ -155,7 +155,7 @@ Within a few decades, from the first satellite to a view of the early universe.
 - 2021
   - James Webb Space Telescope launches
 
-## What Does Life Need? <!-- venn -->
+## :seedling: What Does Life Need? <!-- venn -->
 
 Life as we know it depends on three ingredients coming together.
 
@@ -167,7 +167,7 @@ Life as we know it depends on three ingredients coming together.
   Carbon, hydrogen, nitrogen, oxygen and a few other elements.
 - Together: a world where life could exist
 
-## Exoplanets Found <!-- line -->
+## :planet: Exoplanets Found <!-- line -->
 
 Confirmed planets around other stars, roughly – and the count keeps climbing.
 
@@ -178,7 +178,7 @@ Confirmed planets around other stars, roughly – and the count keeps climbing.
 - 2020: 4,300
 - 2025: 5,900
 
-## Searching for Another Earth <!-- funnel -->
+## :binoculars: Searching for Another Earth <!-- funnel -->
 
 Narrowing billions of stars down to the few places where life might exist.
 
@@ -193,7 +193,7 @@ Narrowing billions of stars down to the few places where life might exist.
 - Signs of life
   - None found – yet
 
-## Stargazing Checklist
+## :check: Stargazing Checklist
 
 Things to see with your own eyes – most of them need nothing but a clear night.
 
@@ -205,7 +205,7 @@ Things to see with your own eyes – most of them need nothing but a clear night
   The Perseids peak every year around 12 August.
 - [ ] Visit a dark-sky park
 
-## One Last Thought <!-- quote -->
+## :quote: One Last Thought <!-- quote -->
 
 Most of the matter in your body was forged inside stars long ago.
 

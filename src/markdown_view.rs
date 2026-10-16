@@ -2,6 +2,7 @@
 //! Jede Änderung im Text wird sofort in die Mindmap übernommen.
 
 use crate::document::Document;
+use crate::icons;
 use crate::images;
 use crate::model::{MindMap, Node};
 use crate::nodes::paint_checkbox;
@@ -193,7 +194,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
             .weak(),
     );
     ui.add_space(6.0);
-    ui.add(egui::Label::new(RichText::new(root.text.as_str()).size(26.0).strong()).wrap());
+    ui.add(egui::Label::new(RichText::new(icons::label(root)).size(26.0).strong()).wrap());
     thumb(ui, map, root, 0.0);
     note(ui, &root.note, 0.0);
 
@@ -204,7 +205,7 @@ fn preview_outline(ui: &mut egui::Ui, map: &MindMap, theme: &Theme) {
             let (bar, _) = ui.allocate_exact_size(Vec2::new(4.0, 22.0), Sense::hover());
             ui.painter().rect_filled(bar, 2.0, color);
             ui.add(
-                egui::Label::new(RichText::new(branch.text.as_str()).size(19.0).strong()).wrap(),
+                egui::Label::new(RichText::new(icons::label(branch)).size(19.0).strong()).wrap(),
             );
             if let Some(layout) = branch.layout {
                 ui.label(
@@ -231,7 +232,7 @@ fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color
                     let r =
                         Rect::from_center_size(r.center() + Vec2::new(0.0, 2.0), Vec2::splat(13.0));
                     paint_checkbox(ui.painter(), r, done, color, ui.visuals().text_color());
-                    let mut text = RichText::new(child.text.as_str());
+                    let mut text = RichText::new(icons::label(child));
                     if done {
                         text = text.strikethrough().weak();
                     }
@@ -239,7 +240,7 @@ fn bullets(ui: &mut egui::Ui, map: &MindMap, id: u64, depth: usize, color: Color
                 }
                 None => {
                     ui.label(RichText::new("•").color(color).strong());
-                    ui.add(egui::Label::new(child.text.as_str()).wrap());
+                    ui.add(egui::Label::new(icons::label(child)).wrap());
                 }
             }
         });

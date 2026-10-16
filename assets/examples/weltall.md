@@ -1,8 +1,8 @@
-# Das Weltall
+# :comet: Das Weltall
 
 Eine Reise von unserer Sonne bis an den Rand des beobachtbaren Universums.
 
-## Unser Sonnensystem <!-- compare -->
+## :sunny: Unser Sonnensystem <!-- compare -->
 
 Acht Planeten und unzählige kleinere Körper kreisen um einen gewöhnlichen Stern: die Sonne.
 
@@ -23,7 +23,7 @@ Acht Planeten und unzählige kleinere Körper kreisen um einen gewöhnlichen Ste
   - Zu klein, um ihre Bahn freizuräumen
   - Pluto verlor 2006 den Planetenstatus
 
-## Planeten-Porträts
+## :camera: Planeten-Porträts
 
 Drei Arten von Welten – vom Computer gemalt, nicht fotografiert.
 
@@ -34,7 +34,7 @@ Drei Arten von Welten – vom Computer gemalt, nicht fotografiert.
 - Ein Riese mit Ringen
   ![](ringed-planet.jpg)
 
-## Größe der Planeten <!-- bars -->
+## :bar_chart: Größe der Planeten <!-- bars -->
 
 Durchmesser in tausend Kilometern – Jupiter ist elfmal so breit wie die Erde.
 
@@ -47,7 +47,7 @@ Durchmesser in tausend Kilometern – Jupiter ist elfmal so breit wie die Erde.
 - Uranus: 50,7
 - Neptun: 49,2
 
-## Wie groß ist das All? <!-- pyramid -->
+## :globe: Wie groß ist das All? <!-- pyramid -->
 
 Jede Stufe ist tausendfach größer als die vorige.
 
@@ -62,13 +62,13 @@ Jede Stufe ist tausendfach größer als die vorige.
 - Beobachtbares Universum
   - 93 Milliarden Lichtjahre Durchmesser
 
-## Wo Sterne geboren werden
+## :sparkles: Wo Sterne geboren werden
 
 ![](nebula.jpg)
 
 In riesigen Wolken aus Gas und Staub zündet die Schwerkraft langsam neue Sonnen.
 
-## Das Leben eines Sterns <!-- cycle -->
+## :star: Das Leben eines Sterns <!-- cycle -->
 
 Sterne entstehen, leuchten und sterben – und aus ihren Resten wird die nächste Generation.
 
@@ -83,7 +83,7 @@ Sterne entstehen, leuchten und sterben – und aus ihren Resten wird die nächst
 - Supernova oder Weißer Zwerg
   - Verstreut neues Material im All
 
-## Galaxien <!-- matrix -->
+## :spiral: Galaxien <!-- matrix -->
 
 Sterne leben nicht allein – sie sammeln sich in riesigen Sternsystemen mit vier Grundformen.
 
@@ -104,7 +104,7 @@ Sterne leben nicht allein – sie sammeln sich in riesigen Sternsystemen mit vie
   - Beispiel: die Magellanschen Wolken
   - Oft durch Zusammenstöße geformt
 
-## Schwarze Löcher
+## :half: Schwarze Löcher
 
 ![](black-hole.jpg)
 
@@ -120,7 +120,7 @@ Orte, an denen die Schwerkraft so stark ist, dass nicht einmal Licht entkommt.
   - 2019: M87*
   - 2022: Sagittarius A*
 
-## Der Urknall <!-- number -->
+## :zap: Der Urknall <!-- number -->
 
 Das Universum hatte einen Anfang – und dehnt sich bis heute aus.
 
@@ -130,7 +130,7 @@ Das Universum hatte einen Anfang – und dehnt sich bis heute aus.
 - Seit 1998 bekannt: die Ausdehnung wird schneller
   Angetrieben wohl von der Dunklen Energie, die noch niemand ganz versteht.
 
-## Woraus das Universum besteht <!-- pie -->
+## :atom: Woraus das Universum besteht <!-- pie -->
 
 Alles, was wir sehen können – Sterne, Planeten, wir –, ist nur ein kleiner Teil davon.
 
@@ -138,7 +138,7 @@ Alles, was wir sehen können – Sterne, Planeten, wir –, ist nur ein kleiner 
 - Dunkle Materie: 27 %
 - Normale Materie: 5 %
 
-## Raumfahrt <!-- timeline -->
+## :rocket: Raumfahrt <!-- timeline -->
 
 In wenigen Jahrzehnten vom ersten Satelliten bis zum Blick ins frühe Universum.
 
@@ -155,7 +155,7 @@ In wenigen Jahrzehnten vom ersten Satelliten bis zum Blick ins frühe Universum.
 - 2021
   - Start des James-Webb-Weltraumteleskops
 
-## Was braucht Leben? <!-- venn -->
+## :seedling: Was braucht Leben? <!-- venn -->
 
 Leben, wie wir es kennen, braucht drei Zutaten zugleich.
 
@@ -167,7 +167,7 @@ Leben, wie wir es kennen, braucht drei Zutaten zugleich.
   Kohlenstoff, Wasserstoff, Stickstoff, Sauerstoff und ein paar weitere Elemente.
 - Zusammen: eine Welt, auf der Leben möglich ist
 
-## Entdeckte Exoplaneten <!-- line -->
+## :planet: Entdeckte Exoplaneten <!-- line -->
 
 Bestätigte Planeten um andere Sterne, ungefähr – und es werden immer mehr.
 
@@ -178,7 +178,7 @@ Bestätigte Planeten um andere Sterne, ungefähr – und es werden immer mehr.
 - 2020: 4.300
 - 2025: 5.900
 
-## Die Suche nach einer zweiten Erde <!-- funnel -->
+## :binoculars: Die Suche nach einer zweiten Erde <!-- funnel -->
 
 Von Milliarden Sternen zu den wenigen Orten, an denen es Leben geben könnte.
 
@@ -193,7 +193,7 @@ Von Milliarden Sternen zu den wenigen Orten, an denen es Leben geben könnte.
 - Spuren von Leben
   - Noch keine gefunden
 
-## Checkliste für Sternengucker
+## :check: Checkliste für Sternengucker
 
 Dinge, die du mit eigenen Augen sehen kannst – meist reicht eine klare Nacht.
 
@@ -205,7 +205,7 @@ Dinge, die du mit eigenen Augen sehen kannst – meist reicht eine klare Nacht.
   Die Perseiden erreichen jedes Jahr um den 12. August ihren Höhepunkt.
 - [ ] Einen Sternenpark besuchen
 
-## Ein letzter Gedanke <!-- quote -->
+## :quote: Ein letzter Gedanke <!-- quote -->
 
 Der größte Teil der Materie in deinem Körper wurde vor langer Zeit in Sternen geschmiedet.
 

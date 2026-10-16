@@ -9,7 +9,9 @@
 
 use crate::document::{Camera, Document, TourState};
 use crate::model::MindMap;
-use crate::nodes::{node_size, node_style, paint_label, paint_node, paint_task, paint_thumb};
+use crate::nodes::{
+    label_job, node_size, node_style, paint_label, paint_node, paint_task, paint_thumb,
+};
 use crate::present::{
     backdrop, color_of, confetti_burst, confetti_draw, corner_buttons, ease_in_out_cubic,
     ease_out_back, ease_out_cubic, filmstrip, laser, read_nav, strip_keys, vignette, Backdrop,
@@ -609,9 +611,10 @@ pub fn show(
         }
         let font = style.font_size * scale;
         if font >= 3.0 {
-            let text = map.get(d.id).map(|n| n.text.clone()).unwrap_or_default();
-            let galley = p.layout_no_wrap(text, FontId::proportional(font), style.text);
-            paint_label(&p, label, galley, &style, task, scale);
+            if let Some(n) = map.get(d.id) {
+                let galley = p.layout_job(label_job(n, &style, font));
+                paint_label(&p, label, galley, &style, task, scale);
+            }
         }
     }
 

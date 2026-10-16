@@ -1,10 +1,11 @@
 //! Aussehen und Zeichnen der Mindmap-Knoten – gemeinsam genutzt von der
 //! Mindmap-Fläche (app.rs), der Kamerafahrt (tour.rs) und dem Export.
 
+use crate::icons;
 use crate::images::{self, Fit};
 use crate::model::{MindMap, Node};
 use crate::theme::Theme;
-use eframe::egui::{self, Color32, FontId, Pos2, Rect, Stroke, Vec2};
+use eframe::egui::{self, text::LayoutJob, Color32, FontId, Pos2, Rect, Stroke, TextFormat, Vec2};
 
 /// Mindestgröße eines Knotens bei Zoom 1
 pub const MIN_NODE: Vec2 = Vec2::new(90.0, 34.0);
@@ -56,16 +57,34 @@ pub fn node_style(map: &MindMap, theme: &Theme, id: u64) -> NodeStyle {
     }
 }
 
+/// Beschriftung eines Knotens: Symbol (in der Zweigfarbe) und Text
+pub fn label_job(node: &Node, style: &NodeStyle, size: f32) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    if let Some(glyph) = node.icon.as_deref().and_then(icons::glyph) {
+        // Auf farbigen Knoten in Textfarbe, auf hellen Karten in der Zweigfarbe
+        let color = if style.outlined {
+            style.accent
+        } else {
+            style.text
+        };
+        job.append(
+            &format!("{glyph}  "),
+            0.0,
+            TextFormat::simple(FontId::proportional(size * 1.05), color),
+        );
+    }
+    job.append(
+        &node.text,
+        0.0,
+        TextFormat::simple(FontId::proportional(size), style.text),
+    );
+    job
+}
+
 /// Größe eines Knotens bei Zoom 1
 pub fn node_size(ctx: &egui::Context, map: &MindMap, theme: &Theme, node: &Node) -> Vec2 {
     let style = node_style(map, theme, node.id);
-    let galley = ctx.fonts(|f| {
-        f.layout_no_wrap(
-            node.text.clone(),
-            FontId::proportional(style.font_size),
-            style.text,
-        )
-    });
+    let galley = ctx.fonts(|f| f.layout_job(label_job(node, &style, style.font_size)));
     let task = if node.task.is_some() {
         Vec2::new(TASK_SPACE, 0.0)
     } else {
@@ -275,7 +294,12 @@ pub fn paint_label(
     };
     let pos = node.center() + Vec2::new(shift, 0.0) - galley.size() / 2.0;
     let size = galley.size();
-    painter.galley_with_override_text_color(pos, galley, color);
+    if done {
+        painter.galley_with_override_text_color(pos, galley, color);
+    } else {
+        // Farben aus dem Galley behalten (Symbol in Zweigfarbe)
+        painter.galley(pos, galley, color);
+    }
     if done {
         let y = pos.y + size.y * 0.55;
         painter.line_segment(

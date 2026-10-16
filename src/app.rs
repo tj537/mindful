@@ -4,7 +4,7 @@ use crate::export::{self, ExportNode};
 use crate::images;
 use crate::model::{parse_outline, Clip, MindMap, SlideLayout, StoredImage, DEFAULT_TEXT};
 use crate::nodes::{
-    node_size, node_style, paint_label, paint_node, paint_task, paint_thumb, thumb_size,
+    label_job, node_size, node_style, paint_label, paint_node, paint_task, paint_thumb, thumb_size,
     with_thumb, NodeStyle, MIN_NODE, TASK_SPACE,
 };
 use crate::present::ease_in_out_cubic;
@@ -184,6 +184,8 @@ enum Action {
     /// Folien-Layout eines Hauptzweigs
     SetLayout(u64, Option<SlideLayout>),
     SetColor(u64, Option<usize>),
+    /// Symbol vor dem Text setzen oder entfernen
+    SetIcon(u64, Option<String>),
     /// Bild(er) per Dateidialog einfügen
     InsertImage(u64),
     /// Bild aus der Zwischenablage einfügen
@@ -545,6 +547,16 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
         Action::EditNote(id),
         out,
     );
+    let current_icon = map.get(id).and_then(|n| n.icon.clone());
+    let icon_label = match current_icon.as_deref().and_then(crate::icons::glyph) {
+        Some(g) => format!("{g}  Icon"),
+        None => l(icon::SMILEY, "Icon"),
+    };
+    ui.menu_button(icon_label, |ui| {
+        if let Some(choice) = crate::icons::picker(ui, current_icon.as_deref()) {
+            *out = Some(Action::SetIcon(id, choice));
+        }
+    });
     let has_image = map.get(id).is_some_and(|n| n.image.is_some());
     ui.menu_button(l(icon::IMAGE, "Image"), |ui| {
         let insert = if has_image {
@@ -1532,6 +1544,12 @@ impl MindMapApp {
                 doc.checkpoint();
                 if let Some(n) = doc.map.get_mut(id) {
                     n.color = color;
+                }
+            }
+            Action::SetIcon(id, icon) => {
+                doc.checkpoint();
+                if let Some(n) = doc.map.get_mut(id) {
+                    n.icon = icon;
                 }
             }
             Action::InsertImage(id) => {
@@ -2740,11 +2758,7 @@ impl MindMapApp {
             .filter(|n| !doc.map.is_hidden(n.id))
             .map(|n| {
                 let style = node_style(&doc.map, theme, n.id);
-                let galley = painter.layout_no_wrap(
-                    n.text.clone(),
-                    FontId::proportional(style.font_size * zoom),
-                    style.text,
-                );
+                let galley = painter.layout_job(label_job(n, &style, style.font_size * zoom));
                 let task_space = if n.task.is_some() { TASK_SPACE } else { 0.0 };
                 let mut size = (galley.size()
                     + (style.padding + Vec2::new(task_space, 0.0)) * zoom)

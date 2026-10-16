@@ -284,7 +284,7 @@ mod tests {
                         );
                         p.line_segment(
                             [Pos2::new(x, 470.0), Pos2::new(x + 60.0, 470.0)],
-                            Stroke::new(4.0, accent),
+                            Stroke::new(4.0_f32, accent),
                         );
                         // Rechts: zwei Folien übereinander
                         let back =
