@@ -1,0 +1,9 @@
+# Überall Unix-Zeilenenden – auch beim Auschecken unter Windows. Sonst würden
+# die eingebetteten Beispiele und Vorlagen anders aussehen als das, was
+# Mindful beim Speichern schreibt (und die Tests würden das bemerken).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
