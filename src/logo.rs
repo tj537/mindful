@@ -23,7 +23,7 @@ fn render(px: u32) -> Option<ColorImage> {
     resvg::render_node(node, transform, &mut pixmap.as_mut())?;
     // Only the opacity counts: make it white, the colour is added when drawing
     let mut rgba = pixmap.take();
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         p[0] = p[3];
         p[1] = p[3];
         p[2] = p[3];

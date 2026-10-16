@@ -120,9 +120,37 @@ enum Piece {
 }
 
 /// A card laid out at scale `s`: its size and what goes where (relative to the top left)
+/// Largest scale at which card text is laid out (see `nodes::MAX_TEXT_SIZE`)
+const MAX_CARD_TEXT_SCALE: f32 = 1.0;
+
 struct CardLayout {
     size: Vec2,
     pieces: Vec<(Rect, Piece)>,
+}
+
+impl CardLayout {
+    /// The same layout `k` times as large (positions, sizes and text)
+    fn scaled(self, k: f32) -> CardLayout {
+        if (k - 1.0).abs() < 1e-4 {
+            return self;
+        }
+        let pieces = self
+            .pieces
+            .into_iter()
+            .map(|(r, piece)| {
+                let r = Rect::from_min_size((r.min.to_vec2() * k).to_pos2(), r.size() * k);
+                let piece = match piece {
+                    Piece::Text(g) => Piece::Text(crate::nodes::scale_galley(g, k)),
+                    other => other,
+                };
+                (r, piece)
+            })
+            .collect();
+        CardLayout {
+            size: self.size * k,
+            pieces,
+        }
+    }
 }
 
 /// Lines below a sub-point card: its own sub-points, depth first
@@ -897,7 +925,10 @@ pub fn show(
             continue;
         }
         let s = k * d.factor;
-        let layout = layout_card(&ctx, map, theme, d.id, d.kind, s);
+        // Laid out at a fixed text step and scaled, so zooming re-uses the layout.
+        // Capped: titles are 66 pt at scale 1, and huge glyphs overflow the font atlas.
+        let step = crate::nodes::text_step(s).min(MAX_CARD_TEXT_SCALE);
+        let layout = layout_card(&ctx, map, theme, d.id, d.kind, step).scaled(s / step);
         let rect = Rect::from_center_size(center, layout.size);
         if !rect.intersects(area.expand(40.0)) {
             continue;

@@ -6,6 +6,7 @@ use crate::images::{self, Fit};
 use crate::model::{MindMap, Node};
 use crate::theme::Theme;
 use eframe::egui::{self, text::LayoutJob, Color32, FontId, Pos2, Rect, Stroke, TextFormat, Vec2};
+use std::sync::Arc;
 
 /// Colour of search matches – the same in every theme, so matches stand out
 pub const SEARCH: Color32 = Color32::from_rgb(255, 190, 40);
@@ -58,6 +59,47 @@ pub fn node_style(map: &MindMap, theme: &Theme, id: u64) -> NodeStyle {
             edge_width: 2.0,
         },
     }
+}
+
+/// Text is laid out only at these scale steps (about 6 % apart). While the
+/// camera zooms, the scale changes every frame; laying text out at each new
+/// size would rasterise every glyph again and re-upload the font atlas – the
+/// tour stuttered. Instead the galley at the next step up is scaled down.
+pub fn text_step(scale: f32) -> f32 {
+    const STEPS_PER_DOUBLING: f32 = 12.0;
+    2f32.powf((scale.max(1e-3).log2() * STEPS_PER_DOUBLING).ceil() / STEPS_PER_DOUBLING)
+}
+
+/// Largest font size that is actually rasterised. Bigger text (a card flying
+/// right past the camera) is scaled up from this size: huge glyphs would fill
+/// egui's font atlas, which is then cleared and rebuilt every frame.
+pub const MAX_TEXT_SIZE: f32 = 64.0;
+
+/// Scales a laid-out galley by `k` (the vertices, not the font size)
+pub fn scale_galley(mut galley: Arc<egui::Galley>, k: f32) -> Arc<egui::Galley> {
+    if (k - 1.0).abs() < 1e-4 {
+        return galley;
+    }
+    let g = Arc::make_mut(&mut galley);
+    for row in &mut g.rows {
+        row.visuals.mesh_bounds = k * row.visuals.mesh_bounds;
+        for v in &mut row.visuals.mesh.vertices {
+            v.pos = Pos2::new(k * v.pos.x, k * v.pos.y);
+        }
+    }
+    g.mesh_bounds = k * g.mesh_bounds;
+    g.rect = k * g.rect;
+    galley
+}
+
+/// Lays out `make(size)` at the next text step at or above `size` and scales it to `size`
+pub fn layout_stepped(
+    painter: &egui::Painter,
+    size: f32,
+    make: impl Fn(f32) -> LayoutJob,
+) -> Arc<egui::Galley> {
+    let stepped = text_step(size).min(MAX_TEXT_SIZE);
+    scale_galley(painter.layout_job(make(stepped)), size / stepped)
 }
 
 /// Label of a node: icon (in the branch colour) and text

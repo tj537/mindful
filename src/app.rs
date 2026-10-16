@@ -3224,9 +3224,12 @@ impl MindMapApp {
             .filter(|n| !doc.map.is_hidden(n.id))
             .map(|n| {
                 let style = node_style(&doc.map, theme, n.id);
-                let mut job = label_job(n, &style, style.font_size * zoom);
-                crate::search::mark(&mut job, &query, SEARCH.gamma_multiply(0.55));
-                let galley = painter.layout_job(job);
+                let galley =
+                    crate::nodes::layout_stepped(&painter, style.font_size * zoom, |size| {
+                        let mut job = label_job(n, &style, size);
+                        crate::search::mark(&mut job, &query, SEARCH.gamma_multiply(0.55));
+                        job
+                    });
                 let task_space = if n.task.is_some() { TASK_SPACE } else { 0.0 };
                 let mut size = (galley.size()
                     + (style.padding + Vec2::new(task_space, 0.0)) * zoom)

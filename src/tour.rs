@@ -552,7 +552,8 @@ pub fn show(
         let font = style.font_size * scale;
         if font >= 3.0 {
             if let Some(n) = map.get(d.id) {
-                let galley = p.layout_job(label_job(n, &style, font));
+                let galley =
+                    crate::nodes::layout_stepped(&p, font, |size| label_job(n, &style, size));
                 paint_label(&p, label, galley, &style, task, scale);
             }
         }

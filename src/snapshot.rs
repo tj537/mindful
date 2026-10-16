@@ -491,4 +491,86 @@ mod tests {
         step(&mut snap, &mut app, vec![]);
         assert_eq!(app.root_for_test(), ("Mars".to_string(), true));
     }
+
+    /// Frame time of both tour styles while flying (not a correctness test):
+    /// `cargo test --release bench_tour -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn bench_tour() {
+        use crate::document::Document;
+        use eframe::egui::{Event, Key, Modifiers};
+        use std::time::Instant;
+        let theme = &THEMES[1];
+        for style in [
+            crate::present::TourStyle::MindMap,
+            crate::present::TourStyle::Free,
+        ] {
+            let mut map =
+                MindMap::from_outline(include_str!("../assets/examples/universe.md")).unwrap();
+            crate::images::resolve(&mut map, None);
+            let mut snap = Snapshot::retina(1440.0, 900.0, 2.0);
+            install_fonts(&snap.ctx);
+            snap.ctx.set_visuals(visuals_for(theme));
+            snap.ctx.style_mut(apply_spacing);
+            snap.frame(0.0, |_| {});
+            let sizes = map
+                .nodes
+                .iter()
+                .map(|n| (n.id, crate::nodes::node_size(&snap.ctx, &map, theme, n)))
+                .collect();
+            map.auto_layout(&sizes);
+            let mut doc = Document::new(map, None);
+            doc.set_mode(Mode::Tour);
+            let mut fx = Effects {
+                tour_style: style,
+                ..Default::default()
+            };
+            let mut times = Vec::new();
+            let frames = if std::env::var("BENCH_LOOP").is_ok() {
+                20_000
+            } else {
+                240
+            };
+            for i in 0..frames {
+                let t = 100.0 + i as f64 / 60.0;
+                // Next stop every 40 frames, so the camera keeps flying
+                let events = if i % 40 == 20 && (i < 150 || frames == 240) {
+                    [true, false]
+                        .map(|pressed| Event::Key {
+                            key: Key::ArrowRight,
+                            physical_key: None,
+                            pressed,
+                            repeat: false,
+                            modifiers: Modifiers::NONE,
+                        })
+                        .to_vec()
+                } else {
+                    vec![]
+                };
+                let start = Instant::now();
+                snap.frame_with_events(t, events, |ctx| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::default().fill(theme.background))
+                        .show(ctx, |ui| crate::tour::show(ui, &mut doc, theme, &mut fx));
+                });
+                let ms = start.elapsed().as_secs_f64() * 1000.0;
+                if i >= 20 {
+                    times.push(ms);
+                }
+                if ms > 8.0 && std::env::var("BENCH_VERBOSE").is_ok() {
+                    eprintln!("  slow frame {i}: {ms:.1} ms (stop {})", doc.tour.stop);
+                }
+            }
+            times.sort_by(f64::total_cmp);
+            let avg = times.iter().sum::<f64>() / times.len() as f64;
+            eprintln!(
+                "{:?}: avg {:.2} ms, median {:.2} ms, p95 {:.2} ms, max {:.2} ms",
+                style as u8,
+                avg,
+                times[times.len() / 2],
+                times[times.len() * 95 / 100],
+                times[times.len() - 1]
+            );
+        }
+    }
 }

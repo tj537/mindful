@@ -406,6 +406,10 @@ Every frame `present::show` publishes the current state (`Remote::publish`, with
 
 *Export → Slides as PDF* runs in a background thread (`MindMapApp::start_pdf_export`; the status bar shows “slide 3 of 16”, polled by `poll_pdf_export`). `pdf::export` creates its own egui context with the app's fonts and theme, renders each slide with `draw_static` at 1280 × 720 points × 1.5 (1920 × 1080 pixels) through `Offscreen`, encodes it as JPEG and writes the pages with a tiny PDF writer of its own (`write_pdf`: catalog, page tree, info, and per page a JPEG image object plus one drawing command). Pages are 960 × 540 pt, like PowerPoint's widescreen format. The text in the PDF is part of the image, so it isn't selectable.
 
+### Text while zooming
+
+The tour (both styles) and the mind map canvas change the scale every frame while the camera moves. Laying text out at each new size made egui rasterise every glyph again; with the large sizes of a card flying past the camera the font atlas overflowed and was rebuilt – a full 2048 × 2048 texture upload every frame. So text is laid out only at fixed steps (`nodes::text_step`, about 6 % apart) and at most at `MAX_TEXT_SIZE` (64 pt), and the finished galley is scaled to the exact size (`nodes::scale_galley`, `layout_stepped`; free-flight cards are laid out at a capped step and scaled as a whole with `CardLayout::scaled`). `cargo test --release bench_tour -- --ignored --nocapture` measures the frame time of both styles while flying (`BENCH_VERBOSE=1` lists slow frames).
+
 ## Camera tour (`tour.rs`)
 
 The tour presents directly on the mind map with its own camera (`Camera { center, zoom }` in world coordinates), independent of the editing view.
