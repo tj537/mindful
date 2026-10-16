@@ -21,8 +21,8 @@ Write an outline, see it as a mind map, and present it as slides or as a camera 
 | View | What it's for |
 |---|---|
 | **Markdown** | Write fast: `#` central topic, `##` main branches, `-` points, plain lines as notes, with a live preview |
-| **Mind map** | Collect and arrange ideas: drag, color, collapse, auto layout |
 | **Presentation** | A title slide plus one slide per main branch; bullet points appear one by one |
+| **Mind map** | Collect and arrange ideas: drag, color, collapse, auto layout |
 | **Tour** | Present on the mind map itself: the camera flies from branch to branch and reveals what's below |
 
 **Slides that look like slides**

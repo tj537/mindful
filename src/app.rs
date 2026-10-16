@@ -285,13 +285,13 @@ fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool
             "Markdown",
             SC_MARKDOWN,
         ),
-        (Mode::Mindmap, icon::GRAPH, "Mind map", SC_MARKDOWN),
         (
             Mode::Present,
             icon::PRESENTATION,
             "Presentation",
             SC_PRESENT,
         ),
+        (Mode::Mindmap, icon::GRAPH, "Mind map", SC_MARKDOWN),
         (Mode::Tour, icon::PATH, "Tour", SC_TOUR),
     ];
     let font = FontId::proportional(14.0);
@@ -328,7 +328,7 @@ fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool
             r
         })
         .collect();
-    let index = modes.iter().position(|m| m.0 == current).unwrap_or(1);
+    let index = modes.iter().position(|m| m.0 == current).unwrap_or(2);
     let at = ui
         .ctx()
         .animate_value_with_time(ui.id().with("mode_switch"), index as f32, 0.18);
@@ -1990,18 +1990,18 @@ impl MindMapApp {
                 );
                 cmd_item(
                     ui,
-                    mode != Mode::Mindmap,
-                    &l(icon::GRAPH, "Mind map"),
-                    None,
-                    Command::SetMode(Mode::Mindmap),
-                    &mut out,
-                );
-                cmd_item(
-                    ui,
                     true,
                     &l(icon::PRESENTATION, "Presentation"),
                     Some(&SC_PRESENT),
                     Command::SetMode(Mode::Present),
+                    &mut out,
+                );
+                cmd_item(
+                    ui,
+                    mode != Mode::Mindmap,
+                    &l(icon::GRAPH, "Mind map"),
+                    None,
+                    Command::SetMode(Mode::Mindmap),
                     &mut out,
                 );
                 cmd_item(
@@ -2058,14 +2058,6 @@ impl MindMapApp {
             if show_tools {
                 ui.separator();
                 if show_file_tools {
-                    tool(
-                        ui,
-                        icon::FILE_PLUS,
-                        "New tab",
-                        Some(&SC_NEW_TAB),
-                        true,
-                        Command::NewTab,
-                    );
                     tool(
                         ui,
                         icon::FOLDER_OPEN,
@@ -2203,6 +2195,7 @@ impl MindMapApp {
 
                 // „AI prompt“ mit Aufklappmenü
                 let popup_id = ui.make_persistent_id("ai_prompt_popup");
+                ui.spacing_mut().button_padding = Vec2::new(14.0, 5.0);
                 let ai = ui
                     .add(
                         egui::Button::new(
@@ -2216,7 +2209,7 @@ impl MindMapApp {
                         .fill(accent.gamma_multiply(0.14))
                         .stroke(Stroke::new(1.0_f32, accent.gamma_multiply(0.45)))
                         .corner_radius(14.0)
-                        .min_size(Vec2::new(if ai_compact { 58.0 } else { 0.0 }, 28.0)),
+                        .min_size(Vec2::new(if ai_compact { 58.0 } else { 0.0 }, 30.0)),
                     )
                     .on_hover_text("AI prompt: build a prompt that lets your AI write a mind map");
                 if ai.clicked() {
