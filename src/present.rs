@@ -1,8 +1,8 @@
-//! Präsentationsmodus: eine Titelfolie und pro Hauptzweig eine Folie.
+//! Presentation mode: a title slide and one slide per main branch.
 //!
-//! Hier liegen auch die Teile, die Folien und Kamerafahrt gemeinsam nutzen:
-//! Effekt-Einstellungen, Tastatur, Buttons, Folienstreifen, animierte
-//! Hintergründe, Laserpointer und Animationskurven.
+//! This is also where the parts live that slides and the camera tour share:
+//! effect settings, keyboard, buttons, slide strip, animated
+//! backgrounds, laser pointer and easing curves.
 
 use crate::diagrams::{draw as draw_diagram, layout_menu, Item};
 use crate::document::Document;
@@ -24,10 +24,10 @@ pub enum Event {
 }
 
 // ---------------------------------------------------------------------------
-// Effekt-Einstellungen
+// Effect settings
 // ---------------------------------------------------------------------------
 
-/// Übergang zwischen zwei Folien
+/// Transition between two slides
 #[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum Transition {
     Slide,
@@ -37,7 +37,7 @@ pub enum Transition {
     Rise,
 }
 
-/// Wie ein Stichpunkt erscheint
+/// How a bullet appears
 #[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum BulletFx {
     #[default]
@@ -47,14 +47,14 @@ pub enum BulletFx {
     Typewriter,
 }
 
-/// Animierter Hintergrund
+/// Animated background
 #[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum Backdrop {
     Plain,
     Aurora,
     #[default]
     Stars,
-    /// Weiche, schwebende Lichtkreise
+    /// Soft, floating circles of light
     Bokeh,
 }
 
@@ -64,37 +64,37 @@ pub struct Effects {
     pub transition: Transition,
     pub bullets: BulletFx,
     pub background: Backdrop,
-    /// Langsames Schweben der Kamera in der Tour
+    /// Slow camera drift in the tour
     pub drift: bool,
-    /// Tour: Kamera federt beim Ankommen leicht nach
+    /// Tour: the camera springs slightly on arrival
     pub bounce: bool,
-    /// Tour: Glühen um den aktuellen Zweig
+    /// Tour: glow around the current branch
     pub glow: bool,
-    /// Tour: Welle, die sich beim Ankommen ausbreitet
+    /// Tour: a wave that spreads on arrival
     pub ripple: bool,
-    /// Tour: Lichtpulse, die an den Verbindungen entlanglaufen
+    /// Tour: light pulses running along the connections
     pub pulses: bool,
-    /// Tour: Unterpunkte Ebene für Ebene per Tastendruck aufdecken
+    /// Tour: reveal sub-points level by level on a key press
     pub step_levels: bool,
-    /// Konfetti beim Abhaken einer Checkbox
+    /// Confetti when ticking off a checkbox
     pub confetti: bool,
-    /// Dunklere Bildränder
+    /// Darker image edges
     pub vignette: bool,
-    /// Folien: farbiger Balken am linken Rand der Folie
+    /// Slides: coloured bar at the left edge of the slide
     pub accent_bar: bool,
-    /// Titelfolie: die Hauptzweige als farbige Themen-Marken zeigen
+    /// Title slide: show the main branches as coloured topic chips
     pub title_topics: bool,
-    /// Folien: Lichtschimmer, der über den Titel zieht
+    /// Slides: a shimmer of light that sweeps across the title
     pub shine: bool,
-    /// Folien: langsamer Zoom, solange eine Folie zu sehen ist
+    /// Slides: slow zoom while a slide is visible
     pub ken_burns: bool,
-    /// Tour: Sterne ziehen beim Flug zu Streifen
+    /// Tour: stars stretch into streaks during the flight
     pub warp: bool,
-    /// Tour: Knoten außerhalb des Scheinwerfers rücken zurück
+    /// Tour: nodes outside the spotlight move back
     pub depth_of_field: bool,
-    /// Tour: Funken kreisen um den aktuellen Zweig
+    /// Tour: sparks circle the current branch
     pub orbit: bool,
-    /// Stand der Einstellungen; fehlt bei älteren gespeicherten Daten (= 0)
+    /// Version of the settings; missing in older saved data (= 0)
     #[serde(default)]
     pub version: u32,
 }
@@ -128,18 +128,18 @@ impl Default for Effects {
 }
 
 impl Effects {
-    /// Ältere gespeicherte Einstellungen auf neue Standards bringen
+    /// Bring older saved settings up to the new defaults
     pub fn migrate(&mut self) {
         if self.version < 1 {
-            // Seit Version 1 ist Überblenden der Standard-Übergang
+            // Since version 1, fade is the default transition
             self.transition = Transition::Fade;
         }
         if self.version < 2 {
-            // Seit Version 2 ist der Sternenhimmel der Standard-Hintergrund
+            // Since version 2, the starfield is the default background
             self.background = Backdrop::Stars;
         }
         if self.version < 3 {
-            // Seit Version 3 sind Glühen und Lichtpulse nur noch auf Wunsch an
+            // Since version 3, glow and light pulses are only on when asked for
             self.glow = false;
             self.pulses = false;
         }
@@ -147,7 +147,7 @@ impl Effects {
     }
 }
 
-/// Auswahl der Effekte – in der Präsentation (Button oben rechts) und im Ansicht-Menü
+/// Choice of effects – in the presentation (button at the top right) and in the View menu
 pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: bool) {
     ui.set_min_width(260.0);
     egui::ScrollArea::vertical()
@@ -213,7 +213,7 @@ pub fn effects_menu(ui: &mut egui::Ui, fx: &mut Effects, slides: bool, tour: boo
         });
 }
 
-/// Tastenkürzel beim Präsentieren (im Einstellungsmenü)
+/// Keyboard shortcuts while presenting (in the settings menu)
 fn shortcuts_list(ui: &mut egui::Ui, tour: bool) {
     ui.strong("Keyboard");
     let next = if tour {
@@ -245,7 +245,7 @@ fn shortcuts_list(ui: &mut egui::Ui, tour: bool) {
 }
 
 // ---------------------------------------------------------------------------
-// Gemeinsame Bausteine
+// Shared building blocks
 // ---------------------------------------------------------------------------
 
 pub fn ease_in_out_cubic(t: f32) -> f32 {
@@ -260,14 +260,14 @@ pub fn ease_out_cubic(t: f32) -> f32 {
     1.0 - (1.0 - t).powi(3)
 }
 
-/// Schießt leicht über das Ziel hinaus und federt zurück („Aufploppen“)
+/// Overshoots the target slightly and springs back ("pop")
 pub fn ease_out_back(t: f32) -> f32 {
     let c1 = 1.70158;
     let c3 = c1 + 1.0;
     1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
 }
 
-/// Fortschritt 0…1 einer Animation, die zu `start` beginnt und `duration` dauert
+/// Progress 0…1 of an animation that begins at `start` and lasts `duration`
 fn progress(now: f64, start: f64, duration: f64) -> f32 {
     ((now - start) / duration).clamp(0.0, 1.0) as f32
 }
@@ -278,12 +278,12 @@ pub fn color_of(map: &MindMap, theme: &Theme, id: u64) -> Color32 {
         .unwrap_or(theme.root)
 }
 
-/// Tasten beim Präsentieren
+/// Keys while presenting
 #[derive(Default)]
 pub struct Nav {
-    /// Pfeil rechts/unten, Bild ab
+    /// Arrow right/down, Page Down
     pub right: bool,
-    /// Pfeil links/oben, Bild auf, Rücktaste
+    /// Arrow left/up, Page Up, Backspace
     pub left: bool,
     pub space: bool,
     pub enter: bool,
@@ -293,9 +293,9 @@ pub struct Nav {
     pub fullscreen: bool,
     pub strip: bool,
     pub laser: bool,
-    /// P: Referentenansicht ein/aus
+    /// P: presenter view on/off
     pub presenter: bool,
-    /// R: QR-Code für die Handy-Fernbedienung
+    /// R: QR code for the phone remote
     pub remote: bool,
 }
 
@@ -324,7 +324,7 @@ impl Nav {
         self.right || self.space || self.enter
     }
 
-    /// Tasten aus zwei Fenstern zusammenführen
+    /// Merge the keys from two windows
     fn merge(self, o: Nav) -> Nav {
         Nav {
             right: self.right || o.right,
@@ -343,14 +343,14 @@ impl Nav {
     }
 }
 
-/// Was im geöffneten Schnellwahl-Streifen passieren soll
+/// What should happen in the open quick-jump strip
 pub enum StripKey {
     Stay,
     Jump(usize),
     Close,
 }
 
-/// Tasten bei geöffneter Schnellwahl: ← → wählen, Enter/Leertaste springt, Esc/G schließt
+/// Keys with the quick jump open: ← → select, Enter/Space jumps, Esc/G closes
 pub fn strip_keys(nav: &Nav, cursor: &mut usize, last: usize) -> StripKey {
     if nav.right {
         *cursor = (*cursor + 1).min(last);
@@ -373,8 +373,8 @@ pub fn strip_keys(nav: &Nav, cursor: &mut usize, last: usize) -> StripKey {
     }
 }
 
-/// Buttons oben rechts: Beenden, Vollbild, Folienstreifen, Effekte.
-/// Gibt das Ereignis und „Folienstreifen umschalten“ zurück.
+/// Buttons at the top right: quit, full screen, slide strip, effects.
+/// Returns the event and "toggle slide strip".
 pub fn corner_buttons(
     ui: &mut egui::Ui,
     area: Rect,
@@ -436,7 +436,7 @@ pub fn corner_buttons(
     }
 }
 
-/// Was in der Knopfleiste oben rechts angeklickt wurde
+/// What was clicked in the button bar at the top right
 pub struct Corner {
     pub event: Option<Event>,
     pub strip: bool,
@@ -444,17 +444,17 @@ pub struct Corner {
     pub remote: bool,
 }
 
-/// Animierter Hintergrund hinter Folie bzw. Mindmap.
-/// Gibt `true` zurück, wenn weiter neu gezeichnet werden muss.
-/// Pseudo-Zufallszahl 0…1, immer gleich für dieselben Eingaben
+/// Animated background behind the slide or mind map.
+/// Returns `true` if it needs to keep repainting.
+/// Pseudo-random number 0…1, always the same for the same inputs
 fn hash(i: f32, salt: f32) -> f32 {
     ((i * 12.9898 + salt * 78.233).sin() * 43758.547)
         .fract()
         .abs()
 }
 
-/// `parallax`: Verschiebung (z. B. Kamera), nahe Sterne bewegen sich stärker als ferne.
-/// `warp`: Bewegung der Kamera; ist sie groß genug, werden Sterne zu Streifen.
+/// `parallax`: offset (e.g. camera), near stars move more than far ones.
+/// `warp`: camera movement; if it is large enough, stars turn into streaks.
 pub fn backdrop(
     painter: &egui::Painter,
     area: Rect,
@@ -468,7 +468,7 @@ pub fn backdrop(
     match kind {
         Backdrop::Plain => false,
         Backdrop::Bokeh => {
-            // Weiche Lichtkreise in den Zweigfarben, die langsam nach oben treiben
+            // Soft circles of light in the branch colours, slowly drifting upwards
             let (w, h) = (area.width(), area.height());
             for i in 0..22 {
                 let n = i as f32 * 3.7;
@@ -495,7 +495,7 @@ pub fn backdrop(
             true
         }
         Backdrop::Aurora => {
-            // Weiche Farbwolken in den Zweigfarben, die langsam wandern
+            // Soft colour clouds in the branch colours, wandering slowly
             let radius = area.width().max(area.height()) * 0.38;
             let strength = if theme.dark { 0.02 } else { 0.03 };
             for k in 0..4 {
@@ -522,7 +522,7 @@ pub fn backdrop(
                 theme.text
             };
 
-            // Zarter Nebel in zwei Zweigfarben, kaum sichtbar
+            // Delicate nebula in two branch colours, barely visible
             let radius = w.max(h) * 0.45;
             for (k, color) in [theme.branches[0], theme.branches[4]]
                 .into_iter()
@@ -541,7 +541,7 @@ pub fn backdrop(
                 }
             }
 
-            // Drei Ebenen: ferne (viele, klein), mittlere, nahe (wenige, hell, mit Schein)
+            // Three layers: far (many, small), middle, near (few, bright, with a glow)
             let layers = [
                 (220, 0.04, 0.45, 0.9, 0.35),
                 (90, 0.12, 0.8, 1.5, 0.6),
@@ -561,7 +561,7 @@ pub fn backdrop(
                                     * (t * (0.5 + 1.8 * hash(n, 4.0))
                                         + hash(n, 5.0) * std::f32::consts::TAU)
                                         .sin());
-                    // Einzelne Sterne leicht in den Zweigfarben
+                    // Some stars slightly tinted in the branch colours
                     let color = if hash(n, 6.0) < 0.15 {
                         star.lerp_to_gamma(theme.branches[(hash(n, 7.0) * 6.0) as usize % 6], 0.55)
                     } else {
@@ -569,7 +569,7 @@ pub fn backdrop(
                     };
                     let r = small + (big - small) * hash(n, 3.0);
                     let a = bright * twinkle;
-                    // Beim schnellen Flug: Lichtstreifen, nahe Sterne länger als ferne
+                    // During a fast flight: streaks of light, near stars longer than far ones
                     let streak = warp * (depth * 4.0);
                     if streak.length() > 2.0 {
                         painter.line_segment(
@@ -580,7 +580,7 @@ pub fn backdrop(
                     if layer == 2 {
                         painter.circle_filled(pos, r * 4.5, color.gamma_multiply(0.05 * a));
                         painter.circle_filled(pos, r * 2.2, color.gamma_multiply(0.12 * a));
-                        // Die hellsten funkeln mit einem kleinen Kreuz
+                        // The brightest ones twinkle with a small cross
                         if hash(n, 8.0) > 0.6 {
                             let len = r * 6.0 * twinkle;
                             let stroke = Stroke::new(0.8_f32, color.gamma_multiply(0.35 * a));
@@ -594,7 +594,7 @@ pub fn backdrop(
                 }
             }
 
-            // Ab und zu eine Sternschnuppe
+            // Now and then a shooting star
             let period = 7.0;
             let cycle = (now / period).floor();
             let phase = (now - cycle * period) as f32;
@@ -631,7 +631,7 @@ struct LaserState {
     trail: Vec<(Pos2, f64)>,
 }
 
-/// Laserpointer (Taste L): leuchtender Punkt mit kurzem Schweif statt Mauszeiger
+/// Laser pointer (key L): glowing dot with a short tail instead of the mouse pointer
 pub fn laser(ui: &mut egui::Ui, toggle: bool, now: f64) {
     let id = Id::new("laser_pointer");
     let ctx = ui.ctx().clone();
@@ -667,7 +667,7 @@ pub fn laser(ui: &mut egui::Ui, toggle: bool, now: f64) {
     ctx.data_mut(|d| d.insert_temp(id, state));
 }
 
-/// Dunklere Bildränder („Vignette“)
+/// Darker image edges ("vignette")
 pub fn vignette(painter: &egui::Painter, area: Rect) {
     let steps = 24;
     let band = area.width().min(area.height()) * 0.22 / steps as f32;
@@ -693,7 +693,7 @@ struct Particle {
 
 const CONFETTI_LIFE: f64 = 1.4;
 
-/// Konfetti-Explosion an `at` (z. B. beim Abhaken einer Checkbox)
+/// Confetti burst at `at` (e.g. when ticking off a checkbox)
 pub fn confetti_burst(ctx: &egui::Context, at: Pos2, colors: &[Color32], now: f64) {
     let id = Id::new("confetti");
     let mut parts: Vec<Particle> = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
@@ -713,7 +713,7 @@ pub fn confetti_burst(ctx: &egui::Context, at: Pos2, colors: &[Color32], now: f6
     ctx.data_mut(|d| d.insert_temp(id, parts));
 }
 
-/// Fliegendes Konfetti zeichnen (jeden Frame aufrufen)
+/// Draw the flying confetti (call every frame)
 pub fn confetti_draw(ctx: &egui::Context, now: f64) {
     let id = Id::new("confetti");
     let mut parts: Vec<Particle> = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
@@ -737,15 +737,15 @@ pub fn confetti_draw(ctx: &egui::Context, now: f64) {
     ctx.request_repaint();
 }
 
-/// Ein Eintrag im Folienstreifen
+/// An entry in the slide strip
 pub struct StripItem {
     pub label: String,
     pub title: String,
     pub color: Color32,
 }
 
-/// Schnellwahl-Streifen am unteren Rand (Taste G). `cursor` ist die per
-/// Tastatur markierte Folie, `current` die gezeigte. Gibt die angeklickte Folie zurück.
+/// Quick-jump strip at the bottom (key G). `cursor` is the slide highlighted
+/// with the keyboard, `current` the one shown. Returns the clicked slide.
 pub fn filmstrip(
     ui: &mut egui::Ui,
     area: Rect,
@@ -768,7 +768,7 @@ pub fn filmstrip(
         Pos2::new(area.left(), top),
         Pos2::new(area.right(), top + height),
     );
-    // Klicks auf den Streifen sollen nicht auf darunterliegende Checkboxen gehen
+    // Clicks on the strip should not reach checkboxes underneath
     ui.interact(bar, id.with("bar"), Sense::click());
     let mut painter = ui.painter().clone();
     painter.set_opacity(t);
@@ -784,7 +784,7 @@ pub fn filmstrip(
     let start = if total < area.width() - 48.0 {
         area.center().x - total / 2.0
     } else {
-        // Markierte Folie in die Mitte, ohne über die Ränder hinauszuschieben
+        // Highlighted slide to the centre, without scrolling past the edges
         (area.center().x - cursor as f32 * (size.x + gap) - size.x / 2.0)
             .clamp(area.right() - 24.0 - total, area.left() + 24.0)
     };
@@ -803,7 +803,7 @@ pub fn filmstrip(
             painter.rect_filled(rect.expand(3.0), 10.0, theme.selection);
         }
         if i == current {
-            // Kleiner Punkt: diese Folie wird gerade gezeigt
+            // Small dot: this slide is being shown right now
             painter.circle_filled(rect.center_bottom() + Vec2::new(0.0, 9.0), 3.0, theme.text);
         }
         let fill = if resp.hovered() {
@@ -843,10 +843,10 @@ pub fn filmstrip(
 }
 
 // ---------------------------------------------------------------------------
-// Folien
+// Slides
 // ---------------------------------------------------------------------------
 
-/// Ein Stichpunkt: Ebene, Text, Farbe, Checkbox, Knoten-ID
+/// A bullet: level, text, colour, checkbox, node ID
 type Bullet = (usize, String, Color32, Option<bool>, u64);
 
 struct Slide {
@@ -855,11 +855,11 @@ struct Slide {
     bullets: Vec<Bullet>,
     color: Color32,
     is_title: bool,
-    /// Hauptzweig der Folie (für Checkbox-Fortschritt und Layout-Wahl)
+    /// Main branch of the slide (for checkbox progress and the layout choice)
     branch: Option<u64>,
-    /// Diagramm statt Aufzählung
+    /// Diagram instead of a bullet list
     layout: Option<SlideLayout>,
-    /// Bilder: das des Zweigs selbst (ohne Beschriftung) und die von Stichpunkten
+    /// Pictures: the branch's own (without a caption) and those of bullets
     images: Vec<SlideImage>,
 }
 
@@ -869,7 +869,7 @@ struct SlideImage {
 }
 
 impl Slide {
-    /// Ein einzelnes Bild ohne Stichpunkte (oder auf der Titelfolie) füllt die ganze Folie
+    /// A single picture without bullets (or on the title slide) fills the whole slide
     fn full_bleed(&self) -> bool {
         !self.images.is_empty()
             && (self.is_title
@@ -878,8 +878,8 @@ impl Slide {
 }
 
 impl Slide {
-    /// Stichpunkt-Gruppen: ein Punkt der obersten Ebene mit seinen Unterpunkten.
-    /// Die Titelfolie wird nicht schrittweise aufgebaut.
+    /// Bullet groups: a top-level point with its sub-points.
+    /// The title slide is not built up step by step.
     fn groups(&self) -> usize {
         if self.is_title {
             return 0;
@@ -891,7 +891,7 @@ impl Slide {
         }
     }
 
-    /// Punkte der obersten Ebene mit ihren direkten Unterpunkten (für Diagramme)
+    /// Top-level points with their direct sub-points (for diagrams)
     fn items(&self) -> Vec<Item> {
         let mut out: Vec<Item> = Vec::new();
         for (depth, text, ..) in &self.bullets {
@@ -912,8 +912,8 @@ impl Slide {
     }
 }
 
-/// Weichgezeichneter Schatten unter `rect`: um `drop` nach unten versetzt,
-/// mit einem weichen Rand der Breite `blur`
+/// Blurred shadow under `rect`: offset downwards by `drop`,
+/// with a soft edge of width `blur`
 fn soft_shadow(rect: Rect, radius: f32, drop: f32, blur: f32, color: Color32) -> egui::Shape {
     let shadow = egui::epaint::Shadow {
         offset: [0, drop.round().clamp(0.0, 127.0) as i8],
@@ -924,20 +924,20 @@ fn soft_shadow(rect: Rect, radius: f32, drop: f32, blur: f32, color: Color32) ->
     egui::Shape::Rect(shadow.as_shape(rect, radius.round().clamp(0.0, 255.0) as u8))
 }
 
-/// Bild oben (und für die Fortschrittsleiste unten) abdunkeln, damit heller Text lesbar bleibt.
-/// Ein Netz mit gemeinsamen Kanten, das an den Ecken der Rundung der Folie folgt –
-/// so gibt es weder Streifen noch Nähte.
+/// Darken the picture at the top (and at the bottom for the progress bar) so light text stays readable.
+/// A mesh with shared edges that follows the slide's rounding at the corners –
+/// so there are neither stripes nor seams.
 fn darken_for_text(p: &egui::Painter, card: Rect, s: f32, title_slide: bool, alpha: f32) {
     let radius = 24.0 * s;
     if title_slide {
-        // Titelfolie: Text in der Mitte, also gleichmäßig abdunkeln
+        // Title slide: text in the middle, so darken evenly
         p.rect_filled(
             card,
             radius.round() as u8,
             Color32::from_black_alpha((120.0 * alpha) as u8),
         );
     }
-    // Einrückung an den runden Ecken, `d` = Abstand zur Ober- bzw. Unterkante
+    // Inset at the rounded corners, `d` = distance from the top or bottom edge
     let inset = |d: f32| {
         if d >= radius {
             0.0
@@ -945,7 +945,7 @@ fn darken_for_text(p: &egui::Painter, card: Rect, s: f32, title_slide: bool, alp
             radius - (radius * radius - (radius - d).powi(2)).max(0.0).sqrt()
         }
     };
-    // Verlauf von der Kante (`edge`) über `reach` Pixel nach innen; `dir` = +1 oben, -1 unten
+    // Gradient from the edge (`edge`) over `reach` pixels inwards; `dir` = +1 top, -1 bottom
     let gradient = |edge: f32, dir: f32, reach: f32, strength: f32, curve: f32| {
         let mut ys: Vec<f32> = (0..8).map(|k| radius * k as f32 / 8.0).collect();
         ys.extend((0..=24).map(|k| radius + (reach - radius) * k as f32 / 24.0));
@@ -967,11 +967,11 @@ fn darken_for_text(p: &egui::Painter, card: Rect, s: f32, title_slide: bool, alp
     };
     let reach = card.height() * if title_slide { 0.35 } else { 0.6 };
     gradient(card.top(), 1.0, reach, 190.0, 1.6);
-    // Unten ein schmaler Schatten für die Fortschrittsleiste
+    // A narrow shadow at the bottom for the progress bar
     gradient(card.bottom(), -1.0, 100.0 * s, 120.0, 1.0);
 }
 
-/// Bilder im Raster: ein einzelnes ganz sichtbar, mehrere bildfüllend mit Beschriftung
+/// Pictures in a grid: a single one fully visible, several filling their cells with captions
 #[allow(clippy::too_many_arguments)]
 fn picture_grid(
     p: &egui::Painter,
@@ -994,12 +994,12 @@ fn picture_grid(
     } else {
         0.0
     };
-    // Spaltenzahl so wählen, dass die Bilder möglichst groß werden
+    // Choose the number of columns so the pictures get as large as possible
     let cell_for = |cols: usize| {
         let rows = n.div_ceil(cols);
         let w = (rect.width() - gap * (cols - 1) as f32) / cols as f32;
         let h = (rect.height() - gap * (rows - 1) as f32) / rows as f32 - caption_h;
-        // Nicht breiter als 16:9 und nicht höher als 3:4
+        // No wider than 16:9 and no taller than 3:4
         Vec2::new(w.min(h * 16.0 / 9.0), h.min(w * 4.0 / 3.0))
     };
     let cols = (1..=n)
@@ -1020,14 +1020,14 @@ fn picture_grid(
     let origin = rect.center() - total / 2.0;
     for (i, pic) in pictures.iter().enumerate() {
         let (col, row) = (i % cols, i / cols);
-        // Unvollständige letzte Reihe mittig
+        // Incomplete last row centred
         let in_row = if row + 1 == rows {
             n - row * cols
         } else {
             cols
         };
         let indent = (cols - in_row) as f32 * (cell.x + gap) / 2.0;
-        // Nacheinander einblenden, mit leichtem Aufsteigen
+        // Fade in one after another, rising slightly
         let e = ((appear * (1.0 + 0.25 * n as f32)) - 0.25 * i as f32).clamp(0.0, 1.0);
         let frame = Rect::from_min_size(
             origin
@@ -1043,7 +1043,7 @@ fn picture_grid(
             Some(img) => {
                 let shown = images::contain(frame, img.aspect());
                 let target = if fit == Fit::Contain { shown } else { frame };
-                // Weicher Schatten unter dem Bild
+                // Soft shadow under the picture
                 p.add(soft_shadow(
                     target,
                     14.0 * s,
@@ -1123,8 +1123,8 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
                 caption: None,
             })
             .collect();
-        // Stichpunkte mit Bild werden zu beschrifteten Bildern. Ohne eigene
-        // Unterpunkte verschwinden sie dabei aus der Aufzählung.
+        // Bullets with a picture become captioned pictures. Without sub-points
+        // of their own they disappear from the bullet list.
         if branch.layout.is_none() {
             bullets.retain(|(_, text, _, _, id)| {
                 let Some(key) = map.get(*id).and_then(|n| n.image.clone()) else {
@@ -1151,34 +1151,34 @@ fn slides(map: &MindMap, theme: &Theme) -> Vec<Slide> {
     out
 }
 
-/// Was zum Zeichnen einer Folie gebraucht wird – im Vortrag, in der
-/// Referentenansicht und beim PDF-Export
+/// What is needed to draw a slide – in the talk, in the
+/// presenter view and for the PDF export
 pub struct SlideView<'a> {
     slides: &'a [Slide],
     pub index: usize,
-    /// Sichtbare Stichpunkt-Gruppen
+    /// Visible bullet groups
     pub build: usize,
     pub build_time: f64,
     pub slide_time: f64,
     pub now: f64,
-    /// Deckkraft während des Übergangs
+    /// Opacity during the transition
     pub appear: f32,
-    /// Fortschrittsleiste unten (0…1)
+    /// Progress bar at the bottom (0…1)
     pub progress: f32,
-    /// Checkboxen und Rechtsklick-Menü bedienbar
+    /// Checkboxes and the right-click menu can be used
     pub interactive: bool,
-    /// Als ganze Seite (PDF): ohne Schatten und runde Ecken
+    /// As a whole page (PDF): without shadow and rounded corners
     pub page: bool,
 }
 
-/// Was beim Zeichnen angeklickt wurde
+/// What was clicked while drawing
 pub struct SlideOutput {
     pub ticked: Option<(u64, Pos2)>,
     pub new_layout: Option<Option<SlideLayout>>,
     pub animating: bool,
 }
 
-/// Eine Folie in `card` zeichnen
+/// Draw a slide in `card`
 pub fn render_slide(
     ui: &mut egui::Ui,
     card: Rect,
@@ -1194,12 +1194,12 @@ pub fn render_slide(
     let last = view.slides.len() - 1;
     let now = view.now;
     let appear = view.appear;
-    // Alle Maße relativ zu einer 1280 px breiten Folie
+    // All measurements relative to a slide 1280 px wide
     let s = card.width() / 1280.0;
 
     let radius = if view.page { 0.0 } else { 24.0 * s };
     if !view.page {
-        // Weicher, weichgezeichneter Schatten unter der Folie
+        // Soft, blurred shadow under the slide
         let alpha = if theme.dark { 150 } else { 55 };
         painter.add(soft_shadow(
             card,
@@ -1211,7 +1211,7 @@ pub fn render_slide(
     }
     painter.rect_filled(card, radius, theme.card);
     let full_bleed = slide.full_bleed();
-    // Bilder blenden mit der Folie ein
+    // Pictures fade in with the slide
     let pictures_in = ease_out_cubic(progress(now, view.slide_time + 0.1, 0.8));
     if full_bleed {
         let picture = &slide.images[0];
@@ -1246,7 +1246,7 @@ pub fn render_slide(
         painter.rect_filled(accent_bar, 4.0 * s, slide.color.gamma_multiply(appear));
     }
 
-    // Rechtsklick auf die Folie: Layout wählen (vor dem Inhalt, damit Checkboxen Vorrang haben)
+    // Right-click on the slide: choose a layout (before the content, so checkboxes take priority)
     let mut new_layout: Option<Option<SlideLayout>> = None;
     if view.interactive && slide.branch.is_some() {
         ui.interact(card, ui.id().with("slide_card"), Sense::click())
@@ -1256,17 +1256,17 @@ pub fn render_slide(
             });
     }
 
-    // Wie viele Checkboxen dieses Zweigs schon erledigt sind
+    // How many checkboxes of this branch are already done
     let tasks = slide.branch.and_then(|b| map.task_progress(b));
-    // Angeklickte Checkbox, wird nach dem Zeichnen umgeschaltet
+    // Clicked checkbox, toggled after drawing
     let mut ticked: Option<(u64, Pos2)> = None;
 
-    // Titel steigt auf und blendet ein, die Linie darunter zieht sich auf
+    // The title rises and fades in, the line below it draws itself
     let title_in = ease_out_cubic(progress(now, view.slide_time, 0.55));
     let line_in = ease_out_cubic(progress(now, view.slide_time + 0.2, 0.5));
     let mut animating = title_in < 1.0 || line_in < 1.0 || appear < 1.0;
 
-    // Inhalt der Folie in eigenem Bereich, der mit dem Übergang ein- und ausblendet
+    // Slide contents in their own area that fades in and out with the transition
     {
         let content = card.shrink2(Vec2::new(100.0, 70.0) * s);
         let mut ui = ui.new_child(
@@ -1278,7 +1278,7 @@ pub fn render_slide(
         ui.style_mut().interaction.selectable_labels = false;
         ui.spacing_mut().item_spacing.y = 10.0 * s;
 
-        // Auf einem Vollbild steht der Text hell auf abgedunkeltem Bild
+        // On a full-screen picture the text is light on the darkened picture
         let ink = if full_bleed {
             Color32::WHITE
         } else {
@@ -1293,7 +1293,7 @@ pub fn render_slide(
                         .rect
                 })
                 .inner;
-            // Lichtschimmer: ein heller, schräger Streifen zieht einmal über den Titel
+            // Shimmer: a bright, slanted streak sweeps across the title once
             let sweep = progress(now, view.slide_time + 0.45, 0.9);
             if fx.shine && sweep > 0.0 && sweep < 1.0 {
                 let clip = ui.painter().with_clip_rect(rect.expand(4.0));
@@ -1316,7 +1316,7 @@ pub fn render_slide(
         };
 
         if slide.is_title {
-            // Ohne Themen-Marken steht der Titel etwas tiefer, näher an der Mitte
+            // Without topic chips the title sits a little lower, closer to the centre
             let top = if fx.title_topics { 0.22 } else { 0.3 };
             ui.add_space(content.height() * top);
             title(&mut ui, &slide.title, 76.0 * s);
@@ -1334,7 +1334,7 @@ pub fn render_slide(
                 });
             }
             ui.add_space(36.0 * s);
-            // Kapitel-Marken ploppen nacheinander auf (abschaltbar)
+            // Chapter chips pop up one after another (can be switched off)
             let topics = if fx.title_topics {
                 slide.bullets.as_slice()
             } else {
@@ -1345,7 +1345,7 @@ pub fn render_slide(
                 for (i, (_, text, color, _, _)) in topics.iter().enumerate() {
                     let pop = progress(now, view.slide_time + 0.35 + i as f64 * 0.09, 0.4);
                     animating |= pop < 1.0;
-                    // Feste Größe vorab, damit eine Marke als Ganzes in die nächste Zeile rutscht
+                    // Fixed size up front so a chip moves to the next line as a whole
                     let galley = ui.painter().layout_no_wrap(
                         text.clone(),
                         FontId::proportional(20.0 * s),
@@ -1396,7 +1396,7 @@ pub fn render_slide(
             }
 
             if let Some(layout) = slide.layout {
-                // Diagramm statt Aufzählung, baut sich genauso schrittweise auf
+                // Diagram instead of a bullet list, builds up step by step in the same way
                 let building = build_bullets && slide.groups() > 0;
                 let reveal = |g: usize| {
                     let start = if building {
@@ -1429,10 +1429,10 @@ pub fn render_slide(
                     count_up,
                 );
             } else {
-                // Stichpunkte: noch verdeckte nehmen schon ihren Platz ein, damit nichts
-                // verrutscht. Jede Gruppe erscheint mit dem gewählten Effekt; beim
-                // schrittweisen Aufbau werden ältere Gruppen blasser.
-                // Bilder neben den Stichpunkten, oder als Galerie, wenn es keine gibt
+                // Bullets: hidden ones already take up their space so nothing
+                // shifts. Every group appears with the chosen effect; when building
+                // up step by step, older groups get paler.
+                // Pictures next to the bullets, or as a gallery if there are none
                 let mut side_ui;
                 let ui = if full_bleed || slide.images.is_empty() {
                     &mut ui
@@ -1529,8 +1529,8 @@ pub fn render_slide(
                             );
                             let mut label = RichText::new(shown).size(size).color(theme.text);
                             if let Some(done) = *task {
-                                // Checkbox statt Aufzählungspunkt; Erledigtes durchgestrichen.
-                                // Sichtbare Checkboxen lassen sich anklicken.
+                                // Checkbox instead of a bullet point; done items struck through.
+                                // Visible checkboxes can be clicked.
                                 let r =
                                     Rect::from_center_size(dot.center(), Vec2::splat(size * 0.62));
                                 paint_checkbox(
@@ -1569,7 +1569,7 @@ pub fn render_slide(
     }
     animating |= full_bleed && (pictures_in < 1.0 || fx.ken_burns);
 
-    // Fortschritt unten auf der Folie
+    // Progress at the bottom of the slide
     let track = Rect::from_min_size(
         card.left_bottom() + Vec2::new(44.0, -34.0) * s,
         Vec2::new(card.width() - 88.0 * s, 4.0 * s),
@@ -1593,13 +1593,13 @@ pub fn render_slide(
     }
 }
 
-/// Folientitel; ein Symbol am Anfang (Phosphor-Zeichen) in der Farbe der Folie
+/// Slide title; an icon at the start (Phosphor glyph) in the slide's colour
 fn title_job(text: &str, size: f32, ink: Color32, accent: Color32) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     let format = |color| egui::TextFormat::simple(FontId::proportional(size), color);
     let mut chars = text.chars();
     match chars.next() {
-        // Phosphor liegt im Bereich für private Zeichen
+        // Phosphor lives in the private use area
         Some(c) if ('\u{E000}'..='\u{F8FF}').contains(&c) => {
             job.append(&c.to_string(), 0.0, format(accent));
             job.append(chars.as_str(), 0.0, format(ink));
@@ -1609,7 +1609,7 @@ fn title_job(text: &str, size: f32, ink: Color32, accent: Color32) -> egui::text
     job
 }
 
-/// Notizen zur Folie: die des Zweigs und die seiner Stichpunkte
+/// Notes for the slide: those of the branch and of its bullets
 fn speaker_notes(map: &MindMap, slide: &Slide) -> Vec<(String, String)> {
     let mut notes = Vec::new();
     let node = slide.branch.or_else(|| map.root());
@@ -1629,7 +1629,7 @@ fn speaker_notes(map: &MindMap, slide: &Slide) -> Vec<(String, String)> {
     notes
 }
 
-/// Inhalt der Referentenansicht; gibt die gedrückten Tasten zurück
+/// Contents of the presenter view; returns the keys pressed
 #[allow(clippy::too_many_arguments)]
 fn presenter_body(
     ui: &mut egui::Ui,
@@ -1646,7 +1646,7 @@ fn presenter_body(
     let last = slides.len() - 1;
     let slide = &slides[doc.slide.min(last)];
 
-    // Kopfzeile: Stoppuhr, Uhrzeit, Position
+    // Header: stopwatch, clock, position
     ui.horizontal(|ui| {
         let secs = (now - start).max(0.0) as u64;
         ui.label(
@@ -1687,7 +1687,7 @@ fn presenter_body(
     });
     ui.add_space(12.0);
 
-    // Unten Platz für die Tastenhinweise lassen
+    // Leave room at the bottom for the key hints
     let full = ui.available_rect_before_wrap();
     let rest = Rect::from_min_max(full.min, full.max - Vec2::new(0.0, 28.0));
     let gap = 20.0;
@@ -1703,7 +1703,7 @@ fn presenter_body(
         );
     };
 
-    // Aktuelle Folie, so wie das Publikum sie sieht
+    // Current slide, as the audience sees it
     let current = Rect::from_min_size(
         rest.min + Vec2::new(0.0, 20.0),
         Vec2::new(left_w, (left_w * 9.0 / 16.0).min(rest.height() - 20.0)),
@@ -1735,7 +1735,7 @@ fn presenter_body(
         ui.ctx().request_repaint();
     }
 
-    // Nächste Folie, fertig aufgebaut
+    // Next slide, fully built up
     let right = Rect::from_min_max(
         Pos2::new(current.right() + gap, rest.top() + 20.0),
         rest.max,
@@ -1769,7 +1769,7 @@ fn presenter_body(
         );
     }
 
-    // Notizen unter der nächsten Folie
+    // Notes below the next slide
     let notes_rect = Rect::from_min_max(Pos2::new(right.left(), next.bottom() + 28.0), right.max);
     label(ui, notes_rect.left_top() - Vec2::new(0.0, 6.0), "NOTES");
     let mut notes_ui = ui.new_child(
@@ -1814,7 +1814,7 @@ fn presenter_body(
                             }
                         });
                 });
-    // Hinweis unten links
+    // Hint at the bottom left
     ui.painter().text(
         Pos2::new(full.left(), full.bottom()),
         Align2::LEFT_BOTTOM,
@@ -1825,7 +1825,7 @@ fn presenter_body(
     nav
 }
 
-/// Für Tests: die Referentenansicht direkt in `ui` zeichnen
+/// For tests: draw the presenter view straight into `ui`
 #[cfg(test)]
 pub fn presenter_snapshot(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, fx: &Effects) {
     let slides = slides(&doc.map, theme);
@@ -1834,8 +1834,8 @@ pub fn presenter_snapshot(ui: &mut egui::Ui, doc: &mut Document, theme: &Theme, 
     presenter_body(ui, doc, &slides, theme, fx, true, now, start);
 }
 
-/// Referentenansicht in einem eigenen Fenster: aktuelle und nächste Folie,
-/// Notizen, Stoppuhr und Uhrzeit. Gibt die dort gedrückten Tasten zurück.
+/// Presenter view in a window of its own: current and next slide,
+/// notes, stopwatch and clock. Returns the keys pressed there.
 fn presenter_window(
     ctx: &egui::Context,
     doc: &mut Document,
@@ -1857,14 +1857,14 @@ fn presenter_window(
             if ctx.input(|i| i.viewport().close_requested()) {
                 doc.presenter = false;
             }
-            // Stoppuhr und Uhr jede Sekunde aktualisieren
+            // Update the stopwatch and clock every second
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
             let mut nav = Nav::default();
             let mut body = |ui: &mut egui::Ui| {
                 nav = presenter_body(ui, doc, slides, theme, fx, build_bullets, now, start);
             };
             if class == egui::ViewportClass::Embedded {
-                // Kein zweites Fenster möglich: als Fenster in der App
+                // No second window possible: as a window inside the app
                 let mut open = true;
                 egui::Window::new("Presenter view")
                     .open(&mut open)
@@ -1891,7 +1891,7 @@ fn presenter_window(
     )
 }
 
-/// Für Tests: Folie `index` fertig aufgebaut als Karte (mit Schatten) in `card` zeichnen
+/// For tests: draw slide `index` fully built up as a card (with shadow) in `card`
 #[cfg(test)]
 pub fn draw_card(
     ui: &mut egui::Ui,
@@ -1918,13 +1918,13 @@ pub fn draw_card(
     render_slide(ui, card, &view, map, theme, fx, true);
 }
 
-/// Anzahl der Folien (Titelfolie plus eine je Hauptzweig)
+/// Number of slides (title slide plus one per main branch)
 pub fn slide_count(map: &MindMap, theme: &Theme) -> usize {
     slides(map, theme).len()
 }
 
-/// Folie `index` fertig aufgebaut und ohne Animation in die ganze Fläche zeichnen
-/// (PDF-Export, Vorschau der nächsten Folie)
+/// Draw slide `index` fully built up and without animation into the whole area
+/// (PDF export, preview of the next slide)
 pub fn draw_static(ui: &mut egui::Ui, map: &MindMap, theme: &Theme, fx: &Effects, index: usize) {
     let slides = slides(map, theme);
     let Some(slide) = slides.get(index) else {
@@ -1946,7 +1946,7 @@ pub fn draw_static(ui: &mut egui::Ui, map: &MindMap, theme: &Theme, fx: &Effects
     render_slide(ui, ui.max_rect(), &view, map, theme, fx, true);
 }
 
-/// `build_bullets`: Stichpunkte nacheinander aufdecken
+/// `build_bullets`: reveal bullets one after another
 pub fn show(
     ui: &mut egui::Ui,
     doc: &mut Document,
@@ -1980,7 +1980,7 @@ pub fn show(
     };
     let mut event = None;
     let mut nav = read_nav(ui);
-    // Referentenansicht im zweiten Fenster; dort gedrückte Tasten zählen mit
+    // Presenter view in the second window; keys pressed there count too
     if doc.presenter {
         let keys = presenter_window(ui.ctx(), doc, &slides, theme, fx, build_bullets, now);
         nav = nav.merge(keys);
@@ -1988,7 +1988,7 @@ pub fn show(
     if nav.presenter {
         doc.presenter = !doc.presenter;
     }
-    // Handy-Fernbedienung: Knöpfe vom Handy wie Pfeiltasten behandeln
+    // Phone remote: treat buttons from the phone like arrow keys
     if let Some(remote) = crate::remote::running() {
         for command in remote.take_commands() {
             match command {
@@ -2000,7 +2000,7 @@ pub fn show(
     if nav.remote {
         doc.remote_open = !doc.remote_open;
     }
-    // Esc schließt zuerst das QR-Fenster, erst dann den Vortrag
+    // Esc first closes the QR window, only then the talk
     if doc.remote_open && nav.escape {
         doc.remote_open = false;
         nav.escape = false;
@@ -2010,7 +2010,7 @@ pub fn show(
 
     let painter = ui.painter().clone();
     painter.rect_filled(area, 0.0, theme.background);
-    // Beim Weiterblättern ziehen die Sterne ein Stück mit
+    // When paging forward, the stars move along a little
     let drift = ctx.animate_value_with_time(ui.id().with("star_drift"), doc.slide as f32, 0.9);
     let parallax = Vec2::new(-drift * 120.0, 0.0);
     if backdrop(
@@ -2025,7 +2025,7 @@ pub fn show(
         ctx.request_repaint();
     }
 
-    // Geblättert wird nur per Tastatur – Klicks sind fürs Abhaken da
+    // Paging is keyboard only – clicks are for ticking off
     if doc.strip {
         match strip_keys(&nav, &mut doc.strip_cursor, last) {
             StripKey::Jump(i) => {
@@ -2071,7 +2071,7 @@ pub fn show(
     }
     let slide = &slides[doc.slide];
 
-    // Übergang: die neue Folie kommt je nach Effekt anders herein
+    // Transition: the new slide comes in differently depending on the effect
     let anim = ctx.animate_value_with_time(ui.id().with("slide_anim"), doc.slide as f32, 0.4);
     let offset = doc.slide as f32 - anim;
     let appear = (1.0 - offset.abs()).clamp(0.0, 1.0);
@@ -2084,7 +2084,7 @@ pub fn show(
         Transition::Zoom => (Vec2::ZERO, 0.88 + 0.12 * ease_out_cubic(appear)),
         Transition::Rise => (Vec2::new(0.0, offset.abs() * 70.0), 1.0),
     };
-    // Langsamer Zoom, solange die Folie zu sehen ist
+    // Slow zoom while the slide is visible
     let slow_zoom = if fx.ken_burns {
         1.0 + 0.03 * ease_in_out_cubic(progress(now, doc.slide_time, 14.0))
     } else {
@@ -2140,7 +2140,7 @@ pub fn show(
         if let Some(n) = doc.map.get_mut(branch) {
             n.layout = layout;
         }
-        // Neues Layout gleich animiert zeigen
+        // Show a new layout animated right away
         doc.build = 0;
         doc.slide_time = now;
     }
@@ -2158,7 +2158,7 @@ pub fn show(
         vignette(&painter, area);
     }
 
-    // Schnellwahl und Laserpointer liegen über allem
+    // Quick jump and laser pointer are on top of everything
     let items: Vec<StripItem> = slides
         .iter()
         .enumerate()
@@ -2187,11 +2187,11 @@ pub fn show(
     confetti_draw(&ctx, now);
     laser(ui, nav.laser, now);
 
-    // Stand fürs Handy, und das QR-Fenster
+    // State for the phone, and the QR window
     if let Some(remote) = crate::remote::running() {
         let slide = &slides[doc.slide];
         let start = *doc.presenter_start.get_or_insert(now);
-        // Symbole aus der Phosphor-Schrift kennt das Handy nicht
+        // The phone doesn't know the glyphs of the Phosphor font
         let plain = |text: &str| {
             text.chars()
                 .filter(|c| !('\u{E000}'..='\u{F8FF}').contains(c))
@@ -2220,13 +2220,13 @@ pub fn show(
     event
 }
 
-/// Fenster mit QR-Code für die Handy-Fernbedienung. Gibt `false` zurück,
-/// wenn es geschlossen wurde.
+/// Window with the QR code for the phone remote. Returns `false`
+/// when it was closed.
 fn remote_overlay(ui: &mut egui::Ui, area: Rect, theme: &Theme) -> bool {
     let ctx = ui.ctx().clone();
-    // Solange es offen ist, regelmäßig prüfen, ob sich ein Handy meldet
+    // While it is open, check regularly whether a phone checks in
     ctx.request_repaint_after(std::time::Duration::from_millis(500));
-    // Abdunkeln über der Folie, aber unter dem Fenster
+    // Darken above the slide, but below the window
     let painter = ctx.layer_painter(LayerId::new(Order::Middle, Id::new("remote_dim")));
     painter.rect_filled(area, 0.0, Color32::from_black_alpha(150));
     let card = Rect::from_center_size(area.center(), Vec2::new(420.0, 540.0));
@@ -2272,7 +2272,7 @@ fn remote_overlay(ui: &mut egui::Ui, area: Rect, theme: &Theme) -> bool {
                                 let qr = Rect::from_center_size(rect.center(), Vec2::splat(side));
                                 let p = ui.painter();
                                 p.rect_filled(qr, 14.0, Color32::WHITE);
-                                // Ruhezone von 4 Feldern rundherum
+                                // Quiet zone of 4 modules all around
                                 let cell = side / (width + 8) as f32;
                                 for (i, is_dark) in dark.iter().enumerate() {
                                     if *is_dark {
@@ -2331,17 +2331,17 @@ mod tests {
 
     #[test]
     fn old_settings_switch_to_fade_once() {
-        // Gespeichert vor Version 1: Feld `version` fehlt → 0
+        // Saved before version 1: field `version` is missing → 0
         let mut old: Effects = serde_json::from_str(r#"{"transition":"Slide"}"#).unwrap();
         assert_eq!(old.version, 0);
         old.migrate();
         assert!(old.transition == Transition::Fade);
-        // Danach bleibt eine bewusste Wahl erhalten
+        // After that a deliberate choice is kept
         old.transition = Transition::Zoom;
         old.migrate();
         assert!(old.transition == Transition::Zoom);
         assert!(Effects::default().transition == Transition::Fade);
-        // Version 0 und 1 bekommen einmalig den Sternenhimmel
+        // Versions 0 and 1 get the starfield once
         assert!(old.background == Backdrop::Stars);
         let mut v1: Effects =
             serde_json::from_str(r#"{"background":"Aurora","version":1}"#).unwrap();
@@ -2350,7 +2350,7 @@ mod tests {
         v1.background = Backdrop::Plain;
         v1.migrate();
         assert!(v1.background == Backdrop::Plain);
-        // Version 3: Glühen und Lichtpulse nur noch auf Wunsch
+        // Version 3: glow and light pulses only when asked for
         let mut v2: Effects =
             serde_json::from_str(r#"{"glow":true,"pulses":true,"version":2}"#).unwrap();
         v2.migrate();
@@ -2371,7 +2371,7 @@ mod tests {
         };
         assert!(matches!(strip_keys(&right, &mut cursor, 3), StripKey::Stay));
         assert_eq!(cursor, 3);
-        // Nicht über das Ende hinaus
+        // Not past the end
         strip_keys(&right, &mut cursor, 3);
         assert_eq!(cursor, 3);
         let enter = Nav {

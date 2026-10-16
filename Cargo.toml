@@ -20,10 +20,10 @@ qrcode = { version = "0.14", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [build-dependencies]
-# Symbol und Versionsangaben in der Windows-.exe
+# App icon and version info in the Windows .exe
 winresource = "0.1"
 
-# Kleinere, schnellere Programmdatei für die fertige App
+# Smaller, faster binary for the finished app
 [profile.release]
 lto = "thin"
 strip = true

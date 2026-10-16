@@ -1,6 +1,6 @@
-# Überall Unix-Zeilenenden – auch beim Auschecken unter Windows. Sonst würden
-# die eingebetteten Beispiele und Vorlagen anders aussehen als das, was
-# Mindful beim Speichern schreibt (und die Tests würden das bemerken).
+# Unix line endings everywhere – also when checking out on Windows. Otherwise
+# the embedded examples and templates would differ from what Mindful writes
+# when saving (and the tests would notice).
 * text=auto eol=lf
 
 *.png binary

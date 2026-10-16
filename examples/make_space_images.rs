@@ -1,5 +1,5 @@
-//! Zeichnet die Bilder für das Weltall-Beispiel (assets/examples/images/*.jpg).
-//! Alles wird berechnet – keine Fotos, keine Lizenzfragen.
+//! Draws the pictures for the space example (assets/examples/images/*.jpg).
+//! Everything is computed – no photos, no licensing questions.
 //!
 //!     cargo run --release --example make_space_images
 
@@ -8,7 +8,7 @@ use image::{Rgb, RgbImage};
 type Color = [f32; 3];
 
 // ---------------------------------------------------------------------------
-// Zufall und Rauschen
+// Randomness and noise
 // ---------------------------------------------------------------------------
 
 fn hash(mut x: u32) -> u32 {
@@ -38,7 +38,7 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
-/// Wertrauschen in 3D, 0…1
+/// Value noise in 3D, 0…1
 fn noise(x: f32, y: f32, z: f32, seed: u32) -> f32 {
     let (xi, yi, zi) = (x.floor() as i32, y.floor() as i32, z.floor() as i32);
     let (fx, fy, fz) = (
@@ -54,7 +54,7 @@ fn noise(x: f32, y: f32, z: f32, seed: u32) -> f32 {
     lerp(lerp(x00, x10, fy), lerp(x01, x11, fy), fz)
 }
 
-/// Mehrere Rauschschichten übereinander, 0…1
+/// Several noise layers on top of each other, 0…1
 fn fbm(x: f32, y: f32, z: f32, octaves: u32, seed: u32) -> f32 {
     let (mut sum, mut amp, mut freq, mut norm) = (0.0, 0.5, 1.0, 0.0);
     for o in 0..octaves {
@@ -83,7 +83,7 @@ fn scale(a: Color, s: f32) -> Color {
     [a[0] * s, a[1] * s, a[2] * s]
 }
 
-/// Farbverlauf über mehrere Stützstellen
+/// Colour gradient over several stops
 fn ramp(stops: &[(f32, Color)], t: f32) -> Color {
     let t = t.clamp(0.0, 1.0);
     for w in stops.windows(2) {
@@ -95,7 +95,7 @@ fn ramp(stops: &[(f32, Color)], t: f32) -> Color {
 }
 
 // ---------------------------------------------------------------------------
-// Bild mit Kantenglättung (2×2 Abtastpunkte pro Pixel)
+// Image with anti-aliasing (2×2 samples per pixel)
 // ---------------------------------------------------------------------------
 
 fn render(w: u32, h: u32, f: impl Fn(f32, f32) -> Color + Sync) -> RgbImage {
@@ -108,7 +108,7 @@ fn render(w: u32, h: u32, f: impl Fn(f32, f32) -> Color + Sync) -> RgbImage {
                 c = add(c, f(x as f32 + ox, y as f32 + oy));
             }
             let c = scale(c, 0.25);
-            // Weiche Sättigung statt hartem Abschneiden
+            // Soft saturation instead of hard clipping
             let tone = |v: f32| 1.0 - (-v.max(0.0) * 1.4).exp();
             img.put_pixel(
                 x,
@@ -120,7 +120,7 @@ fn render(w: u32, h: u32, f: impl Fn(f32, f32) -> Color + Sync) -> RgbImage {
     img
 }
 
-/// Sterne: viele schwache, wenige helle mit Schein
+/// Stars: many faint ones, a few bright ones with a glow
 fn stars(x: f32, y: f32, seed: u32, density: f32) -> Color {
     let cell = 6.0;
     let (cx, cy) = ((x / cell).floor() as i32, (y / cell).floor() as i32);
@@ -157,14 +157,14 @@ fn save(img: &RgbImage, name: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// Motive
+// Subjects
 // ---------------------------------------------------------------------------
 
 fn nebula() -> RgbImage {
     let (w, h) = (1600, 900);
     render(w, h, |x, y| {
         let (u, v) = (x / w as f32 * 3.2, y / h as f32 * 1.8);
-        // Verwirbeln für fließende Formen
+        // Warp for flowing shapes
         let q = fbm(u, v, 0.3, 4, 1);
         let r = fbm(u + 2.0 * q, v + 1.7 * q, 1.1, 6, 2);
         let gas = ((r - 0.38).max(0.0) * 2.4).powf(1.3);
@@ -193,23 +193,23 @@ fn black_hole() -> RgbImage {
     let (w, h) = (1200, 900);
     let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0 + 10.0);
     let shadow = 120.0;
-    let tilt = 0.22; // Wie flach die Scheibe von der Seite aussieht
+    let tilt = 0.22; // How flat the disc looks from the side
     render(w, h, |x, y| {
         let (dx, dy) = (x - cx, y - cy);
         let dist = (dx * dx + dy * dy).sqrt();
         let mut c = scale(stars(x, y, 11, 0.04), 0.8);
 
-        // Akkretionsscheibe in ihrer eigenen Ebene
+        // Accretion disc in its own plane
         let disk = |dx: f32, dy: f32| -> Color {
             let r = (dx * dx + (dy / tilt).powi(2)).sqrt() / shadow;
             if !(1.35..5.2).contains(&r) {
                 return [0.0; 3];
             }
             let angle = (dy / tilt).atan2(dx);
-            // Rauschen auf dem Kreis statt über den Winkel, sonst gibt es bei ±180° eine Naht
+            // Noise on the circle instead of over the angle, otherwise there is a seam at ±180°
             let swirl = fbm(r * 6.0, angle.cos() * 1.6 + r, angle.sin() * 1.6, 5, 5);
             let falloff = ((5.2 - r) / 3.8).powf(1.6) * smooth(((r - 1.35) / 0.3).clamp(0.0, 1.0));
-            // Die Seite, die auf uns zukommt, leuchtet heller
+            // The side coming towards us glows brighter
             let beam = 1.0 + 0.55 * (-dx / (r * shadow)).clamp(-1.0, 1.0);
             let heat = ramp(
                 &[
@@ -223,7 +223,7 @@ fn black_hole() -> RgbImage {
             scale(heat, falloff * beam * (0.6 + 0.8 * swirl))
         };
 
-        // Licht der Rückseite, um das Loch herumgebogen: ein Ring
+        // Light from the far side, bent around the hole: a ring
         let ring_r = shadow * 1.18;
         let ring = (-((dist - ring_r) / 9.0).powi(2)).exp() * 1.6
             + (-((dist - ring_r) / 40.0).powi(2)).exp() * 0.35;
@@ -233,11 +233,11 @@ fn black_hole() -> RgbImage {
         if dist < shadow {
             c = [0.0; 3];
         }
-        // Vorderer Teil der Scheibe liegt vor dem Loch, hinterer dahinter
+        // Front part of the disc lies in front of the hole, back part behind it
         if dy > 0.0 || dist >= shadow {
             c = add(c, disk(dx, dy));
         }
-        // Leichter Schein um das Loch
+        // Slight glow around the hole
         if dist >= shadow {
             c = add(
                 c,
@@ -251,7 +251,7 @@ fn black_hole() -> RgbImage {
     })
 }
 
-/// Beleuchtete Kugel; `surface` bekommt den Punkt auf der Einheitskugel
+/// Lit sphere; `surface` gets the point on the unit sphere
 fn planet(
     w: u32,
     h: u32,
@@ -278,7 +278,7 @@ fn planet(
             let limb = 0.55 + 0.45 * nz.sqrt();
             let shade = lambert.powf(0.8) * 1.25 * limb + 0.01;
             c = scale(surface(n), shade);
-            // Dünner Dunst am Rand der Tagseite
+            // Thin haze at the edge of the day side
             let rim = (1.0 - nz).powi(3);
             c = add(c, scale(atmosphere, rim * lambert.sqrt() * 0.9));
             depth = Some(nz);
@@ -314,7 +314,7 @@ fn rocky_planet() -> RgbImage {
                 ],
                 land * 0.8 + detail * 0.3,
             );
-            // Polkappe
+            // Polar cap
             let cap = smooth(((-n[1] - 0.84 + 0.25 * (land - 0.5)) / 0.04).clamp(0.0, 1.0));
             c = mix(c, [1.1, 1.05, 1.0], cap);
             c
@@ -343,7 +343,7 @@ fn gas_giant() -> RgbImage {
                 ],
                 band * 0.8 + fine * 0.2,
             );
-            // Großer Wirbelsturm
+            // Great storm
             let (sx, sy) = (n[0] - 0.25, (lat - 0.32) * 1.8);
             let spot = (-(sx * sx + sy * sy) / 0.012).exp();
             c = mix(c, [0.8, 0.32, 0.18], spot * 0.9);
@@ -358,10 +358,10 @@ fn ringed_planet() -> RgbImage {
     let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0);
     let radius = 230.0;
     let tilt = 0.3_f32;
-    let rotate = -0.32_f32; // Ringe leicht schräg
+    let rotate = -0.32_f32; // Rings slightly tilted
     let (sin, cos) = rotate.sin_cos();
     let ring_at = move |x: f32, y: f32| -> (f32, f32) {
-        // In die Ringebene zurückrechnen
+        // Rotate back into the ring plane
         let (dx, dy) = (x - cx, y - cy);
         let (rx, ry) = (dx * cos + dy * sin, -dx * sin + dy * cos);
         ((rx * rx + (ry / tilt).powi(2)).sqrt() / radius, ry)
@@ -403,7 +403,7 @@ fn ringed_planet() -> RgbImage {
             let Some((col, alpha)) = ring_color(r) else {
                 return c;
             };
-            // Hinter der Kugel (obere Hälfte des Rings) ist der Ring verdeckt
+            // Behind the sphere (upper half of the ring) the ring is hidden
             if depth.is_some() && ry < 0.0 {
                 return c;
             }

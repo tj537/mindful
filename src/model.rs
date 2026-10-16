@@ -6,21 +6,21 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 pub const DEFAULT_TEXT: &str = "New idea";
-/// Text des Mittelpunkts in einem neuen, leeren Tab
+/// Text of the centre node in a new, empty tab
 pub const ROOT_TEXT: &str = "Central topic";
 
-/// Steht im Knoten noch der Platzhalter? Dann wird er beim Anklicken gleich bearbeitet.
+/// Does the node still hold the placeholder? Then clicking it starts editing right away.
 pub fn is_placeholder(text: &str) -> bool {
     let t = text.trim();
     t.is_empty() || t == DEFAULT_TEXT || t == ROOT_TEXT
 }
 
-/// Zeilenhöhe beim automatischen Anordnen
+/// Line height for automatic arranging
 const ROW: f32 = 54.0;
-/// Waagerechter Abstand zwischen Eltern- und Kindknoten beim Anordnen
+/// Horizontal distance between parent and child nodes when arranging
 const GAP_X: f32 = 60.0;
 
-/// Darstellung einer Folie (für Hauptzweige). Ohne Layout: Aufzählung.
+/// How a slide is shown (for main branches). Without a layout: bullet list.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum SlideLayout {
@@ -33,11 +33,11 @@ pub enum SlideLayout {
     Venn,
     Number,
     Quote,
-    /// Balkendiagramm aus Punkten wie „Solar: 42 %“
+    /// Bar chart made of points like "Solar: 42 %"
     Bars,
-    /// Kreis- bzw. Ringdiagramm
+    /// Pie or donut chart
     Pie,
-    /// Liniendiagramm
+    /// Line chart
     Line,
 }
 
@@ -57,7 +57,7 @@ impl SlideLayout {
         SlideLayout::Line,
     ];
 
-    /// Name im Markdown-Kommentar, z. B. `<!-- timeline -->`
+    /// Name in the Markdown comment, e.g. `<!-- timeline -->`
     pub fn name(self) -> &'static str {
         match self {
             SlideLayout::Timeline => "timeline",
@@ -86,33 +86,33 @@ impl SlideLayout {
 pub struct Node {
     pub id: u64,
     pub text: String,
-    /// Längerer Text zum Knoten (Markdown-Absätze, Präsentationsnotiz)
+    /// Longer text for the node (Markdown paragraphs, presentation note)
     #[serde(default)]
     pub note: String,
-    /// Position relativ zur Mitte der Zeichenfläche
+    /// Position relative to the centre of the canvas
     pub pos: [f32; 2],
     pub parent: Option<u64>,
     #[serde(default)]
     pub collapsed: bool,
-    /// Eigene Farbe (Index in die Zweigfarben des Farbschemas), vererbt sich an Unterpunkte
+    /// Own colour (index into the colour scheme's branch colours), inherited by sub-points
     #[serde(default)]
     pub color: Option<usize>,
-    /// Checkbox: `None` = keine, `Some(false)` = offen, `Some(true)` = erledigt
+    /// Checkbox: `None` = none, `Some(false)` = open, `Some(true)` = done
     #[serde(default)]
     pub task: Option<bool>,
-    /// Folien-Layout (nur bei Hauptzweigen wirksam)
+    /// Slide layout (only takes effect on main branches)
     #[serde(default)]
     pub layout: Option<SlideLayout>,
-    /// Bild zum Knoten: Schlüssel in `MindMap::images`
+    /// Picture for the node: key into `MindMap::images`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
-    /// Symbol vor dem Text (Kurzname aus `icons::ICONS`, z. B. „rocket“)
+    /// Icon before the text (short name from `icons::ICONS`, e.g. "rocket")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
 }
 
-/// Ein eingefügtes Bild, fertig verkleinert und kodiert (JPEG oder PNG).
-/// Es wird mit in der Datei gespeichert, damit sie ohne Bilderordner auskommt.
+/// An inserted picture, already scaled down and encoded (JPEG or PNG).
+/// It is saved inside the file so the file doesn't need a picture folder.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct StoredImage {
     pub width: u32,
@@ -127,7 +127,7 @@ impl StoredImage {
     }
 }
 
-/// Bilddaten als Base64-Text statt als Zahlenliste speichern
+/// Save image data as Base64 text instead of a list of numbers
 mod base64_bytes {
     use base64::Engine;
     use serde::{Deserialize, Deserializer, Serializer};
@@ -144,7 +144,7 @@ mod base64_bytes {
     }
 }
 
-/// Anfang des Blocks mit den Bilddaten am Ende einer Markdown-Datei
+/// Start of the block with the image data at the end of a Markdown file
 const IMAGES_START: &str = "<!-- mindful-images";
 
 impl Node {
@@ -169,12 +169,12 @@ impl Node {
 pub struct MindMap {
     pub nodes: Vec<Node>,
     pub next_id: u64,
-    /// Bilder der Knoten. `Arc`, damit die Rückgängig-Schnappschüsse sie nicht kopieren.
+    /// Pictures of the nodes. `Arc` so the undo snapshots don't copy them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub images: BTreeMap<String, Arc<StoredImage>>,
 }
 
-/// Inhalt der Zwischenablage beim Kopieren eines Teilbaums
+/// Clipboard contents when copying a subtree
 #[derive(Serialize, Deserialize)]
 pub struct Clip {
     pub mindmap_clip: Vec<Node>,
@@ -182,7 +182,7 @@ pub struct Clip {
     pub images: BTreeMap<String, Arc<StoredImage>>,
 }
 
-/// Ein Eintrag einer Gliederung (aus Markdown oder eingerücktem Text)
+/// One entry of an outline (from Markdown or indented text)
 #[derive(Debug, PartialEq)]
 pub struct OutlineItem {
     pub level: usize,
@@ -203,14 +203,14 @@ impl MindMap {
         }
     }
 
-    /// Bild eines Knotens, falls vorhanden und geladen
+    /// Picture of a node, if there is one and it is loaded
     #[cfg(test)]
     pub fn image_of(&self, id: u64) -> Option<(&str, &StoredImage)> {
         let key = self.get(id)?.image.as_deref()?;
         self.images.get(key).map(|img| (key, img.as_ref()))
     }
 
-    /// Bilder, auf die noch ein Knoten verweist
+    /// Pictures that a node still refers to
     fn used_images(&self, nodes: &[Node]) -> BTreeMap<String, Arc<StoredImage>> {
         nodes
             .iter()
@@ -219,7 +219,7 @@ impl MindMap {
             .collect()
     }
 
-    /// Bilder entfernen, die kein Knoten mehr benutzt (vor dem Speichern)
+    /// Remove pictures that no node uses any more (before saving)
     pub fn prune_images(&mut self) {
         self.images = self.used_images(&self.nodes);
     }
@@ -264,7 +264,7 @@ impl MindMap {
         depth
     }
 
-    /// Der Hauptzweig (Kind der Wurzel), zu dem der Knoten gehört.
+    /// The main branch (child of the root) the node belongs to.
     pub fn branch_of(&self, id: u64) -> Option<u64> {
         let mut cur = id;
         loop {
@@ -276,7 +276,7 @@ impl MindMap {
         }
     }
 
-    /// Unsichtbar, wenn irgendein Vorfahr eingeklappt ist.
+    /// Invisible if any ancestor is collapsed.
     pub fn is_hidden(&self, id: u64) -> bool {
         let mut cur = self.parent_of(id);
         while let Some(p) = cur {
@@ -288,7 +288,7 @@ impl MindMap {
         false
     }
 
-    /// Klappt alle Vorfahren auf, damit der Knoten sichtbar wird.
+    /// Expands all ancestors so the node becomes visible.
     pub fn expand_to(&mut self, id: u64) {
         let mut ancestors = Vec::new();
         let mut cur = self.parent_of(id);
@@ -303,7 +303,7 @@ impl MindMap {
         }
     }
 
-    /// Einklappen betrifft nur die Hauptzweige, Ausklappen alle Knoten.
+    /// Collapsing only affects the main branches, expanding affects all nodes.
     pub fn set_all_collapsed(&mut self, collapsed: bool) {
         let root = self.root();
         let targets: Vec<u64> = self
@@ -321,8 +321,8 @@ impl MindMap {
         }
     }
 
-    /// Farbindex des Knotens: eigene Farbe, sonst die eines Vorfahren,
-    /// sonst die Nummer seines Hauptzweigs. `None` heißt Wurzelfarbe.
+    /// Colour index of the node: its own colour, otherwise that of an ancestor,
+    /// otherwise the number of its main branch. `None` means the root colour.
     pub fn color_index(&self, id: u64) -> Option<usize> {
         let mut cur = id;
         loop {
@@ -338,8 +338,8 @@ impl MindMap {
         }
     }
 
-    /// Erledigte und alle Checkboxen unterhalb des Knotens (ohne ihn selbst),
-    /// `None`, wenn es darunter keine gibt.
+    /// Done and total checkboxes below the node (not counting the node itself),
+    /// `None` if there are none below it.
     pub fn task_progress(&self, id: u64) -> Option<(usize, usize)> {
         let tasks: Vec<bool> = self
             .subtree(id)
@@ -350,7 +350,7 @@ impl MindMap {
         (!tasks.is_empty()).then(|| (tasks.iter().filter(|done| **done).count(), tasks.len()))
     }
 
-    /// Der Knoten selbst plus alle Nachfahren.
+    /// The node itself plus all descendants.
     pub fn subtree(&self, id: u64) -> Vec<u64> {
         let mut result = vec![id];
         let mut i = 0;
@@ -362,7 +362,7 @@ impl MindMap {
         result
     }
 
-    /// Nächster Knoten in Richtung `dir` (für die Pfeiltasten).
+    /// Next node in direction `dir` (for the arrow keys).
     pub fn neighbor(&self, from: u64, dir: Vec2) -> Option<u64> {
         let origin = self.pos(from);
         self.nodes
@@ -381,18 +381,18 @@ impl MindMap {
             .map(|(id, _)| id)
     }
 
-    /// Wo ein neues Kind von `parent_id` hinkommt.
+    /// Where a new child of `parent_id` goes.
     fn next_child_pos(&self, parent_id: u64) -> Vec2 {
         let n = self.children(parent_id).count() as f32;
         let parent_pos = self.pos(parent_id);
         match self.parent_of(parent_id) {
-            // Kinder der Wurzel: im Kreis um die Mitte verteilen
+            // Children of the root: spread in a circle around the centre
             None => {
                 let angle = n * std::f32::consts::TAU / 6.0;
                 let radius = 230.0 + (n / 6.0).floor() * 90.0;
                 parent_pos + Vec2::new(angle.cos(), angle.sin()) * radius
             }
-            // Tiefere Ebenen: vom Großelternknoten weg, Geschwister abwechselnd versetzt
+            // Deeper levels: away from the grandparent, siblings staggered alternately
             Some(gp) => {
                 let away = parent_pos - self.pos(gp);
                 let dir = if away.length() > 1.0 {
@@ -426,13 +426,13 @@ impl MindMap {
         self.add_child_text(parent_id, "")
     }
 
-    /// Entfernt den Knoten samt Unterbaum.
+    /// Removes the node together with its subtree.
     pub fn remove(&mut self, id: u64) {
         let doomed = self.subtree(id);
         self.nodes.retain(|n| !doomed.contains(&n.id));
     }
 
-    /// Kopie des Teilbaums, der oberste Knoten zuerst.
+    /// Copy of the subtree, top node first.
     pub fn extract(&self, id: u64) -> Vec<Node> {
         self.subtree(id)
             .into_iter()
@@ -449,8 +449,8 @@ impl MindMap {
         .unwrap_or_default()
     }
 
-    /// Fügt einen kopierten Teilbaum unter `parent` ein, mit neuen IDs.
-    /// Gibt die ID des eingefügten obersten Knotens zurück.
+    /// Inserts a copied subtree under `parent`, with new IDs.
+    /// Returns the ID of the inserted top node.
     pub fn insert_subtree(&mut self, parent: u64, nodes: Vec<Node>) -> Option<u64> {
         let first = nodes.first()?.clone();
         let delta = self.next_child_pos(parent) - Vec2::new(first.pos[0], first.pos[1]);
@@ -476,10 +476,10 @@ impl MindMap {
         Some(ids[&first.id])
     }
 
-    // -- Automatisch anordnen -------------------------------------------------
+    // -- Automatic layout -----------------------------------------------------
 
     fn subtree_height(&self, id: u64, sizes: &HashMap<u64, Vec2>) -> f32 {
-        // Knoten mit Bild sind höher als eine Zeile
+        // Nodes with a picture are taller than one line
         let own = sizes.get(&id).map_or(ROW, |s| (s.y + 20.0).max(ROW));
         if self.get(id).is_some_and(|n| n.collapsed) {
             return own;
@@ -491,8 +491,8 @@ impl MindMap {
         sum.max(own)
     }
 
-    /// Klassisches Mindmap-Layout: Hauptzweige rechts und links der Mitte,
-    /// Unterpunkte untereinander. `sizes` sind die Knotengrößen.
+    /// Classic mind map layout: main branches right and left of the centre,
+    /// sub-points below each other. `sizes` are the node sizes.
     pub fn auto_layout(&mut self, sizes: &HashMap<u64, Vec2>) {
         let Some(root) = self.root() else { return };
         let width = |id: u64| sizes.get(&id).map_or(90.0, |s| s.x);
@@ -533,7 +533,7 @@ impl MindMap {
         out.insert(id, pos);
 
         if self.get(id).is_some_and(|n| n.collapsed) {
-            // Eingeklappte Unterpunkte wandern einfach mit
+            // Collapsed sub-points simply move along
             for d in self.subtree(id).into_iter().skip(1) {
                 out.insert(d, self.pos(d) + (pos - old));
             }
@@ -551,10 +551,10 @@ impl MindMap {
         }
     }
 
-    // -- Markdown / Gliederungen ---------------------------------------------
+    // -- Markdown / outlines -------------------------------------------------
 
-    /// Mitte als `#`, Hauptzweige als `##`, alles darunter als Aufzählung.
-    /// Notizen stehen als Absatz unter ihrem Knoten.
+    /// Centre as `#`, main branches as `##`, everything below as a bullet list.
+    /// Notes are written as a paragraph below their node.
     pub fn to_markdown(&self) -> String {
         let mut out = String::new();
         let Some(root) = self.root().and_then(|r| self.get(r)) else {
@@ -601,8 +601,8 @@ impl MindMap {
         }
     }
 
-    /// Markdown samt Bilddaten in einem Kommentarblock am Ende – so bleibt eine
-    /// exportierte Datei vollständig, und andere Programme zeigen den Block nicht an.
+    /// Markdown plus image data in a comment block at the end – that way an
+    /// exported file stays complete, and other programs don't show the block.
     pub fn to_markdown_with_images(&self) -> String {
         let mut out = self.to_markdown();
         let used = self.used_images(&self.nodes);
@@ -621,7 +621,7 @@ impl MindMap {
         out
     }
 
-    /// Gegenstück zu `to_markdown_with_images`
+    /// Counterpart of `to_markdown_with_images`
     pub fn from_markdown_with_images(text: &str) -> Option<MindMap> {
         let (outline, images) = match text.find(IMAGES_START) {
             Some(start) => (&text[..start], &text[start + IMAGES_START.len()..]),
@@ -656,8 +656,8 @@ impl MindMap {
         Some(map)
     }
 
-    /// Hängt eine Gliederung unter `parent`.
-    /// Gibt die IDs der obersten neuen Knoten zurück.
+    /// Attaches an outline below `parent`.
+    /// Returns the IDs of the new top-level nodes.
     pub fn add_outline(&mut self, parent: u64, items: &[OutlineItem]) -> Vec<u64> {
         let base = items.iter().map(|i| i.level).min().unwrap_or(0);
         let mut stack: Vec<(usize, u64)> = Vec::new();
@@ -684,17 +684,17 @@ impl MindMap {
         top
     }
 
-    /// Baut eine Mindmap aus Markdown oder eingerücktem Text.
+    /// Builds a mind map from Markdown or indented text.
     pub fn from_outline(text: &str) -> Option<MindMap> {
         let mut map = MindMap::new("");
         map.apply_outline(text);
         (map.nodes.len() > 1 || !map.nodes[0].text.is_empty()).then_some(map)
     }
 
-    /// Übernimmt eine (bearbeitete) Gliederung in die Mindmap.
-    /// Knoten, die es schon gab, behalten Position, Farbe und Einklapp-Zustand:
-    /// Sie werden unter demselben Elternknoten über den Text wiedererkannt,
-    /// sonst über ihre Reihenfolge.
+    /// Applies an (edited) outline to the mind map.
+    /// Nodes that already existed keep their position, colour and collapsed state:
+    /// they are recognised under the same parent by their text,
+    /// otherwise by their order.
     pub fn apply_outline(&mut self, text: &str) {
         let items = parse_outline(text);
         let min = items.iter().map(|i| i.level).min().unwrap_or(0);
@@ -805,8 +805,8 @@ impl MindMap {
     }
 }
 
-/// Schreibt eine Notiz als Absatz. Unter Überschriften (`indent == None`)
-/// mit Leerzeile davor, unter Aufzählungen eingerückt direkt darunter.
+/// Writes a note as a paragraph. Under headings (`indent == None`)
+/// with a blank line before it, under bullets indented directly below.
 fn push_note(note: &str, indent: Option<&str>, out: &mut String) {
     if note.trim().is_empty() {
         return;
@@ -825,7 +825,7 @@ fn push_note(note: &str, indent: Option<&str>, out: &mut String) {
     }
 }
 
-/// Bild als eigene Zeile `![](schlüssel)` direkt unter dem Eintrag
+/// Picture as its own line `![](key)` directly below the entry
 fn push_image(node: &Node, indent: Option<&str>, out: &mut String) {
     let Some(key) = &node.image else { return };
     if indent.is_none() {
@@ -835,7 +835,7 @@ fn push_image(node: &Node, indent: Option<&str>, out: &mut String) {
     out.push_str(&format!("![]({key})\n"));
 }
 
-/// Erkennt eine Bildzeile `![Beschreibung](pfad)` und gibt den Pfad zurück
+/// Recognises an image line `![description](path)` and returns the path
 fn split_image(line: &str) -> Option<String> {
     let rest = line.strip_prefix("![")?.strip_suffix(')')?;
     let (_, target) = rest.split_once("](")?;
@@ -843,7 +843,7 @@ fn split_image(line: &str) -> Option<String> {
     (!target.is_empty()).then(|| target.to_string())
 }
 
-/// Markdown-Schreibweise einer Checkbox
+/// Markdown notation of a checkbox
 fn task_box(task: Option<bool>) -> &'static str {
     match task {
         None => "",
@@ -852,14 +852,14 @@ fn task_box(task: Option<bool>) -> &'static str {
     }
 }
 
-/// Markdown-Kommentar für ein Folien-Layout
+/// Markdown comment for a slide layout
 fn layout_comment(layout: Option<SlideLayout>) -> String {
     layout
         .map(|l| format!(" <!-- {} -->", l.name()))
         .unwrap_or_default()
 }
 
-/// Trennt einen Layout-Kommentar am Zeilenende (`<!-- timeline -->`) vom Text
+/// Splits a layout comment at the end of the line (`<!-- timeline -->`) off the text
 fn split_layout(text: &str) -> (Option<SlideLayout>, String) {
     let t = text.trim_end();
     if let (Some(start), true) = (t.rfind("<!--"), t.ends_with("-->")) {
@@ -871,7 +871,7 @@ fn split_layout(text: &str) -> (Option<SlideLayout>, String) {
     (None, t.to_string())
 }
 
-/// Trennt eine Checkbox (`[ ]`, `[x]`) vom Text
+/// Splits a checkbox (`[ ]`, `[x]`) off the text
 fn split_task(text: &str) -> (Option<bool>, String) {
     let t = text.trim();
     for (prefix, done) in [("[ ]", false), ("[x]", true), ("[X]", true)] {
@@ -929,18 +929,18 @@ fn classify(line: &str) -> Line {
     Line::Plain(indent, trimmed.to_string())
 }
 
-/// Zerlegt Markdown oder eingerückten Text in eine Gliederung.
+/// Splits Markdown or indented text into an outline.
 ///
-/// Enthält der Text Überschriften oder Aufzählungen, gilt er als Markdown:
-/// normale Zeilen sind dann Notizen zum Eintrag davor. Sonst ist jede Zeile
-/// ein Eintrag und die Einrückung bestimmt die Ebene.
+/// If the text contains headings or bullets, it counts as Markdown:
+/// plain lines are then notes for the entry before them. Otherwise every line
+/// is an entry and the indentation decides the level.
 pub fn parse_outline(text: &str) -> Vec<OutlineItem> {
     let lines: Vec<Line> = text.lines().map(classify).collect();
     let markdown = lines
         .iter()
         .any(|l| matches!(l, Line::Heading(..) | Line::Bullet(..)));
 
-    // Einrückungsschritt erkennen (2 oder 4 Leerzeichen, Tab …)
+    // Detect the indentation step (2 or 4 spaces, tab …)
     let unit = lines
         .iter()
         .filter_map(|l| match l {
@@ -1015,7 +1015,7 @@ mod tests {
         assert_eq!(map.get(beach).unwrap().image.as_deref(), Some("beach.jpg"));
         assert_eq!(map.get(beach).unwrap().note, "Sunny.");
 
-        // Bilddaten wandern im Kommentarblock am Ende mit
+        // Image data travels along in the comment block at the end
         let img = Arc::new(StoredImage {
             width: 4,
             height: 3,
@@ -1030,14 +1030,14 @@ mod tests {
         assert_eq!(back.to_markdown(), md);
         assert_eq!(back.images.get("beach.jpg"), Some(&img));
 
-        // … und in der .mindmap-Datei (JSON) als Base64-Text
+        // … and in the .mindmap file (JSON) as Base64 text
         map.prune_images();
         let json = serde_json::to_string(&map).unwrap();
         assert!(json.contains("\"AQID+g==\""));
         let back: MindMap = serde_json::from_str(&json).unwrap();
         assert_eq!(back.images.len(), 1);
 
-        // Kopieren nimmt die Bilder mit
+        // Copying takes the pictures along
         let clip: Clip = serde_json::from_str(&map.clip_json(beach)).unwrap();
         assert!(clip.images.contains_key("beach.jpg"));
     }
@@ -1074,7 +1074,7 @@ mod tests {
         assert_eq!(find("Apples").task, Some(true));
         assert_eq!(map.task_progress(find("Packing").id), Some((2, 3)));
         assert_eq!(map.task_progress(find("Charger").id), None);
-        // [X] wird beim Schreiben zu [x]
+        // [X] becomes [x] when written
         assert_eq!(map.to_markdown(), md.replace("[X]", "[x]"));
     }
 
@@ -1086,7 +1086,7 @@ mod tests {
         assert_eq!(find("Spaceflight").layout, Some(SlideLayout::Timeline));
         assert_eq!(find("Galaxies").layout, None);
         assert_eq!(map.to_markdown(), md);
-        // Unbekannte Kommentare bleiben Teil des Textes
+        // Unknown comments stay part of the text
         let map = MindMap::from_outline("# A\n\n## B <!-- hello -->\n").unwrap();
         assert!(map.nodes.iter().any(|n| n.text == "B <!-- hello -->"));
     }
@@ -1106,11 +1106,11 @@ mod tests {
         map.get_mut(b).unwrap().color = Some(4);
         map.get_mut(b).unwrap().pos = [123.0, 456.0];
 
-        // Wie im Editor: Änderungen kommen nacheinander an
-        map.apply_outline("# Mitte\n\n## B\n"); // A gelöscht
-        map.apply_outline("# Mitte\n\n## B \n"); // B wird umbenannt …
+        // As in the editor: changes arrive one after another
+        map.apply_outline("# Mitte\n\n## B\n"); // A deleted
+        map.apply_outline("# Mitte\n\n## B \n"); // B is renamed …
         map.apply_outline("# Mitte\n\n## B neu\n");
-        map.apply_outline("# Mitte\n\n## B neu\n\n## C\n"); // C dazu
+        map.apply_outline("# Mitte\n\n## B neu\n\n## C\n"); // C added
         assert!(map.get(a).is_none());
         let b_node = map.get(b).unwrap();
         assert_eq!(b_node.text, "B neu");
@@ -1172,7 +1172,7 @@ mod example_tests {
         ] {
             let map = MindMap::from_outline(md).unwrap();
             assert!(map.children(map.root().unwrap()).count() >= 4);
-            // Im Markdown-Editor erscheint die Vorlage genau so, wie sie geschrieben ist
+            // In the Markdown editor the template appears exactly as it is written
             assert_eq!(map.to_markdown(), md);
         }
     }
@@ -1185,9 +1185,9 @@ mod example_tests {
         assert_eq!(map.get(root).unwrap().text, "The Universe");
         let branches: Vec<&Node> = map.children(root).collect();
         assert_eq!(branches.len(), 16);
-        // Bilder: Galerie, Vollbild und Bild neben dem Text
+        // Pictures: gallery, full screen and picture next to the text
         assert_eq!(map.nodes.iter().filter(|n| n.image.is_some()).count(), 5);
-        // Jedes Folienlayout kommt genau einmal vor, dazu normale Aufzählungen
+        // Every slide layout occurs exactly once, plus normal bullet lists
         for layout in SlideLayout::ALL {
             assert_eq!(
                 branches.iter().filter(|b| b.layout == Some(layout)).count(),
@@ -1196,7 +1196,7 @@ mod example_tests {
                 layout.name()
             );
         }
-        // Die Checkliste: 2 von 6 erledigt
+        // The checklist: 2 of 6 done
         let checklist = branches
             .iter()
             .find(|b| b.text == "Stargazing Checklist")
@@ -1224,7 +1224,7 @@ mod example_tests {
         assert!(branches
             .iter()
             .all(|b| !b.note.is_empty() && (map.has_children(b.id) || b.image.is_some())));
-        // Beim Öffnen im Markdown-Editor kommt exakt derselbe Text heraus
+        // Opening it in the Markdown editor gives exactly the same text
         assert_eq!(map.to_markdown(), md);
     }
 }

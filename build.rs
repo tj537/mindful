@@ -1,9 +1,9 @@
-//! Unter Windows: App-Symbol und Versionsangaben in die mindful.exe einbetten.
-//! Auf anderen Systemen tut dieses Skript nichts.
+//! On Windows: embeds the app icon and version info into mindful.exe.
+//! On other systems this script does nothing.
 
 fn main() {
     println!("cargo:rerun-if-changed=assets/icon.ico");
-    // Nur beim Bauen auf Windows für Windows – dort gibt es das nötige Ressourcen-Werkzeug
+    // Only when building on Windows for Windows – that's where the required resource tool exists
     if cfg!(windows) && std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         let mut res = winresource::WindowsResource::new();
         res.set_icon("assets/icon.ico")

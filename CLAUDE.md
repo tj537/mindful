@@ -19,7 +19,7 @@ Commit only when `cargo test` exits 0 (check the exit code; don't hide it behind
 
 ## Conventions
 
-- **Language:** UI, README, docs, release notes, commit messages in English. Code comments are German – keep writing them in German.
+- **Language:** UI, README, docs, release notes, commit messages in English. Code comments are English too.
 - **egui pins:** egui/eframe 0.31 with `egui-phosphor` 0.9 – they must be upgraded together.
 - **Visual checks:** there is no way to drive the real app from the terminal. Verify UI with the offscreen renderer (`src/offscreen.rs`, tests in `src/snapshot.rs`, `MindMapApp::for_snapshot`). Don't take full-screen screenshots of the user's desktop.
 - **Markdown round trip:** `MindMap::to_markdown()` must reproduce the bundled examples and templates exactly (tests check this). New node properties need both directions: written in `to_markdown`, read in `parse_outline`, carried through `apply_outline`/`add_outline`.

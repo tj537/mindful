@@ -26,11 +26,11 @@ use std::sync::Arc;
 
 const MIN_ZOOM: f32 = 0.25;
 const MAX_ZOOM: f32 = 3.0;
-/// Farbschema beim ersten Start: "Dark"
+/// Colour scheme on first start: "Dark"
 const DEFAULT_THEME: usize = 1;
 
-/// Mitgelieferte Beispiele (Name, Markdown)
-/// Vorlagen für neue Mindmaps (Name, Symbol, Markdown)
+/// Bundled examples (name, Markdown)
+/// Templates for new mind maps (name, icon, Markdown)
 const TEMPLATES: [(&str, &str, &str); 6] = [
     (
         "Brainstorming",
@@ -76,7 +76,7 @@ const EXAMPLES: [(&str, &str); 2] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Tastenkürzel (Cmd auf dem Mac, Strg sonst)
+// Keyboard shortcuts (Cmd on the Mac, Ctrl elsewhere)
 // ---------------------------------------------------------------------------
 
 const CMD: Modifiers = Modifiers::COMMAND;
@@ -113,7 +113,7 @@ const SC_TOUR: KeyboardShortcut = shortcut(Modifiers::NONE, Key::F6);
 const SC_TASK: KeyboardShortcut = shortcut(CMD, Key::Enter);
 
 // ---------------------------------------------------------------------------
-// Befehle
+// Commands
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy)]
@@ -121,11 +121,11 @@ enum ExportKind {
     Png,
     Svg,
     Markdown,
-    /// Alle Folien als PDF
+    /// All slides as PDF
     Pdf,
 }
 
-/// PDF-Export, der im Hintergrund läuft
+/// PDF export running in the background
 struct PdfJob {
     done: Arc<std::sync::atomic::AtomicUsize>,
     total: usize,
@@ -133,7 +133,7 @@ struct PdfJob {
     path: PathBuf,
 }
 
-/// Befehle aus Menü, Tableiste und Tastenkürzeln
+/// Commands from the menu, the tab bar and keyboard shortcuts
 #[derive(Clone, Copy)]
 enum Command {
     NewTab,
@@ -142,7 +142,7 @@ enum Command {
     SaveAs,
     Export(ExportKind),
     CloseTab(usize),
-    /// Tab samt Inhalt kopieren (Rechtsklick auf den Tab)
+    /// Copy a tab with its contents (right-click on the tab)
     DuplicateTab(usize),
     SelectTab(usize),
     NextTab(i32),
@@ -174,28 +174,28 @@ enum Command {
     OpenTemplate(usize),
 }
 
-/// Änderungen an einzelnen Knoten der aktiven Mindmap
+/// Changes to single nodes of the active mind map
 enum Action {
     AddChild(u64),
     AddSibling(u64),
     Rename(u64),
-    /// Ausgewählter Knoten, und es wird einfach losgetippt: Text ersetzen
+    /// Selected node and the user just starts typing: replace the text
     TypeInto(u64, String),
     Delete(u64),
     Toggle(u64),
-    /// Checkbox anklicken: offen ↔ erledigt
+    /// Click the checkbox: open ↔ done
     ToggleDone(u64),
-    /// ⌘Enter: keine → offen → erledigt → offen
+    /// ⌘Enter: none → open → done → open
     CycleTask(u64),
     SetTask(u64, Option<bool>),
-    /// Folien-Layout eines Hauptzweigs
+    /// Slide layout of a main branch
     SetLayout(u64, Option<SlideLayout>),
     SetColor(u64, Option<usize>),
-    /// Symbol vor dem Text setzen oder entfernen
+    /// Set or remove the icon before the text
     SetIcon(u64, Option<String>),
-    /// Bild(er) per Dateidialog einfügen
+    /// Insert picture(s) via the file dialog
     InsertImage(u64),
-    /// Bild aus der Zwischenablage einfügen
+    /// Insert a picture from the clipboard
     PasteImage(u64),
     RemoveImage(u64),
     Copy(u64),
@@ -211,7 +211,7 @@ enum Action {
     HideWelcome,
 }
 
-/// „1 node“, „5 nodes“
+/// "1 node", "5 nodes"
 fn count(n: usize, word: &str) -> String {
     if n == 1 {
         format!("1 {word}")
@@ -220,7 +220,7 @@ fn count(n: usize, word: &str) -> String {
     }
 }
 
-/// Beschriftung aus einem Dateinamen: „mars_rover-2“ → „Mars rover 2“
+/// Label from a file name: "mars_rover-2" → "Mars rover 2"
 fn caption(name: &str) -> String {
     let text = name.replace(['_', '-'], " ");
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -231,7 +231,7 @@ fn caption(name: &str) -> String {
     }
 }
 
-/// Zoomt so, dass der Punkt `p` auf dem Bildschirm an seiner Stelle bleibt.
+/// Zooms so that the point `p` stays where it is on the screen.
 fn zoom_at(doc: &mut Document, area: Rect, p: Pos2, zoom: f32) {
     let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
     let world = (p - area.center() - doc.pan) / doc.zoom;
@@ -239,7 +239,7 @@ fn zoom_at(doc: &mut Document, area: Rect, p: Pos2, zoom: f32) {
     doc.zoom = zoom;
 }
 
-/// Verschiebung und Zoom, bei denen alle sichtbaren Knoten ins Bild passen
+/// Pan and zoom at which all visible nodes fit into view
 fn fit_target(doc: &Document, area: Rect, sizes: &HashMap<u64, Vec2>) -> Option<(Vec2, f32)> {
     let mut bounds = Rect::NOTHING;
     for n in doc.map.nodes.iter().filter(|n| !doc.map.is_hidden(n.id)) {
@@ -255,7 +255,7 @@ fn fit_target(doc: &Document, area: Rect, sizes: &HashMap<u64, Vec2>) -> Option<
     Some((-bounds.center().to_vec2() * zoom, zoom))
 }
 
-/// Dauer von Gleiten und weicher Kamerafahrt in der Mindmap
+/// Duration of gliding and of the smooth camera move in the mind map
 const GLIDE: f64 = 0.7;
 
 fn cmd_item(
@@ -276,7 +276,7 @@ fn cmd_item(
     }
 }
 
-/// Flacher Icon-Button mit Tooltip (samt Tastenkürzel)
+/// Flat icon button with tooltip (including the shortcut)
 fn icon_button(
     ui: &mut egui::Ui,
     ic: &str,
@@ -295,7 +295,7 @@ fn icon_button(
         .clicked()
 }
 
-/// Segment-Schalter für die vier Ansichten; die Markierung gleitet zur gewählten
+/// Segmented switch for the four views; the highlight glides to the selected one
 fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool) -> Option<Mode> {
     let modes = [
         (
@@ -337,7 +337,7 @@ fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool
     let painter = ui.painter();
     painter.rect_filled(outer, 10.0, theme.background);
 
-    // Rechtecke der Segmente von links nach rechts
+    // Rectangles of the segments from left to right
     let mut x = outer.left() + inner;
     let rects: Vec<Rect> = widths
         .iter()
@@ -383,7 +383,7 @@ fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool
             theme.text.gamma_multiply(0.7)
         };
         painter.galley_with_override_text_color(r.center() - galley.size() / 2.0, galley, color);
-        // ⌘E schaltet zwischen Markdown und Mindmap hin und her
+        // ⌘E toggles between Markdown and mind map
         let tip = format!("{label}   {}", ui.ctx().format_shortcut(sc));
         if resp.on_hover_text(tip).clicked() && !selected {
             picked = Some(*mode);
@@ -392,7 +392,7 @@ fn mode_switch(ui: &mut egui::Ui, theme: &Theme, current: Mode, icons_only: bool
     picked
 }
 
-/// Ein Farbschema als Kärtchen in seinen eigenen Farben
+/// A colour scheme as a small card in its own colours
 fn theme_card(ui: &mut egui::Ui, t: &Theme, selected: bool, accent: Color32) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(176.0, 44.0), Sense::click());
     let p = ui.painter();
@@ -611,7 +611,7 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
         ui.separator();
         ui.weak("Tip: drag images from the Finder onto a node");
     });
-    // Folien-Layout nur für Hauptzweige (jeder ist eine Folie)
+    // Slide layout only for main branches (each one is a slide)
     if map.depth(id) == 1 {
         let current = map.get(id).and_then(|n| n.layout);
         let label = match current {
@@ -677,18 +677,18 @@ fn node_menu(ui: &mut egui::Ui, theme: &Theme, map: &MindMap, id: u64, out: &mut
     );
 }
 
-/// Ein sichtbarer Knoten mit fertig berechneter Bildschirmposition
+/// A visible node with its screen position already computed
 struct Laid {
     id: u64,
     rect: Rect,
     galley: Arc<egui::Galley>,
     style: NodeStyle,
     collapsed: bool,
-    /// Auf welcher Seite des Elternknotens er liegt (+1 rechts, -1 links)
+    /// Which side of its parent it is on (+1 right, -1 left)
     side: f32,
     hit: bool,
     task: Option<bool>,
-    /// Mit Vorschaubild: als Karte zeichnen
+    /// With a preview picture: draw as a card
     card: bool,
 }
 
@@ -696,10 +696,10 @@ struct Laid {
 // App
 // ---------------------------------------------------------------------------
 
-/// Wird beim Beenden gesichert und beim Start wiederhergestellt
+/// Saved on quit and restored on start
 #[derive(Deserialize)]
 struct SavedState {
-    /// Name statt Nummer, damit neue Farbschemas die Auswahl nicht verschieben
+    /// Name instead of a number, so new colour schemes don't shift the selection
     #[serde(default)]
     theme_name: Option<String>,
     docs: Vec<Document>,
@@ -738,62 +738,62 @@ struct SavedStateRef<'a> {
 pub struct MindMapApp {
     docs: Vec<Document>,
     active: usize,
-    /// Index in `THEMES`; `THEMES.len()` steht für die eigenen Farben
+    /// Index into `THEMES`; `THEMES.len()` stands for the custom colours
     theme: usize,
     applied_theme: Option<Theme>,
-    /// Eigene Farben aus dem Farb-Editor
+    /// Custom colours from the colour editor
     custom_colors: CustomColors,
     show_color_editor: bool,
-    /// Tab wurde gedrückt (wird abgefangen, bevor egui damit den Fokus wechselt)
+    /// Tab was pressed (intercepted before egui uses it to move the focus)
     tab_pressed: bool,
     /// Ctrl+Tab / Ctrl+Shift+Tab
     tab_switch: i32,
-    /// Textfeld des Knotens soll im nächsten Frame den Fokus bekommen
+    /// The node's text field should get the focus in the next frame
     focus_pending: bool,
-    /// Beim Fokussieren: Cursor ans Ende (nach dem Lostippen) statt alles markieren
+    /// When focusing: cursor to the end (after typing started) instead of selecting everything
     edit_cursor_end: bool,
     search: String,
     search_focus: bool,
     show_help: bool,
     status: String,
-    /// Zuletzt angezeigte Meldung und seit wann (zum Verblassen)
+    /// Last message shown and since when (for fading)
     status_shown: (String, f64),
-    /// Tab unter dem Mauszeiger im letzten Frame
+    /// Tab under the mouse pointer in the last frame
     hovered_tab: Option<usize>,
-    /// Läuft gerade ein PDF-Export?
+    /// Is a PDF export running right now?
     pdf_job: Option<PdfJob>,
-    /// Für Bildschirmfotos in Tests: das „AI prompt“-Fenster öffnen
+    /// For screenshots in tests: open the "AI prompt" window
     #[cfg(test)]
     pub open_ai_popup: bool,
-    /// Für Bildschirmfotos in Tests: das Einstellungen-Fenster öffnen
+    /// For screenshots in tests: open the settings window
     #[cfg(test)]
     pub open_settings_popup: bool,
     window_title: String,
     canvas_rect: Rect,
-    /// Vorschau neben dem Markdown-Editor
+    /// Preview next to the Markdown editor
     md_preview: bool,
-    /// Offenes Notizfenster: Knoten und Stand vorher (für Rückgängig)
+    /// Open note window: node and previous state (for undo)
     note_edit: Option<(u64, MindMap)>,
     fullscreen: bool,
-    /// Zeitpunkt des letzten eingefügten Textes (⌘V ohne Text = Bild einfügen)
+    /// Time of the last pasted text (⌘V without text = paste a picture)
     last_paste: f64,
-    /// Bildschirm-Rechtecke der Knoten im letzten Frame (Ziel beim Hineinziehen von Bildern)
+    /// Screen rectangles of the nodes in the last frame (target when dragging pictures in)
     node_rects: HashMap<u64, Rect>,
-    /// Tipp-Karte mit Beispiel-Button auf leeren Mindmaps
+    /// Tip card with an example button on empty mind maps
     show_welcome: bool,
-    /// Stichpunkte auf Folien nacheinander aufdecken
+    /// Reveal bullets on slides one after another
     build_bullets: bool,
-    /// Übergänge, Hintergrund usw. für Präsentation und Tour
+    /// Transitions, background etc. for the presentation and the tour
     effects: present::Effects,
-    /// Eingaben im „AI prompt“-Formular
+    /// Inputs in the "AI prompt" form
     prompt: ai_prompt::PromptForm,
-    /// Beim Start nach einer neuen Version fragen
+    /// Ask for a new version on startup
     check_updates: bool,
-    /// Laufende oder fertige Update-Prüfung
+    /// Running or finished update check
     update_check: Option<crate::update::Check>,
-    /// Gefundene neuere Version
+    /// Newer version found
     update: Option<crate::update::Update>,
-    /// Prüfung per Menü angestoßen: auch „aktuell“ melden
+    /// Check triggered from the menu: report "up to date" too
     manual_update_check: bool,
 }
 
@@ -805,7 +805,7 @@ impl MindMapApp {
         Self::with_state(&cc.egui_ctx, saved)
     }
 
-    /// Ohne Fenster, für Bildschirmfotos in Tests: mit dem Weltall-Beispiel
+    /// Without a window, for screenshots in tests: with the universe example
     #[cfg(test)]
     pub fn for_snapshot(ctx: &egui::Context) -> Self {
         let mut app = Self::with_state(ctx, None);
@@ -814,7 +814,7 @@ impl MindMapApp {
     }
 
     fn with_state(ctx: &egui::Context, saved: Option<SavedState>) -> Self {
-        // Cmd +/- soll die Mindmap zoomen, nicht die ganze Oberfläche
+        // Cmd +/- should zoom the mind map, not the whole UI
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         install_fonts(ctx);
         ctx.style_mut(apply_spacing);
@@ -860,7 +860,7 @@ impl MindMapApp {
 
         if let Some(state) = saved {
             if let Some(name) = state.theme_name {
-                // Farbschemas hießen früher deutsch
+                // Colour schemes used to have German names
                 let name = match name.as_str() {
                     "Hell" => "Light",
                     "Dunkel" => "Dark",
@@ -892,12 +892,12 @@ impl MindMapApp {
             app.new_tab();
         }
         app.active = app.active.min(app.docs.len() - 1);
-        // Nicht in Tests: dort soll nichts ins Netz
+        // Not in tests: nothing should go to the network there
         if app.check_updates && !cfg!(test) {
             let ctx = ctx.clone();
             app.update_check = Some(crate::update::start(move || ctx.request_repaint()));
         }
-        // Gespeicherten Modus wiederherstellen, aber nie direkt in die Präsentation
+        // Restore the saved mode, but never straight into the presentation
         for doc in &mut app.docs {
             let mode = if doc.mode.is_presenting() {
                 Mode::Mindmap
@@ -909,7 +909,7 @@ impl MindMapApp {
         app
     }
 
-    /// Ein Frame der ganzen Oberfläche
+    /// One frame of the whole UI
     pub fn show(&mut self, ctx: &egui::Context) {
         self.poll_pdf_export(ctx);
         self.poll_update_check();
@@ -918,7 +918,7 @@ impl MindMapApp {
             ctx.set_visuals(visuals_for(&current));
             self.applied_theme = Some(current);
         }
-        // Hineingezogene Dateien: Bilder an einen Knoten hängen, Mindmaps öffnen
+        // Dropped files: attach pictures to a node, open mind maps
         let dropped: Vec<PathBuf> = ctx.input(|i| {
             i.raw
                 .dropped_files
@@ -936,7 +936,7 @@ impl MindMapApp {
         let theme = &self.current_theme();
         let mode = self.doc().mode;
 
-        // Folien oder Kamerafahrt: nur die Präsentation, keine Leisten
+        // Slides or camera tour: only the presentation, no bars
         if mode.is_presenting() {
             self.tab_pressed = false;
             let build_bullets = self.build_bullets;
@@ -1018,8 +1018,8 @@ impl MindMapApp {
         self.update_title(ctx);
     }
 
-    /// Alle Tabs samt ungespeicherter Änderungen sichern; beim nächsten Start
-    /// ist alles wieder da.
+    /// Save all tabs including unsaved changes; on the next start
+    /// everything is back.
     #[cfg(test)]
     pub fn set_mode_for_snapshot(&mut self, mode: Mode) {
         self.doc_mut().set_mode(mode);
@@ -1041,7 +1041,7 @@ impl MindMapApp {
         self.new_tab();
     }
 
-    /// Für Tests: Text des Mittelpunkts und ob gerade bearbeitet wird
+    /// For tests: text of the centre node and whether it is being edited
     #[cfg(test)]
     pub fn root_for_test(&self) -> (String, bool) {
         let doc = self.doc();
@@ -1052,7 +1052,7 @@ impl MindMapApp {
         )
     }
 
-    /// Aktuelles Farbschema – eines aus `THEMES` oder die eigenen Farben
+    /// Current colour scheme – one of `THEMES` or the custom colours
     fn current_theme(&self) -> Theme {
         THEMES
             .get(self.theme)
@@ -1068,7 +1068,7 @@ impl MindMapApp {
         &mut self.docs[self.active]
     }
 
-    // -- Tabs und Dateien -----------------------------------------------------
+    // -- Tabs and files -------------------------------------------------------
 
     fn new_tab(&mut self) {
         self.close_note();
@@ -1079,7 +1079,7 @@ impl MindMapApp {
         self.active = self.docs.len() - 1;
     }
 
-    /// Kopie eines Tabs direkt dahinter; ungespeichert, damit das Original unberührt bleibt
+    /// Copy of a tab right behind it; unsaved, so the original stays untouched
     fn duplicate_tab(&mut self, i: usize) {
         self.close_note();
         let Some(source) = self.docs.get(i) else {
@@ -1138,7 +1138,7 @@ impl MindMapApp {
         }
     }
 
-    /// Zeigt ein Dokument an: ersetzt einen leeren, unberührten Tab, sonst neuer Tab.
+    /// Shows a document: replaces an empty, untouched tab, otherwise a new tab.
     fn push_doc(&mut self, doc: Document) {
         self.close_note();
         let replace = self
@@ -1173,7 +1173,7 @@ impl MindMapApp {
         let Some(mut map) = MindMap::from_outline(text) else {
             return;
         };
-        // Die Beispielbilder sind in die App eingebaut
+        // The example pictures are built into the app
         images::resolve(&mut map, None);
         let mut doc = Document::new(map, None);
         doc.layout_pending = true;
@@ -1181,7 +1181,7 @@ impl MindMapApp {
         self.status = format!("Opened example “{name}” – press F5 to present");
     }
 
-    /// Gibt `false` zurück, wenn nicht gespeichert wurde (z. B. Dialog abgebrochen).
+    /// Returns `false` if nothing was saved (e.g. dialog cancelled).
     fn save_doc(&mut self, i: usize) -> bool {
         let is_mindmap = |p: &PathBuf| {
             p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
@@ -1221,7 +1221,7 @@ impl MindMapApp {
         }
     }
 
-    /// Fenster zum Bearbeiten der eigenen Farben; Änderungen wirken sofort
+    /// Window for editing the custom colours; changes take effect immediately
     fn color_editor(&mut self, ctx: &egui::Context) {
         if !self.show_color_editor {
             return;
@@ -1286,7 +1286,7 @@ impl MindMapApp {
         }
     }
 
-    /// Inhalt des Einstellungen-Fensters (Zahnrad oben rechts)
+    /// Contents of the settings window (gear at the top right)
     fn settings_ui(&mut self, ui: &mut egui::Ui, current_theme: usize, out: &mut Option<Command>) {
         use crate::ai_prompt::{field_label, toggle};
         ui.spacing_mut().item_spacing.y = 6.0;
@@ -1298,13 +1298,13 @@ impl MindMapApp {
         ui.add_space(4.0);
 
         field_label(ui, "THEME");
-        // Farbschemas als Kärtchen in zwei Spalten, dazu die eigenen Farben
+        // Colour schemes as cards in two columns, plus the custom colours
         let accent = self.current_theme().branches[0];
         let custom = self.custom_colors.to_theme();
         let themes: Vec<Theme> = THEMES.iter().copied().chain([custom]).collect();
         egui::ScrollArea::vertical()
             .id_salt("settings_themes_scroll")
-            // Alle Kärtchen zeigen, nur bei kleinem Fenster scrollen
+            // Show all cards, only scroll in a small window
             .max_height((ui.ctx().screen_rect().height() - 380.0).clamp(150.0, 480.0))
             .show(ui, |ui| {
                 egui::Grid::new("settings_themes")
@@ -1362,8 +1362,8 @@ impl MindMapApp {
         });
     }
 
-    /// Wohin ein hineingezogenes Bild gehört: in der Präsentation an die aktuelle Folie,
-    /// in der Mindmap an den Knoten unter dem Mauszeiger, sonst an den ausgewählten
+    /// Where a dropped picture belongs: in the presentation to the current slide,
+    /// in the mind map to the node under the mouse pointer, otherwise to the selected one
     fn drop_target(&self, ctx: &egui::Context) -> Option<u64> {
         let doc = self.doc();
         let root = doc.map.root()?;
@@ -1389,7 +1389,7 @@ impl MindMapApp {
         })
     }
 
-    /// Folien im Hintergrund als PDF schreiben; der Fortschritt steht unten
+    /// Write the slides as PDF in the background; the progress is shown at the bottom
     fn start_pdf_export(&mut self, path: PathBuf) {
         if self.pdf_job.is_some() {
             self.status = "A PDF export is already running".into();
@@ -1414,7 +1414,7 @@ impl MindMapApp {
         self.pdf_job = Some(job);
     }
 
-    /// Ergebnis der Update-Prüfung übernehmen
+    /// Take over the result of the update check
     fn poll_update_check(&mut self) {
         let Some(check) = &self.update_check else {
             return;
@@ -1437,7 +1437,7 @@ impl MindMapApp {
         }
     }
 
-    /// Fortschritt des PDF-Exports in der Statuszeile
+    /// Progress of the PDF export in the status bar
     fn poll_pdf_export(&mut self, ctx: &egui::Context) {
         let Some(job) = &self.pdf_job else { return };
         let finished = job.result.lock().ok().and_then(|mut r| r.take());
@@ -1458,7 +1458,7 @@ impl MindMapApp {
         }
     }
 
-    /// Bilddateien einlesen und einfügen; andere Dateien (.mindmap, .md) öffnen
+    /// Read and insert picture files; open other files (.mindmap, .md)
     fn add_image_files(&mut self, target: u64, paths: Vec<PathBuf>) {
         let (pictures, others): (Vec<PathBuf>, Vec<PathBuf>) =
             paths.into_iter().partition(|p| images::is_image_path(p));
@@ -1486,7 +1486,7 @@ impl MindMapApp {
         }
     }
 
-    /// Ein Bild kommt an den Knoten selbst, mehrere werden je ein neuer Unterpunkt
+    /// One picture goes to the node itself, several become one new sub-point each
     fn add_images(&mut self, target: u64, found: Vec<(String, (String, StoredImage))>) {
         let doc = &mut self.docs[self.active];
         if found.is_empty() || doc.map.get(target).is_none() {
@@ -1629,7 +1629,7 @@ impl MindMapApp {
         };
     }
 
-    // -- Befehle ausführen ----------------------------------------------------
+    // -- Running commands ----------------------------------------------------
 
     fn zoom_by(&mut self, factor: f32) {
         let area = self.canvas_rect;
@@ -1782,7 +1782,7 @@ impl MindMapApp {
                 }
             }
             Action::AddSibling(id) => {
-                // An der Wurzel gibt es keine Geschwister, also Kind
+                // The root has no siblings, so add a child
                 let parent = doc.map.parent_of(id).unwrap_or(id);
                 doc.checkpoint();
                 let sibling = doc.map.add_child(parent);
@@ -1803,7 +1803,7 @@ impl MindMapApp {
                 self.edit_cursor_end = true;
             }
             Action::Delete(id) => {
-                // Die Wurzel bleibt immer stehen
+                // The root always stays
                 if let Some(parent) = doc.map.parent_of(id) {
                     doc.checkpoint();
                     doc.map.remove(id);
@@ -1880,7 +1880,7 @@ impl MindMapApp {
                     .or(doc.map.root());
                 let Some(target) = target else { return };
                 doc.checkpoint();
-                // Eigener kopierter Teilbaum, sonst Text als Gliederung
+                // Our own copied subtree, otherwise text as an outline
                 let first = match serde_json::from_str::<Clip>(&text) {
                     Ok(clip) => {
                         for (key, img) in clip.images {
@@ -1942,7 +1942,7 @@ impl MindMapApp {
         }
     }
 
-    // -- Tastatur -------------------------------------------------------------
+    // -- Keyboard -------------------------------------------------------------
 
     fn shortcuts(&mut self, ctx: &egui::Context) -> Vec<Command> {
         let typing = ctx.wants_keyboard_input();
@@ -1954,7 +1954,7 @@ impl MindMapApp {
                     out.push(cmd);
                 }
             };
-            // Varianten mit Shift zuerst, sonst greift die ohne
+            // Variants with Shift first, otherwise the one without would match
             check(SC_SAVE_AS, Command::SaveAs);
             check(SC_SAVE, Command::Save);
             check(SC_OPEN, Command::Open);
@@ -1999,7 +1999,7 @@ impl MindMapApp {
         let tab = std::mem::take(&mut self.tab_pressed);
         let doc = &mut self.docs[self.active];
 
-        // Tab legt immer ein Kind an – auch direkt aus dem Textfeld heraus
+        // Tab always adds a child – even straight from the text field
         if tab && (doc.editing.is_some() || !typing) {
             let target = doc
                 .editing
@@ -2008,7 +2008,7 @@ impl MindMapApp {
             doc.end_edit();
             return target.map(Action::AddChild);
         }
-        // Während getippt wird, gehören die übrigen Tasten dem Textfeld
+        // While typing, the remaining keys belong to the text field
         if doc.editing.is_some() || typing {
             return None;
         }
@@ -2024,8 +2024,8 @@ impl MindMapApp {
                     egui::Event::Cut => cut = true,
                     egui::Event::Paste(text) => paste = Some(text.clone()),
                     egui::Event::Text(text) => typed.push_str(text),
-                    // Liegt nur ein Bild in der Zwischenablage, meldet egui kein „Paste“ –
-                    // aber das Loslassen von V bei gedrückter ⌘-Taste kommt an
+                    // If only a picture is on the clipboard, egui reports no "Paste" –
+                    // but releasing V while ⌘ is held does arrive
                     egui::Event::Key {
                         key: Key::V,
                         pressed: false,
@@ -2058,7 +2058,7 @@ impl MindMapApp {
 
         let Some(sel) = doc.selected.filter(|id| doc.map.get(*id).is_some()) else {
             doc.selected = None;
-            // Ohne Auswahl wählt eine Pfeiltaste den Mittelpunkt
+            // Without a selection an arrow key selects the centre node
             if arrows.iter().any(|(k, _)| pressed(*k)) {
                 doc.selected = doc.map.root();
             }
@@ -2074,8 +2074,8 @@ impl MindMapApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SC_TASK)) {
             return Some(Action::CycleTask(sel));
         }
-        // Wie in einer Tabelle: auswählen und lostippen ersetzt den Text
-        // (ein einzelnes Leerzeichen bleibt „Einklappen“)
+        // Like in a spreadsheet: selecting and typing replaces the text
+        // (a single space stays "collapse")
         if !typed.trim().is_empty() {
             return Some(Action::TypeInto(sel, typed));
         }
@@ -2107,7 +2107,7 @@ impl MindMapApp {
         None
     }
 
-    // -- Oberfläche -----------------------------------------------------------
+    // -- User interface -------------------------------------------------------
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) -> Option<Command> {
         let mut out = None;
@@ -2122,8 +2122,8 @@ impl MindMapApp {
         let accent = self.current_theme().branches[0];
         let l = |ic: &str, text: &str| format!("{ic}  {text}");
 
-        // Schmales Fenster: Teile der Leiste nach und nach ausblenden oder verkleinern,
-        // damit sich nichts überlappt (alles bleibt über die Menüs erreichbar)
+        // Narrow window: hide or shrink parts of the bar step by step,
+        // so nothing overlaps (everything stays reachable via the menus)
         let width = ui.available_width();
         let ai_compact = width < 1250.0;
         let search_width = if width >= 1100.0 {
@@ -2140,7 +2140,7 @@ impl MindMapApp {
         let show_tools = width >= 760.0;
 
         egui::menu::bar(ui, |ui| {
-            // Mehr Luft in den Menü-Knöpfen (File, Edit, …)
+            // More room in the menu buttons (File, Edit, …)
             ui.spacing_mut().button_padding = Vec2::new(10.0, 5.0);
             let logo_color = ui.visuals().strong_text_color();
             crate::logo::show(ui, 24.0, logo_color).on_hover_text("Mindful");
@@ -2419,7 +2419,7 @@ impl MindMapApp {
                 );
             });
 
-            // Werkzeugleiste
+            // Toolbar
             let mut tool = |ui: &mut egui::Ui,
                             ic: &str,
                             tip: &str,
@@ -2512,7 +2512,7 @@ impl MindMapApp {
                 }
             }
 
-            // Rechts in der Leiste: Einstellungen ganz außen, daneben die Suche
+            // On the right of the bar: settings at the far end, the search next to it
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let settings_id = ui.make_persistent_id("settings_popup");
                 let gear = ui
@@ -2573,7 +2573,7 @@ impl MindMapApp {
                 }
                 ui.separator();
 
-                // „AI prompt“ mit Aufklappmenü
+                // "AI prompt" with a drop-down menu
                 let popup_id = ui.make_persistent_id("ai_prompt_popup");
                 ui.spacing_mut().button_padding = Vec2::new(14.0, 5.0);
                 let ai = ui
@@ -2628,7 +2628,7 @@ impl MindMapApp {
     fn tab_bar(&mut self, ui: &mut egui::Ui, theme: &Theme) -> Option<Command> {
         let mut out = None;
         let hovered_tab = self.hovered_tab.take();
-        // Schmales Fenster: Ansichten nur als Symbole, Tabs seitlich scrollbar
+        // Narrow window: views as icons only, tabs scroll sideways
         let icons_only = ui.available_width() < 1000.0;
         let switch_width = if icons_only { 200.0 } else { 450.0 };
         ui.horizontal(|ui| {
@@ -2706,7 +2706,7 @@ impl MindMapApp {
                                         if let Some(path) = &doc.path {
                                             label.on_hover_text(path.display().to_string());
                                         }
-                                        // Ungespeichert: Punkt; beim Drüberfahren (oder im aktiven Tab) das X
+                                        // Unsaved: dot; on hover (or in the active tab) the X
                                         let (r, close) = ui
                                             .allocate_exact_size(Vec2::splat(18.0), Sense::click());
                                         if close.hovered() {
@@ -2747,7 +2747,7 @@ impl MindMapApp {
                     });
                 });
 
-            // Ansichts-Umschalter rechts
+            // View switcher on the right
             let current = self.docs[self.active].mode;
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if let Some(mode) = mode_switch(ui, theme, current, icons_only) {
@@ -2761,7 +2761,7 @@ impl MindMapApp {
     fn status_bar(&mut self, ui: &mut egui::Ui) -> Option<Command> {
         let mut out = None;
         let now = ui.input(|i| i.time);
-        // Meldungen werden nach ein paar Sekunden blasser
+        // Messages fade after a few seconds
         if self.status != self.status_shown.0 {
             self.status_shown = (self.status.clone(), now);
         }
@@ -2770,12 +2770,12 @@ impl MindMapApp {
         if (6.0..7.5).contains(&age) {
             ui.ctx().request_repaint();
         }
-        // Schmales Fenster: Tipp rechts ausblenden, Meldung links abschneiden
+        // Narrow window: hide the tip on the right, cut off the message on the left
         let width = ui.available_width();
         let show_hint = width >= 1050.0;
         let right = if show_hint { 560.0 } else { 300.0 };
         ui.horizontal(|ui| {
-            // Neue Version: farbiger Knopf ganz links, öffnet die Download-Seite
+            // New version: coloured button at the far left, opens the download page
             let mut used = 0.0;
             if let Some(update) = &self.update {
                 let accent = ui.visuals().selection.stroke.color;
@@ -2827,7 +2827,7 @@ impl MindMapApp {
                         ui.weak("## heading = branch · - bullet = child · text = note");
                     }
                 } else {
-                    // Zoom: − Prozent +, Klick auf die Zahl holt alles ins Bild
+                    // Zoom: − percent +, clicking the number brings everything into view
                     let small = |ic: &str| {
                         egui::Button::new(egui::RichText::new(ic).size(13.0))
                             .min_size(Vec2::new(22.0, 20.0))
@@ -2959,7 +2959,7 @@ impl MindMapApp {
 
         let now = ui.input(|i| i.time);
 
-        // Anordnen und "alles anzeigen" brauchen die echten Knotengrößen
+        // Arranging and "show all" need the real node sizes
         if doc.layout_pending || doc.fit_pending {
             let sizes: HashMap<u64, Vec2> = doc
                 .map
@@ -2968,7 +2968,7 @@ impl MindMapApp {
                 .map(|n| (n.id, node_size(&ctx, &doc.map, theme, n)))
                 .collect();
             if doc.layout_pending {
-                // Alte Positionen merken: die Knoten gleiten von dort an ihren neuen Platz
+                // Remember the old positions: the nodes glide from there to their new place
                 let before = doc.map.nodes.iter().map(|n| (n.id, n.pos)).collect();
                 doc.map.auto_layout(&sizes);
                 doc.layout_anim = Some((before, now));
@@ -2996,7 +2996,7 @@ impl MindMapApp {
             }
         }
 
-        // Weiche Kamerafahrt
+        // Smooth camera move
         if let Some(v) = doc.view_anim {
             let t = ((now - v.start) / GLIDE).clamp(0.0, 1.0) as f32;
             let e = ease_in_out_cubic(t);
@@ -3009,7 +3009,7 @@ impl MindMapApp {
             }
         }
 
-        // Zoomen (Cmd+Scrollen, Pinch) an der Maus, sonst Scrollen = Verschieben
+        // Zoom (Cmd+scroll, pinch) at the mouse, otherwise scrolling = panning
         if ui.rect_contains_pointer(area) {
             let (zoom_delta, scroll, hover) =
                 ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
@@ -3037,7 +3037,7 @@ impl MindMapApp {
         let origin = area.center() + doc.pan;
         let to_screen = |p: [f32; 2]| origin + Vec2::new(p[0], p[1]) * zoom;
 
-        // Hintergrund mit Punktraster, das sich mitbewegt
+        // Background with a dot grid that moves along
         painter.rect_filled(area, 0.0, theme.background);
         let mut spacing = 28.0 * zoom;
         while spacing < 14.0 {
@@ -3053,7 +3053,7 @@ impl MindMapApp {
             y += spacing;
         }
 
-        // Nach dem Anordnen gleiten die Knoten von ihren alten Plätzen herüber
+        // After arranging, the nodes glide over from their old places
         let mut gliding: HashMap<u64, [f32; 2]> = HashMap::new();
         if let Some((from, start)) = &doc.layout_anim {
             let e = ease_in_out_cubic(((now - *start) / GLIDE).clamp(0.0, 1.0) as f32);
@@ -3075,7 +3075,7 @@ impl MindMapApp {
             }
         }
 
-        // Sichtbare Knoten berechnen
+        // Compute the visible nodes
         let mut layout: Vec<Laid> = doc
             .map
             .nodes
@@ -3112,7 +3112,7 @@ impl MindMapApp {
                 }
             })
             .collect();
-        // Bild wird hineingezogen: Knoten unter dem Mauszeiger hervorheben
+        // A picture is being dragged in: highlight the node under the mouse pointer
         let file_hover = ctx.input(|i| {
             (!i.raw.hovered_files.is_empty())
                 .then(|| i.pointer.latest_pos())
@@ -3126,7 +3126,7 @@ impl MindMapApp {
         let rects: HashMap<u64, Rect> = layout.iter().map(|l| (l.id, l.rect)).collect();
         self.node_rects = rects.clone();
 
-        // Ausgewählten Knoten ins Bild holen, falls er außerhalb liegt
+        // Bring the selected node into view if it is outside
         if let Some(id) = doc.reveal.take() {
             if let Some(r) = rects.get(&id) {
                 if !area.shrink(30.0).contains_rect(*r) {
@@ -3136,7 +3136,7 @@ impl MindMapApp {
             }
         }
 
-        // Geschwungene Verbindungslinien, unter den Knoten
+        // Curved connecting lines, below the nodes
         for l in &layout {
             let Some(parent) = doc.map.parent_of(l.id).and_then(|p| rects.get(&p)) else {
                 continue;
@@ -3164,7 +3164,7 @@ impl MindMapApp {
             if resp.double_clicked() {
                 action = Some(Action::Rename(id));
             }
-            // Platzhalter („Central topic“, „New idea“) gleich zum Überschreiben öffnen
+            // Open placeholders ("Central topic", "New idea") for typing over right away
             if resp.clicked()
                 && doc.editing != Some(id)
                 && doc.map.get(id).is_some_and(|n| is_placeholder(&n.text))
@@ -3176,7 +3176,7 @@ impl MindMapApp {
                 doc.layout_anim = None;
             }
             if resp.dragged() {
-                // Knoten samt Unterbaum verschieben
+                // Move the node together with its subtree
                 let d = resp.drag_delta() / zoom;
                 for nid in doc.map.subtree(id) {
                     if let Some(n) = doc.map.get_mut(nid) {
@@ -3197,13 +3197,13 @@ impl MindMapApp {
                 l.hit,
                 l.card,
             );
-            // Vorschaubild oben, Text und Checkbox darunter
+            // Preview picture on top, text and checkbox below
             let label = match doc.map.get(id) {
                 Some(n) => paint_thumb(&painter, &doc.map, n, rect, zoom),
                 None => rect,
             };
 
-            // Checkbox zum Anklicken
+            // Clickable checkbox
             if let Some(done) = l.task {
                 let r = paint_task(&painter, label, &l.style, done, zoom);
                 let check = ui.interact(
@@ -3221,7 +3221,7 @@ impl MindMapApp {
                 }
             }
 
-            // Notiz-Symbol oben rechts; die Notiz erscheint beim Drüberfahren
+            // Note icon at the top right; the note appears on hover
             let note = doc
                 .map
                 .get(id)
@@ -3243,7 +3243,7 @@ impl MindMapApp {
                 }
             }
 
-            // Zähler für eingeklappte Unterpunkte; Klick klappt aus
+            // Counter for collapsed sub-points; a click expands them
             if l.collapsed {
                 let count = doc.map.subtree(id).len() - 1;
                 let c = rect.center() + Vec2::new(l.side * (rect.width() / 2.0 + 16.0 * zoom), 0.0);
@@ -3291,8 +3291,8 @@ impl MindMapApp {
                     );
                     if *focus_pending {
                         edit.request_focus();
-                        // Ganzen Text markieren, damit Tippen ihn ersetzt –
-                        // nach dem Lostippen dagegen den Cursor ans Ende setzen
+                        // Select the whole text so typing replaces it –
+                        // after typing started, put the cursor at the end instead
                         let len = node.text.chars().count();
                         let range = if std::mem::take(edit_cursor_end) {
                             egui::text::CCursorRange::one(egui::text::CCursor::new(len))
@@ -3308,7 +3308,7 @@ impl MindMapApp {
                         state.store(ui.ctx(), edit.id);
                         *focus_pending = false;
                     } else if edit.lost_focus() {
-                        // Enter, Esc oder Klick daneben beendet das Bearbeiten
+                        // Enter, Esc or a click elsewhere ends editing
                         lost = true;
                     }
                 }
@@ -3333,12 +3333,12 @@ impl MindMapApp {
             ctx.request_repaint();
         }
 
-        // Tipp-Karte auf einer leeren, unberührten Mindmap
+        // Tip card on an empty, untouched mind map
         let pristine = doc.map.nodes.len() == 1 && doc.path.is_none() && !doc.dirty;
         if self.show_welcome && pristine {
             let card = Rect::from_center_size(
                 Pos2::new(area.center().x, area.bottom() - 70.0),
-                // Schmal: kompakte Karte (siehe `narrow` unten), mittig
+                // Narrow: compact card (see `narrow` below), centred
                 Vec2::new(
                     area.width()
                         .min(if area.width() < 720.0 { 410.0 } else { 760.0 }),
@@ -3356,7 +3356,7 @@ impl MindMapApp {
                 .corner_radius(12.0)
                 .inner_margin(egui::Margin::symmetric(16, 10))
                 .show(&mut card_ui, |ui| {
-                    // Schmales Fenster: nur die Knöpfe, kurz beschriftet
+                    // Narrow window: only the buttons, with short labels
                     let narrow = area.width() < 720.0;
                     ui.horizontal(|ui| {
                         ui.label(
@@ -3401,7 +3401,7 @@ impl MindMapApp {
                 });
         }
 
-        // Rechtsklick auf die freie Fläche
+        // Right-click on the empty canvas
         let root = doc.map.root();
         let current_theme = self.theme;
         bg.context_menu(|ui| {
@@ -3449,12 +3449,12 @@ impl MindMapApp {
         }
         self.close_note();
         self.doc_mut().set_mode(mode);
-        // Vortrag vorbei: Handy-Fernbedienung beenden, Port schließen
+        // Talk over: stop the phone remote, close the port
         if was == Mode::Present {
             crate::remote::stop();
             self.doc_mut().remote_open = false;
         }
-        // Präsentation läuft im Vollbild
+        // The presentation runs in full screen
         if mode.is_presenting() || was.is_presenting() {
             self.fullscreen = mode.is_presenting();
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
@@ -3514,10 +3514,10 @@ impl MindMapApp {
 }
 
 impl eframe::App for MindMapApp {
-    /// egui wechselt bei Tab sonst den Fokus durch die Buttons der Leiste.
-    /// Darum wird Tab hier abgefangen, bevor egui es sieht.
+    /// Otherwise egui moves the focus through the buttons of the bar on Tab.
+    /// So Tab is intercepted here before egui sees it.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        // Im Markdown-Editor rückt Tab ein und bleibt deshalb unangetastet
+        // In the Markdown editor Tab indents, so it is left alone
         let markdown = self
             .docs
             .get(self.active)

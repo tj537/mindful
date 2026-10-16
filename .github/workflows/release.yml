@@ -1,6 +1,6 @@
-# Beim Pushen eines Versions-Tags (z. B. v0.4.0): die Mac-App und die
-# Windows-Version bauen und an das GitHub-Release hängen. Die Beschreibung
-# kommt aus .github/release-notes/<tag>.md, sonst erzeugt GitHub sie.
+# When a version tag is pushed (e.g. v0.4.0): build the Mac app and the
+# Windows version and attach them to the GitHub release. The description
+# comes from .github/release-notes/<tag>.md, otherwise GitHub generates it.
 name: Release
 
 on:

@@ -1,11 +1,11 @@
-//! Folien-Layouts im Stil von SmartArt: Die Stichpunkte einer Folie werden
-//! als Zeitstrahl, Kreislauf, Pyramide, Trichter, Vergleich, Matrix,
-//! Venn-Diagramm, große Zahl, Zitat oder als Balken-, Kreis- und
-//! Liniendiagramm aus Punkten wie „Solar: 42 %“ gezeichnet.
+//! SmartArt-style slide layouts: the bullets of a slide are drawn
+//! as a timeline, cycle, pyramid, funnel, comparison, matrix,
+//! Venn diagram, big number, quote or as a bar, donut or
+//! line chart made of points like "Solar: 42 %".
 //!
-//! `reveal(i)` liefert für Punkt `i` den Fortschritt seines Erscheinens
-//! (0 = noch verborgen, 1 = ganz da) – so bauen sich die Diagramme genauso
-//! schrittweise auf wie normale Stichpunkte.
+//! `reveal(i)` gives the progress of point `i` appearing
+//! (0 = still hidden, 1 = fully there) – so the diagrams build up step
+//! by step just like normal bullets.
 
 use crate::model::SlideLayout;
 use crate::present::{ease_out_back, ease_out_cubic};
@@ -18,7 +18,7 @@ use egui_phosphor::regular as icon;
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 
-/// Ein Punkt der obersten Ebene mit seinen Unterpunkten
+/// A top-level point with its sub-points
 pub struct Item {
     pub text: String,
     pub children: Vec<String>,
@@ -59,7 +59,7 @@ impl SlideLayout {
         }
     }
 
-    /// Wie viele Punkte das Layout zeigt (= Schritte beim Aufbauen)
+    /// How many points the layout shows (= steps when building up)
     pub fn steps(self, items: usize) -> usize {
         match self {
             SlideLayout::Number | SlideLayout::Quote => 0,
@@ -69,8 +69,8 @@ impl SlideLayout {
     }
 }
 
-/// Auswahlmenü für das Layout. Gibt `Some(Wahl)` zurück, wenn etwas angeklickt wurde
-/// (`Some(None)` = normale Aufzählung).
+/// Picker for the layout. Returns `Some(choice)` when something was clicked
+/// (`Some(None)` = normal bullet list).
 pub fn layout_menu(ui: &mut egui::Ui, current: Option<SlideLayout>) -> Option<Option<SlideLayout>> {
     let mut picked = None;
     ui.set_min_width(200.0);
@@ -100,7 +100,7 @@ pub fn layout_menu(ui: &mut egui::Ui, current: Option<SlideLayout>) -> Option<Op
 }
 
 // ---------------------------------------------------------------------------
-// Text-Helfer
+// Text helpers
 // ---------------------------------------------------------------------------
 
 fn galley(
@@ -123,7 +123,7 @@ fn galley(
     p.layout_job(job)
 }
 
-/// Text mittig unter `top` (Mitte oben); gibt die belegte Fläche zurück
+/// Text centred below `top` (top centre); returns the area used
 fn text_centered(p: &Painter, text: &str, size: f32, color: Color32, wrap: f32, top: Pos2) -> Rect {
     let g = galley(p, text, size, color, wrap, true);
     let rect = g.rect.translate(top.to_vec2());
@@ -131,7 +131,7 @@ fn text_centered(p: &Painter, text: &str, size: f32, color: Color32, wrap: f32, 
     rect
 }
 
-/// Text links oben an `top_left`; gibt die belegte Fläche zurück
+/// Text at the top left at `top_left`; returns the area used
 fn text_left(
     p: &Painter,
     text: &str,
@@ -146,7 +146,7 @@ fn text_left(
     rect
 }
 
-/// Unterpunkte als Liste mit Punkten (ein einzelner Unterpunkt ohne Punkt)
+/// Sub-points as a bulleted list (a single sub-point without a bullet)
 fn child_lines(item: &Item) -> String {
     if let [only] = item.children.as_slice() {
         return only.clone();
@@ -168,13 +168,13 @@ fn palette(theme: &Theme, i: usize) -> Color32 {
     theme.branches[i % theme.branches.len()]
 }
 
-/// Schrift etwas kleiner, wenn es viele Punkte sind
+/// Slightly smaller font when there are many points
 fn fit(n: usize, comfortable: usize) -> f32 {
     (comfortable as f32 / n.max(comfortable) as f32).max(0.6)
 }
 
 // ---------------------------------------------------------------------------
-// Zeichnen
+// Drawing
 // ---------------------------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
@@ -209,7 +209,7 @@ pub fn draw(
     }
 }
 
-/// Schritte auf einer Linie, nummeriert, Text darunter
+/// Steps on a line, numbered, text below
 fn timeline(
     p: &Painter,
     r: Rect,
@@ -221,7 +221,7 @@ fn timeline(
 ) {
     let n = items.len();
     let f = fit(n, 5);
-    // Etwas über der Mitte, damit Linie und Texte die Fläche füllen
+    // A little above the centre so the line and the texts fill the area
     let y = r.top() + ((r.height() - 190.0 * s) * 0.4).max(40.0 * s);
     let margin = 70.0 * s;
     let span = (r.width() - 2.0 * margin).max(1.0);
@@ -235,7 +235,7 @@ fn timeline(
     };
     let shown: Vec<f32> = (0..n).map(reveal).collect();
 
-    // Linie: grau, darüber farbig bis zum zuletzt erschienenen Schritt
+    // Line: grey, coloured on top up to the step that appeared last
     let width = 6.0 * s;
     p.line_segment(
         [Pos2::new(x_of(0), y), Pos2::new(x_of(n - 1), y)],
@@ -285,7 +285,7 @@ fn timeline(
     }
 }
 
-/// Punkte auf einer Ellipse, verbunden durch Pfeile; Unterpunkte im Kästchen
+/// Points on an ellipse, connected by arrows; sub-points in a box
 fn cycle(
     p: &Painter,
     r: Rect,
@@ -303,7 +303,7 @@ fn cycle(
     let at = |a: f32| c + Vec2::new(a.cos() * rx, a.sin() * ry);
     let shown: Vec<f32> = (0..n).map(reveal).collect();
 
-    // Kästchen vorab setzen (Titel + Unterpunkte), damit die Pfeile ausweichen können
+    // Place the boxes first (title + sub-points) so the arrows can avoid them
     let wrap = 240.0 * s * f;
     let boxes: Vec<(Arc<Galley>, Option<Arc<Galley>>, Vec2)> = items
         .iter()
@@ -324,7 +324,7 @@ fn cycle(
             (title, sub, Vec2::new(w, h) + Vec2::new(30.0, 18.0) * s)
         })
         .collect();
-    // Wo der Bogen ein Kästchen verlässt: vom Mittelpunkt aus schrittweise suchen
+    // Where the arc leaves a box: search step by step from the centre
     let rects: Vec<Rect> = (0..n)
         .map(|i| Rect::from_center_size(at(angle(i)), boxes[i].2).expand(10.0 * s))
         .collect();
@@ -339,7 +339,7 @@ fn cycle(
         a
     };
 
-    // Pfeile zum jeweils nächsten Punkt (zurück zum ersten erst, wenn alles da ist)
+    // Arrows to the next point each (back to the first only once everything is there)
     if n > 1 {
         for i in 0..n {
             let next = (i + 1) % n;
@@ -352,7 +352,7 @@ fn cycle(
                 continue;
             }
             let a0 = leave(i, 1.0);
-            // Der nächste Punkt liegt eine volle Runde weiter, wenn es zurück zum ersten geht
+            // The next point is a full turn further when going back to the first
             let wrap_around = if next == 0 { TAU } else { 0.0 };
             let mut a1 = leave(next, -1.0) + wrap_around;
             if a1 <= a0 {
@@ -409,7 +409,7 @@ fn cycle(
     }
 }
 
-/// Pyramide (schmal oben) oder Trichter (breit oben), Unterpunkte daneben
+/// Pyramid (narrow at the top) or funnel (wide at the top), sub-points next to it
 #[allow(clippy::too_many_arguments)]
 fn stack(
     p: &Painter,
@@ -488,7 +488,7 @@ fn stack(
     }
 }
 
-/// Spalten nebeneinander: Überschrift oben, Unterpunkte darunter
+/// Columns side by side: heading on top, sub-points below
 fn compare(
     p: &Painter,
     r: Rect,
@@ -501,7 +501,7 @@ fn compare(
     let gap = 18.0 * s;
     let col_w = (r.width() - gap * (k - 1) as f32) / k as f32;
     let text_w = col_w - 52.0 * s;
-    // Alle Kästen so hoch wie der längste Inhalt, aber nicht höher als nötig
+    // All boxes as tall as the longest content, but no taller than needed
     let content = items
         .iter()
         .take(k)
@@ -565,7 +565,7 @@ fn compare(
     }
 }
 
-/// Vier Felder im 2×2-Raster
+/// Four quadrants in a 2×2 grid
 fn matrix(
     p: &Painter,
     r: Rect,
@@ -585,7 +585,7 @@ fn matrix(
         let full = Rect::from_min_size(origin, cell);
         let col = palette(theme, i);
         let Some(item) = items.get(i) else {
-            // Leere Felder nur angedeutet
+            // Empty quadrants only hinted at
             p.rect_stroke(
                 full,
                 14.0 * s,
@@ -629,8 +629,8 @@ fn matrix(
     }
 }
 
-/// Zwei oder drei überlappende Kreise. Ein weiterer Punkt beschreibt, was alle
-/// gemeinsam haben, und steht als Unterschrift darunter.
+/// Two or three overlapping circles. Another point describes what they all
+/// have in common and sits below as a caption.
 fn venn(
     p: &Painter,
     r: Rect,
@@ -646,7 +646,7 @@ fn venn(
     } else {
         r
     };
-    // Größe so wählen, dass alle Kreise in die Fläche passen
+    // Choose the size so all circles fit into the area
     let (radius, centers): (f32, Vec<Pos2>) = match k {
         1 => {
             let radius = area.width().min(area.height()) * 0.45;
@@ -661,7 +661,7 @@ fn venn(
         _ => {
             let radius = (area.width() / 3.4).min(area.height() / 2.95);
             let offset = radius * 0.62;
-            // Die drei Kreise reichen oben weiter als unten: Mitte etwas nach unten
+            // The three circles reach further up than down: move the centre down a little
             let c = area.center() + Vec2::Y * offset * 0.25;
             let centers = (0..3)
                 .map(|i| {
@@ -683,7 +683,7 @@ fn venn(
         p.circle_filled(*center, rad, col.gamma_multiply(0.26 * e));
         p.circle_stroke(*center, rad, Stroke::new(3.0 * s, col.gamma_multiply(e)));
     }
-    // Beschriftungen in den äußeren Teil des Kreises, mittig um ihren Ankerpunkt
+    // Labels in the outer part of the circle, centred on their anchor point
     for (i, center) in centers.iter().enumerate() {
         let e = reveal(i);
         if e <= 0.0 {
@@ -697,7 +697,7 @@ fn venn(
             *center + dir * radius * 0.32
         };
         let item = &items[i];
-        // Lange Beschriftungen etwas kleiner, damit Wörter nicht mittendrin umbrechen
+        // Long labels slightly smaller so words don't break in the middle
         let wrap = radius * 1.15;
         let size = if item.text.chars().count() > 18 {
             17.0
@@ -727,7 +727,7 @@ fn venn(
             );
         }
     }
-    // Was alle gemeinsam haben: als Unterschrift mit Schnittmengen-Symbol
+    // What they all have in common: as a caption with an intersection symbol
     if let Some(shared) = shared {
         let e = reveal(k);
         if e > 0.0 {
@@ -746,9 +746,9 @@ fn venn(
     }
 }
 
-/// Zerlegt „13.8 billion years“ in Zahl und Rest
+/// Splits "13.8 billion years" into number and rest
 fn split_number(text: &str) -> Option<(String, String, String)> {
-    // Ein kurzes Wort davor ist erlaubt („Vor 13,8 …“, „ca. 5 …“)
+    // A short word before it is allowed ("Vor 13,8 …", "ca. 5 …", "About 13.8 …")
     let start = text.find(|c: char| c.is_ascii_digit())?;
     if start > 6 {
         return None;
@@ -766,9 +766,9 @@ fn split_number(text: &str) -> Option<(String, String, String)> {
     ))
 }
 
-/// Zahl wie im Original schreiben (Dezimalstellen, Tausendertrenner), aber mit Wert `v`
+/// Write the number like the original (decimals, thousands separator), but with the value `v`
 fn format_like(original: &str, v: f64) -> String {
-    // Ein Trenner, dem genau drei Ziffern folgen, gilt als Tausendertrenner
+    // A separator followed by exactly three digits counts as a thousands separator
     let last_sep = original.rfind(['.', ',']);
     let (decimal_sep, decimals) = match last_sep {
         Some(i) if original.len() - i - 1 != 3 => {
@@ -809,7 +809,7 @@ fn parse_number(original: &str) -> Option<f64> {
     cleaned.parse().ok()
 }
 
-/// Eine Kennzahl riesig, die beim Erscheinen hochzählt; weitere Punkte darunter
+/// One key figure, huge, counting up as it appears; further points below
 #[allow(clippy::too_many_arguments)]
 fn number(
     p: &Painter,
@@ -849,7 +849,7 @@ fn number(
         }
         None => text_centered(&q, &first.text, 64.0 * s, color, r.width() * 0.9, top),
     };
-    // Unterpunkte und weitere Punkte als kleine Fakten
+    // Sub-points and further points as small facts
     let facts: Vec<&str> = first
         .children
         .iter()
@@ -863,7 +863,7 @@ fn number(
     let gap = 16.0 * s;
     let w = (r.width() - gap * (facts.len() - 1) as f32) / facts.len() as f32;
     let y = (below.bottom() + 40.0 * s).max(r.bottom() - 120.0 * s);
-    // Alle Kärtchen gleich hoch
+    // All cards the same height
     let card_h = facts
         .iter()
         .map(|f| {
@@ -897,7 +897,7 @@ fn number(
     }
 }
 
-/// Großes Zitat mit Quelle
+/// Large quote with its source
 #[allow(clippy::too_many_arguments)]
 fn quote(
     p: &Painter,
@@ -943,8 +943,8 @@ fn quote(
     );
     let used = g.rect.translate(top.to_vec2());
     q.galley(top, g, theme.text);
-    // Großes Anführungszeichen links über dem Text
-    // Das Zeichen sitzt weit oben in seiner Zeile, darum oben ausrichten
+    // Big quotation mark at the top left above the text
+    // The glyph sits high up in its line, so align it at the top
     q.text(
         used.left_top() + Vec2::new(-16.0, -36.0) * s,
         egui::Align2::RIGHT_TOP,
@@ -964,22 +964,22 @@ fn quote(
 }
 
 // ---------------------------------------------------------------------------
-// Diagramme mit Zahlen
+// Charts with numbers
 // ---------------------------------------------------------------------------
 
-/// Ein Datenpunkt aus einem Stichpunkt wie „Solar: 42 %“
+/// A data point from a bullet like "Solar: 42 %"
 #[derive(Debug, PartialEq)]
 pub struct Datum {
     pub label: String,
     pub value: f64,
-    /// Die Zahl, wie sie geschrieben wurde („42“, „1,250.5“)
+    /// The number as it was written ("42", "1,250.5")
     pub number: String,
-    /// Was danach kommt („ %“, „ km“)
+    /// What comes after it (" %", " km")
     pub unit: String,
 }
 
 impl Datum {
-    /// Wert schreiben wie im Original, beim Hochzählen mit `share` (0…1) des Werts
+    /// Write the value like the original, with `share` (0…1) of the value while counting up
     fn shown(&self, share: f32) -> String {
         format!(
             "{}{}",
@@ -989,7 +989,7 @@ impl Datum {
     }
 }
 
-/// Die letzte Zahl im Text ist der Wert, davor steht die Beschriftung
+/// The last number in the text is the value, the label comes before it
 pub fn parse_datum(text: &str) -> Option<Datum> {
     let bytes: Vec<(usize, char)> = text.char_indices().collect();
     let last_digit = bytes.iter().rposition(|(_, c)| c.is_ascii_digit())?;
@@ -1024,7 +1024,7 @@ fn data(items: &[Item]) -> Vec<Datum> {
     items.iter().filter_map(|i| parse_datum(&i.text)).collect()
 }
 
-/// Hinweis, wenn keine Zahlen gefunden wurden
+/// Hint when no numbers were found
 fn no_data(p: &Painter, r: Rect, theme: &Theme, s: f32) {
     text_centered(
         p,
@@ -1036,19 +1036,19 @@ fn no_data(p: &Painter, r: Rect, theme: &Theme, s: f32) {
     );
 }
 
-/// Feine Hilfslinien mit „runden“ Werten; gibt den Höchstwert der Skala zurück
+/// Fine grid lines at "round" values; returns the maximum of the scale
 fn grid_lines(p: &Painter, plot: Rect, data: &[Datum], theme: &Theme, s: f32) -> f64 {
     let max = data
         .iter()
         .map(|d| d.value)
         .fold(0.0, f64::max)
         .max(f64::EPSILON);
-    // Tausendertrenner wie in den Daten (Komma oder Punkt)
+    // Thousands separator as in the data (comma or point)
     let sep = data.iter().find_map(|d| {
         let i = d.number.rfind([',', '.'])?;
         (d.number.len() - i - 1 == 3).then(|| d.number[i..=i].to_string())
     });
-    // Schöne Schrittweite: 1, 2 oder 5 mal einer Zehnerpotenz
+    // Nice step size: 1, 2 or 5 times a power of ten
     let raw = (max / 4.0).max(f64::EPSILON);
     let pow = 10f64.powf(raw.log10().floor());
     let step = [1.0, 2.0, 5.0, 10.0]
@@ -1087,7 +1087,7 @@ fn grid_lines(p: &Painter, plot: Rect, data: &[Datum], theme: &Theme, s: f32) ->
     top
 }
 
-/// Säulen, die nacheinander hochwachsen; Werte zählen dabei hoch
+/// Columns that grow one after another; the values count up with them
 fn bars(
     p: &Painter,
     r: Rect,
@@ -1152,7 +1152,7 @@ fn bars(
     }
 }
 
-/// Ring aus Segmenten, die sich nacheinander schließen; Legende rechts
+/// Ring of segments that close one after another; legend on the right
 fn pie(p: &Painter, r: Rect, items: &[Item], theme: &Theme, s: f32, reveal: &dyn Fn(usize) -> f32) {
     let data = data(items);
     if data.is_empty() {
@@ -1195,7 +1195,7 @@ fn pie(p: &Painter, r: Rect, items: &[Item], theme: &Theme, s: f32, reveal: &dyn
         }
         angle += sweep;
     }
-    // In der Mitte der größte Anteil
+    // The largest share in the centre
     if let Some((i, _)) = largest {
         let d = &data[i];
         let e = reveal(i);
@@ -1222,7 +1222,7 @@ fn pie(p: &Painter, r: Rect, items: &[Item], theme: &Theme, s: f32, reveal: &dyn
             center + Vec2::new(0.0, 2.0 * s),
         );
     }
-    // Legende
+    // Legend
     let x = center.x + radius + 60.0 * s;
     let row = (r.height() / data.len() as f32).min(54.0 * s);
     let top = r.center().y - row * data.len() as f32 / 2.0;
@@ -1259,7 +1259,7 @@ fn pie(p: &Painter, r: Rect, items: &[Item], theme: &Theme, s: f32, reveal: &dyn
     }
 }
 
-/// Linie, die von Punkt zu Punkt weiterwächst, mit leichter Fläche darunter
+/// Line that grows from point to point, with a light area below
 #[allow(clippy::too_many_arguments)]
 fn line(
     p: &Painter,
@@ -1297,7 +1297,7 @@ fn line(
             plot.bottom() - (data[i].value.max(0.0) / top) as f32 * plot.height(),
         )
     };
-    // Linie und Fläche, Abschnitt für Abschnitt
+    // Line and area, segment by segment
     for i in 1..n {
         let e = ease_out_cubic(reveal(i));
         if e <= 0.0 {
@@ -1377,11 +1377,11 @@ mod tests {
         assert_eq!(parse_number("13.8"), Some(13.8));
         assert_eq!(format_like("13.8", 13.8), "13.8");
         assert_eq!(format_like("13.8", 6.9), "6.9");
-        // Tausendertrenner bleiben erhalten, auch mit Komma oder Punkt
+        // Thousands separators are kept, with a comma or a point
         assert_eq!(parse_number("380,000"), Some(380000.0));
         assert_eq!(format_like("380,000", 190000.0), "190,000");
         assert_eq!(format_like("100.000", 2500.0), "2.500");
-        // Deutsches Dezimalkomma
+        // German decimal comma
         assert_eq!(parse_number("13,8"), Some(13.8));
         assert_eq!(format_like("13,8", 13.8), "13,8");
         assert!(split_number("No number here").is_none());

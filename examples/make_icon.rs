@@ -1,9 +1,9 @@
-//! Rendert assets/icon.svg in alle Größen, die ein macOS-Iconset braucht.
+//! Renders assets/icon.svg in every size a macOS iconset needs.
 //!
-//!     cargo run --release --example make_icon -- <Zielordner.iconset>
+//!     cargo run --release --example make_icon -- <output.iconset>
 //!
-//! Mit `--assets` statt eines Ordners werden stattdessen `assets/icon.png` (Fenster-Symbol)
-//! und `assets/icon.ico` (Windows, mehrere Größen) neu geschrieben.
+//! With `--assets` instead of a folder it rewrites `assets/icon.png` (window icon)
+//! and `assets/icon.ico` (Windows, several sizes) instead.
 
 use resvg::{tiny_skia, usvg};
 use std::path::{Path, PathBuf};
@@ -19,7 +19,7 @@ fn render(tree: &usvg::Tree, px: u32) -> tiny_skia::Pixmap {
     pixmap
 }
 
-/// ICO-Datei mit eingebetteten PNGs (versteht Windows seit Vista)
+/// ICO file with embedded PNGs (understood by Windows since Vista)
 fn write_ico(tree: &usvg::Tree, path: &Path) {
     let sizes = [16u32, 24, 32, 48, 64, 128, 256];
     let pngs: Vec<Vec<u8>> = sizes
@@ -31,7 +31,7 @@ fn write_ico(tree: &usvg::Tree, path: &Path) {
     ico.extend_from_slice(&(sizes.len() as u16).to_le_bytes());
     let mut offset = 6 + 16 * sizes.len() as u32;
     for (&px, png) in sizes.iter().zip(&pngs) {
-        // 256 wird als 0 eingetragen
+        // 256 is stored as 0
         let side = if px >= 256 { 0 } else { px as u8 };
         ico.extend_from_slice(&[side, side, 0, 0]);
         ico.extend_from_slice(&1u16.to_le_bytes());

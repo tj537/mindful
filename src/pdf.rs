@@ -1,7 +1,7 @@
-//! Folien als PDF: jede Folie wird ohne Fenster gezeichnet (`offscreen.rs`),
-//! als JPEG kodiert und als eigene Seite in eine PDF-Datei geschrieben.
-//! Ein kleiner eigener PDF-Schreiber reicht dafür – Seiten aus Bildern
-//! brauchen nur wenige PDF-Objekte.
+//! Slides as PDF: every slide is drawn without a window (`offscreen.rs`),
+//! encoded as JPEG and written as its own page into a PDF file.
+//! A small PDF writer of our own is enough for that – pages made of pictures
+//! need only a few PDF objects.
 
 use crate::model::MindMap;
 use crate::offscreen::Offscreen;
@@ -12,14 +12,14 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Folie in Punkten (1280 × 720) und Pixel pro Punkt → 1920 × 1080 Bilder
+/// Slide in points (1280 × 720) and pixels per point → 1920 × 1080 images
 const SLIDE: egui::Vec2 = egui::Vec2::new(1280.0, 720.0);
 const SCALE: f32 = 1.5;
-/// Seitengröße im PDF in pt (13,33 × 7,5 Zoll, wie PowerPoint im Breitformat)
+/// Page size in the PDF in pt (13.33 × 7.5 inches, like PowerPoint widescreen)
 const PAGE: (f32, f32) = (960.0, 540.0);
 
-/// Alle Folien rendern und als PDF speichern. `done` zählt die fertigen Folien
-/// (für die Fortschrittsanzeige); läuft in einem eigenen Thread.
+/// Render all slides and save them as PDF. `done` counts the finished slides
+/// (for the progress display); runs in its own thread.
 pub fn export(
     map: &MindMap,
     theme: &Theme,
@@ -38,7 +38,7 @@ pub fn export(
     let mut pages = Vec::with_capacity(count);
     for index in 0..count {
         let mut shapes = Vec::new();
-        // Zwei Frames: im ersten werden Schrift und Bilder geladen
+        // Two frames: the first one loads fonts and pictures
         for t in [index as f64 * 10.0, index as f64 * 10.0 + 5.0] {
             shapes = screen.frame(t, |ctx| {
                 egui::CentralPanel::default()
@@ -69,7 +69,7 @@ pub fn export(
     std::fs::write(path, bytes).map_err(|e| e.to_string())
 }
 
-/// Text für eine PDF-Zeichenkette maskieren (nur ASCII, Rest wird zu „?“)
+/// Escape text for a PDF string (ASCII only, everything else becomes "?")
 fn pdf_string(text: &str) -> String {
     text.chars()
         .map(|c| match c {
@@ -80,11 +80,11 @@ fn pdf_string(text: &str) -> String {
         .collect()
 }
 
-/// Minimales PDF: Katalog, Seitenbaum, je Seite ein Bild und ein Zeichenbefehl
+/// Minimal PDF: catalog, page tree, one image and one draw command per page
 fn write_pdf(title: &str, pages: &[(u32, u32, Vec<u8>)]) -> Vec<u8> {
     let mut out: Vec<u8> = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut offsets: Vec<usize> = Vec::new();
-    // Objektnummern: 1 Katalog, 2 Seitenbaum, 3 Info, dann je Seite 3 Objekte
+    // Object numbers: 1 catalog, 2 page tree, 3 info, then 3 objects per page
     let page_id = |i: usize| 4 + i * 3;
     let mut object = |out: &mut Vec<u8>, body: &[u8]| {
         offsets.push(out.len());
@@ -173,7 +173,7 @@ mod tests {
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.contains("/Count 3"));
         assert_eq!(text.matches("/Subtype /Image").count(), 3);
-        // Verweise in der xref-Tabelle zeigen auf die Objekte
+        // References in the xref table point to the objects
         let xref = pdf.windows(6).position(|w| w == b"\nxref\n").unwrap() + 1;
         let table = String::from_utf8_lossy(&pdf[xref..]);
         let first = table.lines().nth(3).unwrap();

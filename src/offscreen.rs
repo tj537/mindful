@@ -1,8 +1,8 @@
-//! Zeichnet egui-Oberflächen ohne Fenster in ein Bild.
+//! Draws egui user interfaces into an image without a window.
 //!
-//! egui liefert pro Frame Dreiecke mit Farben und Texturkoordinaten. Ein
-//! kleiner Software-Rasterizer malt sie in ein Bild. Damit entstehen der
-//! PDF-Export der Folien und die Bildschirmfotos der Tests (`snapshot.rs`).
+//! Per frame egui delivers triangles with colours and texture coordinates. A
+//! small software rasterizer paints them into an image. This gives the
+//! PDF export of the slides and the screenshots of the tests (`snapshot.rs`).
 
 use eframe::egui::{
     self,
@@ -23,7 +23,7 @@ pub struct Offscreen {
     pub ctx: egui::Context,
     textures: HashMap<TextureId, Texture>,
     pub size: Vec2,
-    /// Pixel pro Punkt (2 = Retina)
+    /// Pixels per point (2 = Retina)
     scale: f32,
 }
 
@@ -37,7 +37,7 @@ impl Offscreen {
         }
     }
 
-    /// Wie `new`, aber mit `scale` Pixeln pro Punkt gerastert (schärfer)
+    /// Like `new`, but rasterized with `scale` pixels per point (sharper)
     pub fn retina(width: f32, height: f32, scale: f32) -> Self {
         Self {
             scale,
@@ -45,7 +45,7 @@ impl Offscreen {
         }
     }
 
-    /// Einen Frame laufen lassen und die fertigen Dreiecke zurückgeben
+    /// Run one frame and return the finished triangles
     pub fn frame(
         &mut self,
         time: f64,
@@ -54,7 +54,7 @@ impl Offscreen {
         self.frame_with_events(time, Vec::new(), run_ui)
     }
 
-    /// Wie `frame`, aber mit Eingaben (Klicks, Tasten) – für Tests der Bedienung
+    /// Like `frame`, but with input (clicks, keys) – for tests of the controls
     pub fn frame_with_events(
         &mut self,
         time: f64,
@@ -108,14 +108,14 @@ impl Offscreen {
         self.ctx.tessellate(output.shapes, output.pixels_per_point)
     }
 
-    /// Dreiecke rastern; gibt Breite, Höhe und RGBA-Pixel (vormultipliziert) zurück
+    /// Rasterize triangles; returns width, height and RGBA pixels (premultiplied)
     pub fn rgba(&self, primitives: &[ClippedPrimitive]) -> (u32, u32, Vec<u8>) {
         let scale = self.scale;
         let (w, h) = (
             (self.size.x * scale) as usize,
             (self.size.y * scale) as usize,
         );
-        // Vormultiplizierte Farben 0…1, wie egui sie liefert
+        // Premultiplied colours 0…1, as egui delivers them
         let mut buffer = vec![[0.0_f32; 4]; w * h];
         let rgba = |c: Color32| c.to_array().map(|v| v as f32 / 255.0);
         let edge =
@@ -187,7 +187,7 @@ impl Offscreen {
         (w as u32, h as u32, pixels)
     }
 
-    /// Dreiecke rastern und als PNG speichern (für Tests)
+    /// Rasterize triangles and save them as PNG (for tests)
     #[cfg(test)]
     pub fn save(&self, primitives: &[ClippedPrimitive], path: &Path) {
         let (w, h, pixels) = self.rgba(primitives);

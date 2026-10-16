@@ -1,5 +1,5 @@
-//! Markdown-Modus: Editor links (mit Hervorhebung), Vorschau rechts.
-//! Jede Änderung im Text wird sofort in die Mindmap übernommen.
+//! Markdown mode: editor on the left (with highlighting), preview on the right.
+//! Every change to the text is applied to the mind map right away.
 
 use crate::document::Document;
 use crate::icons;
@@ -14,7 +14,7 @@ use egui_phosphor::regular as icon;
 
 const BODY: f32 = 15.0;
 
-/// Länge des Aufzählungszeichens am Zeilenanfang ("- ", "* ", "1. " …)
+/// Length of the bullet at the start of the line ("- ", "* ", "1. " …)
 fn bullet_len(trimmed: &str) -> Option<usize> {
     for bullet in ["- [ ] ", "- [x] ", "- [X] ", "- ", "* ", "+ "] {
         if trimmed.starts_with(bullet) {
@@ -25,8 +25,8 @@ fn bullet_len(trimmed: &str) -> Option<usize> {
     (digits > 0 && trimmed[digits..].starts_with(". ")).then_some(digits + 2)
 }
 
-/// Färbt Überschriften und Aufzählungszeichen ein – in der Farbe des
-/// Hauptzweigs, zu dem sie gehören, wie in der Mindmap.
+/// Colours headings and bullets – in the colour of the
+/// main branch they belong to, as in the mind map.
 fn highlight(text: &str, theme: &Theme) -> LayoutJob {
     let mut job = LayoutJob::default();
     let fmt = |size: f32, color: Color32| TextFormat {
@@ -60,7 +60,7 @@ fn highlight(text: &str, theme: &Theme) -> LayoutJob {
             };
             let split = indent + hashes + 1;
             job.append(&line[..split], 0.0, fmt(size, marker.gamma_multiply(0.75)));
-            // Layout-Kommentar (`<!-- timeline -->`) gedimmt
+            // Layout comment (`<!-- timeline -->`) dimmed
             let rest = &line[split..];
             match rest.find("<!--") {
                 Some(c) => {
@@ -70,11 +70,11 @@ fn highlight(text: &str, theme: &Theme) -> LayoutJob {
                 None => job.append(rest, 0.0, fmt(size, theme.text)),
             }
         } else if trimmed.starts_with("![") {
-            // Bildzeile gedimmt, wie ein Kommentar
+            // Image line dimmed, like a comment
             job.append(line, 0.0, fmt(BODY, theme.grid.gamma_multiply(1.6)));
         } else if let Some(len) = bullet_len(trimmed) {
             let split = indent + len;
-            // Erledigte Aufgaben blasser
+            // Finished tasks paler
             let done = trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ");
             let text_color = if done {
                 note_color.gamma_multiply(0.8)
@@ -146,7 +146,7 @@ fn branch_color(map: &MindMap, theme: &Theme, id: u64) -> Color32 {
         .unwrap_or(theme.root)
 }
 
-/// Kleines Vorschaubild unter einem Eintrag
+/// Small preview picture under an entry
 fn thumb(ui: &mut egui::Ui, map: &MindMap, node: &Node, indent: f32) {
     let Some(key) = &node.image else { return };
     ui.horizontal_top(|ui| {

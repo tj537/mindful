@@ -1,4 +1,4 @@
-//! Nur für Tests: Bildschirmfotos von Folien und vom ganzen Fenster.
+//! Tests only: screenshots of slides and of the whole window.
 //!
 //!     cargo test --release render_ -- --ignored    → target/snapshots/*.png
 
@@ -12,7 +12,7 @@ mod tests {
     use eframe::egui::{self, Vec2};
     use std::path::Path;
 
-    /// Alle Folien der beiden Beispiele rendern (darin kommt jedes Layout vor)
+    /// Render all slides of both examples (together they use every layout)
     #[test]
     #[ignore]
     fn render_slides() {
@@ -57,7 +57,7 @@ mod tests {
             );
         }
 
-        // Titelfolie ohne Themen-Marken
+        // Title slide without topic chips
         fx.title_topics = false;
         doc.slide = 0;
         doc.slide_time = 3000.0;
@@ -75,7 +75,7 @@ mod tests {
         );
         fx.title_topics = true;
 
-        // Referentenansicht (ohne echtes zweites Fenster als eingebettetes Fenster)
+        // Presenter view (embedded instead of a real second window)
         if name == "universe" {
             let mut wide = Snapshot::retina(1500.0, 900.0, 1.0);
             install_fonts(&wide.ctx);
@@ -95,7 +95,7 @@ mod tests {
                 });
             }
             wide.save(&shapes, Path::new("target/snapshots/presenter.png"));
-            // Nur die Referentenansicht, wie im zweiten Fenster
+            // Only the presenter view, as in the second window
             let mut window = Snapshot::retina(1100.0, 680.0, 1.5);
             install_fonts(&window.ctx);
             window.ctx.set_visuals(visuals_for(theme));
@@ -114,7 +114,7 @@ mod tests {
                 });
             }
             window.save(&shapes, Path::new("target/snapshots/presenter_window.png"));
-            // QR-Code für die Handy-Fernbedienung
+            // QR code for the phone remote
             doc.presenter = false;
             doc.remote_open = true;
             for t in [2020.0, 2021.0, 2022.0] {
@@ -129,7 +129,7 @@ mod tests {
             doc.presenter = false;
         }
 
-        // Kamerafahrt, Übersicht: zeigt die Knoten samt Vorschaubildern
+        // Camera tour, overview: shows the nodes including preview pictures
         let sizes = doc
             .map
             .nodes
@@ -152,7 +152,7 @@ mod tests {
         );
     }
 
-    /// Das ganze Fenster in allen Ansichten und einigen Farbschemas rendern
+    /// Render the whole window in all views and a few colour schemes
     #[test]
     #[ignore]
     fn render_app() {
@@ -170,7 +170,7 @@ mod tests {
                 Path::new(&format!("target/snapshots/app_{name}.png")),
             );
         }
-        // Helles Farbschema und eine leere Mindmap mit Tipp-Karte
+        // Light colour scheme and an empty mind map with the tip card
         app.set_mode_for_snapshot(Mode::Mindmap);
         app.set_theme_for_snapshot(0);
         app.new_tab_for_snapshot();
@@ -180,7 +180,7 @@ mod tests {
         }
         snap.save(&shapes, Path::new("target/snapshots/app_light_empty.png"));
 
-        // „AI prompt“-Fenster
+        // "AI prompt" window
         app.set_theme_for_snapshot(1);
         snap.size = Vec2::new(1400.0, 860.0);
         app.open_ai_popup = true;
@@ -189,7 +189,7 @@ mod tests {
             shapes = snap.frame(t, |ctx| app.show(ctx));
         }
         snap.save(&shapes, Path::new("target/snapshots/app_ai_prompt.png"));
-        // Einstellungen
+        // Settings
         snap.ctx.memory_mut(|m| m.close_popup());
         app.open_settings_popup = true;
         for t in [27.0, 27.5, 27.8] {
@@ -203,7 +203,7 @@ mod tests {
         }
         snap.save(&shapes, Path::new("target/snapshots/app_colours.png"));
         app.set_theme_for_snapshot(1);
-        // schmal: kompakter Knopf
+        // narrow: compact button
         snap.ctx.memory_mut(|m| m.close_popup());
         snap.size = Vec2::new(1000.0, 200.0);
         for t in [28.0, 28.5] {
@@ -211,7 +211,7 @@ mod tests {
         }
         snap.save(&shapes, Path::new("target/snapshots/app_ai_compact.png"));
 
-        // Schmale Fenster: nichts darf sich überlappen
+        // Narrow windows: nothing may overlap
         app.set_theme_for_snapshot(1);
         for width in [1180.0, 1050.0, 940.0, 880.0, 800.0, 700.0, 600.0] {
             snap.size = Vec2::new(width, 240.0);
@@ -226,7 +226,7 @@ mod tests {
         }
     }
 
-    /// Vorschaubild für GitHub (Profil, Social Preview): 1280 × 640
+    /// Preview picture for GitHub (profile, social preview): 1280 × 640
     #[test]
     #[ignore]
     fn render_social_preview() {
@@ -265,7 +265,7 @@ mod tests {
                             Vec2::ZERO,
                             Vec2::ZERO,
                         );
-                        // Links: Name, Satz, Stichworte
+                        // Left: name, sentence, keywords
                         let accent = theme.branches[0];
                         let x = 70.0;
                         crate::logo::paint(&p, Pos2::new(x + 34.0, 150.0), 72.0, theme.text);
@@ -319,7 +319,7 @@ mod tests {
                             [Pos2::new(x, 470.0), Pos2::new(x + 60.0, 470.0)],
                             Stroke::new(4.0_f32, accent),
                         );
-                        // Rechts: zwei Folien übereinander
+                        // Right: two slides on top of each other
                         let back =
                             Rect::from_min_size(Pos2::new(700.0, 90.0), Vec2::new(500.0, 281.0));
                         let front =
@@ -337,8 +337,8 @@ mod tests {
         snap.save(&shapes, Path::new("target/snapshots/social-preview.png"));
     }
 
-    /// Klick auf den Platzhalter und Tippen ersetzt ihn; Lostippen auf einem
-    /// ausgewählten Knoten ersetzt dessen Text
+    /// Clicking the placeholder and typing replaces it; typing on a
+    /// selected node replaces its text
     #[test]
     fn placeholders_can_be_typed_over() {
         use crate::app::MindMapApp;
@@ -354,7 +354,7 @@ mod tests {
         for _ in 0..4 {
             step(&mut snap, &mut app, vec![]);
         }
-        // Der Mittelpunkt steht nach dem Einpassen in der Mitte der Zeichenfläche
+        // After fitting, the centre node sits in the middle of the canvas
         let center = Pos2::new(600.0, 430.0);
         let click = |pressed| Event::PointerButton {
             pos: center,
@@ -386,7 +386,7 @@ mod tests {
         step(&mut snap, &mut app, vec![]);
         assert_eq!(app.root_for_test(), ("Holiday".to_string(), false));
 
-        // Ausgewählt lassen und lostippen: ersetzt den Text, weitere Zeichen hängen sich an
+        // Keep it selected and start typing: replaces the text, further characters are appended
         step(&mut snap, &mut app, vec![Event::Text("M".into())]);
         step(&mut snap, &mut app, vec![]);
         step(&mut snap, &mut app, vec![Event::Text("ars".into())]);

@@ -1,5 +1,5 @@
-# Bei jedem Push und Pull Request: formatieren, prüfen und testen –
-# auf macOS, Windows und Linux.
+# On every push and pull request: format, lint and test –
+# on macOS, Windows and Linux.
 name: CI
 
 on:

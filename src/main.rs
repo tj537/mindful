@@ -1,4 +1,4 @@
-// Unter Windows kein Konsolenfenster neben der App öffnen (nur im Release-Build)
+// On Windows, don't open a console window next to the app (release builds only)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ai_prompt;
@@ -26,7 +26,7 @@ use eframe::egui;
 
 const APP_NAME: &str = "Mindful";
 
-/// Die App hieß früher "Mindmap": gespeicherte Tabs und Einstellungen einmalig übernehmen.
+/// The app used to be called "Mindmap": take over saved tabs and settings once.
 fn migrate_storage() {
     let (Some(old), Some(new)) = (
         eframe::storage_dir("Mindmap"),
@@ -49,7 +49,7 @@ fn main() -> eframe::Result {
         .with_inner_size([1200.0, 800.0])
         .with_min_inner_size([600.0, 420.0])
         .with_title("Mindful");
-    // Icon für Fenster, Taskleiste und Dock (wenn ohne .app-Paket gestartet)
+    // Icon for the window, taskbar and Dock (when started without the .app bundle)
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")) {
         viewport = viewport.with_icon(icon);
     }

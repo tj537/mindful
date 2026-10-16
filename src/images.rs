@@ -1,9 +1,9 @@
-//! Bilder: einlesen (Datei, Zwischenablage), verkleinern, als Textur zeichnen.
+//! Pictures: reading them in (file, clipboard), scaling them down, drawing them as textures.
 //!
-//! Eingefügte Bilder werden auf höchstens `MAX_SIDE` Pixel verkleinert und als
-//! JPEG (oder PNG, wenn sie durchsichtige Stellen haben) in der Mindmap
-//! gespeichert. So steckt alles in einer Datei, und die Rückgängig-Schritte
-//! teilen sich die Daten über `Arc`.
+//! Inserted pictures are scaled down to at most `MAX_SIDE` pixels and stored in the
+//! mind map as JPEG (or PNG if they have transparent areas).
+//! That way everything lives in one file, and the undo steps
+//! share the data via `Arc`.
 
 use crate::model::{MindMap, StoredImage};
 use eframe::egui::{
@@ -17,15 +17,15 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Längste Seite eines gespeicherten Bildes in Pixeln
+/// Longest side of a stored picture in pixels
 const MAX_SIDE: u32 = 1920;
-/// Kleinere Originale bleiben unverändert, wenn sie nicht größer als das sind
+/// Smaller originals stay unchanged if they are no bigger than this
 const KEEP_ORIGINAL_BYTES: usize = 1_500_000;
 
-/// Dateiendungen, die als Bild eingefügt werden können
+/// File extensions that can be inserted as a picture
 pub const EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"];
 
-/// Bilder der Beispiele – fest in die App eingebaut
+/// Pictures of the examples – built into the app
 const BUILTIN: [(&str, &[u8]); 5] = [
     (
         "black-hole.jpg",
@@ -55,7 +55,7 @@ pub fn is_image_path(path: &Path) -> bool {
         .is_some_and(|e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
 }
 
-/// Kurzer, lesbarer Schlüssel: Dateiname plus Prüfsumme, z. B. `nebel-3fa2c19d.jpg`
+/// Short, readable key: file name plus checksum, e.g. `nebel-3fa2c19d.jpg`
 fn key_for(name: &str, data: &[u8], ext: &str) -> String {
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
@@ -75,7 +75,7 @@ fn key_for(name: &str, data: &[u8], ext: &str) -> String {
     format!("{stem}-{:08x}.{ext}", hasher.finish() as u32)
 }
 
-/// SVG in ein Pixelbild umwandeln
+/// Turn an SVG into a pixel image
 fn rasterize_svg(bytes: &[u8]) -> Result<DynamicImage, String> {
     let tree = resvg::usvg::Tree::from_data(bytes, &resvg::usvg::Options::default())
         .map_err(|e| e.to_string())?;
@@ -99,8 +99,8 @@ fn rasterize_svg(bytes: &[u8]) -> Result<DynamicImage, String> {
     Ok(DynamicImage::ImageRgba8(rgba))
 }
 
-/// Ein Bild aus Dateidaten einlesen und für das Speichern vorbereiten.
-/// `name` ist der Dateiname (für Schlüssel und SVG-Erkennung).
+/// Read a picture from file data and prepare it for saving.
+/// `name` is the file name (for the key and for detecting SVG).
 pub fn import(bytes: &[u8], name: &str) -> Result<(String, StoredImage), String> {
     let is_svg = name.to_lowercase().ends_with(".svg")
         || bytes.trim_ascii_start().starts_with(b"<svg")
@@ -116,7 +116,7 @@ pub fn import(bytes: &[u8], name: &str) -> Result<(String, StoredImage), String>
         return Err("The image is empty".into());
     }
 
-    // Kleine JPEGs und PNGs unverändert übernehmen
+    // Take small JPEGs and PNGs over unchanged
     let small = w.max(h) <= MAX_SIDE && bytes.len() <= KEEP_ORIGINAL_BYTES;
     match format {
         Some(ImageFormat::Jpeg) if small && !is_svg => {
@@ -164,7 +164,7 @@ pub fn import_file(path: &Path) -> Result<(String, StoredImage), String> {
     import(&bytes, name)
 }
 
-/// Bild aus der Zwischenablage (z. B. ein Bildschirmfoto), falls dort eines liegt
+/// Picture from the clipboard (e.g. a screenshot), if there is one
 pub fn from_clipboard() -> Option<(String, StoredImage)> {
     let mut clipboard = arboard::Clipboard::new().ok()?;
     let data = clipboard.get_image().ok()?;
@@ -180,7 +180,7 @@ pub fn from_clipboard() -> Option<(String, StoredImage)> {
     import(&png, "pasted.png").ok()
 }
 
-/// Bild in die Mindmap legen und dem Knoten zuweisen
+/// Put a picture into the mind map and assign it to the node
 pub fn attach(map: &mut MindMap, node: u64, (key, img): (String, StoredImage)) {
     map.images
         .entry(key.clone())
@@ -190,8 +190,8 @@ pub fn attach(map: &mut MindMap, node: u64, (key, img): (String, StoredImage)) {
     }
 }
 
-/// Verweise auf Bilder, die noch nicht in der Mindmap liegen, auflösen:
-/// erst die eingebauten Beispielbilder, dann Dateien (relativ zu `base`).
+/// Resolve references to pictures that aren't in the mind map yet:
+/// first the built-in example pictures, then files (relative to `base`).
 pub fn resolve(map: &mut MindMap, base: Option<&Path>) {
     let missing: Vec<(u64, String)> = map
         .nodes
@@ -214,7 +214,7 @@ pub fn resolve(map: &mut MindMap, base: Option<&Path>) {
     }
 }
 
-/// Pfad aus einem Markdown-Bildverweis (`~/…`, `file://…`, relativ)
+/// Path from a Markdown image reference (`~/…`, `file://…`, relative)
 fn file_path(target: &str, base: Option<&Path>) -> Option<PathBuf> {
     if target.starts_with("http://") || target.starts_with("https://") {
         return None;
@@ -234,10 +234,10 @@ fn file_path(target: &str, base: Option<&Path>) -> Option<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
-// Zeichnen
+// Drawing
 // ---------------------------------------------------------------------------
 
-/// Textur eines Bildes; wird beim ersten Mal dekodiert und dann wiederverwendet
+/// Texture of a picture; decoded the first time and reused afterwards
 pub fn texture(ctx: &Context, key: &str, img: &StoredImage) -> Option<TextureHandle> {
     let id = egui::Id::new(("mindful-image", key));
     if let Some(cached) = ctx.data(|d| d.get_temp::<Option<TextureHandle>>(id)) {
@@ -257,16 +257,16 @@ pub fn texture(ctx: &Context, key: &str, img: &StoredImage) -> Option<TextureHan
     handle
 }
 
-/// Wie ein Bild in seinen Rahmen passt
+/// How a picture fits into its frame
 #[derive(Clone, Copy, PartialEq)]
 pub enum Fit {
-    /// Ganz sichtbar, Rahmen schrumpft auf das Seitenverhältnis
+    /// Fully visible, the frame shrinks to the aspect ratio
     Contain,
-    /// Füllt den Rahmen, Ränder werden abgeschnitten
+    /// Fills the frame, the edges are cut off
     Cover,
 }
 
-/// Rechteck, das ein Bild mit `aspect` in `frame` bei `Contain` einnimmt
+/// Rectangle a picture with `aspect` takes up in `frame` with `Contain`
 pub fn contain(frame: Rect, aspect: f32) -> Rect {
     let size = if frame.aspect_ratio() > aspect {
         Vec2::new(frame.height() * aspect, frame.height())
@@ -276,8 +276,8 @@ pub fn contain(frame: Rect, aspect: f32) -> Rect {
     Rect::from_center_size(frame.center(), size)
 }
 
-/// Bild zeichnen. `zoom` > 1 vergrößert den Ausschnitt (für den langsamen Zoom).
-/// Gibt das tatsächlich bemalte Rechteck zurück.
+/// Draw a picture. `zoom` > 1 enlarges the visible part (for the slow zoom).
+/// Returns the rectangle actually painted.
 #[allow(clippy::too_many_arguments)]
 pub fn paint(
     p: &egui::Painter,
@@ -299,7 +299,7 @@ pub fn paint(
         placeholder(p, rect, radius);
         return rect;
     };
-    // Sichtbarer Ausschnitt in Texturkoordinaten
+    // Visible part in texture coordinates
     let mut uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
     if fit == Fit::Cover {
         let frame_aspect = rect.aspect_ratio();
@@ -321,7 +321,7 @@ pub fn paint(
     rect
 }
 
-/// Grauer Kasten mit Symbol, wenn ein Bild fehlt oder nicht lesbar ist
+/// Grey box with an icon when a picture is missing or unreadable
 pub fn placeholder(p: &egui::Painter, rect: Rect, radius: f32) {
     let color = Color32::from_gray(128);
     p.rect_filled(

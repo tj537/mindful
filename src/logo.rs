@@ -1,14 +1,14 @@
-//! Das Mindful-Zeichen (Kreis mit M, Zweige, Klammern) für die Oberfläche.
+//! The Mindful mark (circle with an M, branches, brackets) for the user interface.
 //!
-//! Quelle ist die Gruppe `id="logo"` in `assets/icon.svg` – dieselbe Datei, aus der auch das
-//! App-Symbol entsteht. So sehen Dock/Taskleiste und Werkzeugleiste immer gleich aus.
+//! Its source is the group `id="logo"` in `assets/icon.svg` – the same file the app icon
+//! is made from. So the Dock/taskbar and the toolbar always look the same.
 
 use eframe::egui::{self, Color32, ColorImage, Context, Pos2, Rect, TextureHandle, Vec2};
 use resvg::{tiny_skia, usvg};
 
 const SVG: &str = include_str!("../assets/icon.svg");
 
-/// Das Zeichen als weiße Maske in `px` × `px` Pixeln (quadratisch, mittig)
+/// The mark as a white mask of `px` × `px` pixels (square, centred)
 fn render(px: u32) -> Option<ColorImage> {
     let tree = usvg::Tree::from_str(SVG, &usvg::Options::default()).ok()?;
     let node = tree.node_by_id("logo")?;
@@ -21,7 +21,7 @@ fn render(px: u32) -> Option<ColorImage> {
     let mut pixmap = tiny_skia::Pixmap::new(px, px)?;
     let transform = tiny_skia::Transform::from_translate(offset.0, offset.1).pre_scale(s, s);
     resvg::render_node(node, transform, &mut pixmap.as_mut())?;
-    // Nur die Deckkraft zählt: weiß einfärben, die Farbe kommt beim Zeichnen dazu
+    // Only the opacity counts: make it white, the colour is added when drawing
     let mut rgba = pixmap.take();
     for p in rgba.chunks_exact_mut(4) {
         p[0] = p[3];
@@ -34,7 +34,7 @@ fn render(px: u32) -> Option<ColorImage> {
     ))
 }
 
-/// Textur in der passenden Pixelgröße; einmal gerendert und dann wiederverwendet
+/// Texture in the matching pixel size; rendered once and then reused
 fn texture(ctx: &Context, px: u32) -> Option<TextureHandle> {
     let id = egui::Id::new(("mindful-logo", px));
     if let Some(cached) = ctx.data(|d| d.get_temp::<Option<TextureHandle>>(id)) {
@@ -45,7 +45,7 @@ fn texture(ctx: &Context, px: u32) -> Option<TextureHandle> {
     handle
 }
 
-/// Zeichnet das Zeichen quadratisch um `center` in der Farbe `color`
+/// Draws the mark as a square around `center` in the colour `color`
 pub fn paint(painter: &egui::Painter, center: Pos2, size: f32, color: Color32) {
     let px = (size * painter.ctx().pixels_per_point()).round().max(1.0) as u32;
     if let Some(tex) = texture(painter.ctx(), px) {
@@ -55,7 +55,7 @@ pub fn paint(painter: &egui::Painter, center: Pos2, size: f32, color: Color32) {
     }
 }
 
-/// Das Zeichen als Element in einer Zeile (z. B. in der Menüleiste)
+/// The mark as an item in a row (e.g. in the menu bar)
 pub fn show(ui: &mut egui::Ui, size: f32, color: Color32) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::hover());
     paint(ui.painter(), rect.center(), size, color);
@@ -70,7 +70,7 @@ mod tests {
     fn logo_is_found_in_the_app_icon() {
         let img = render(64).expect("icon.svg needs a group with id=\"logo\"");
         assert_eq!(img.size, [64, 64]);
-        // Etwas gezeichnet, aber nicht die ganze Fläche (der Hintergrund gehört nicht dazu)
+        // Something is drawn, but not the whole area (the background is not part of it)
         let opaque = img.pixels.iter().filter(|p| p.a() > 128).count();
         assert!(opaque > 64 * 64 / 10, "logo is almost empty: {opaque}");
         assert!(

@@ -1,12 +1,12 @@
-//! Symbole an Knoten. Im Markdown stehen sie als Kurzname vor dem Text
-//! (`## :rocket: Spaceflight`, wie GitHub-Emojis), gezeichnet werden sie mit
-//! der Phosphor-Schrift – scharf und in der Farbe des Zweigs.
+//! Icons on nodes. In Markdown they are written as a short name before the text
+//! (`## :rocket: Spaceflight`, like GitHub emojis) and drawn with
+//! the Phosphor font – sharp and in the branch colour.
 
 use crate::model::Node;
 use eframe::egui::{self, RichText, Vec2};
 use egui_phosphor::regular as icon;
 
-/// Kurzname, Zeichen, Beschriftung im Auswahlmenü
+/// Short name, glyph, label in the picker
 pub const ICONS: &[(&str, &str, &str)] = &[
     ("bulb", icon::LIGHTBULB, "Idea"),
     ("star", icon::STAR, "Star"),
@@ -74,12 +74,12 @@ pub const ICONS: &[(&str, &str, &str)] = &[
     ("quote", icon::QUOTES, "Quote"),
 ];
 
-/// Zeichen zu einem Kurznamen
+/// Glyph for a short name
 pub fn glyph(name: &str) -> Option<&'static str> {
     ICONS.iter().find(|(n, ..)| *n == name).map(|(_, g, _)| *g)
 }
 
-/// Trennt `:name:` am Anfang vom Text, wenn es ein bekanntes Symbol ist
+/// Splits `:name:` at the start off the text if it is a known icon
 pub fn split_icon(text: &str) -> (Option<String>, String) {
     if let Some(rest) = text.strip_prefix(':') {
         if let Some((name, after)) = rest.split_once(':') {
@@ -91,12 +91,12 @@ pub fn split_icon(text: &str) -> (Option<String>, String) {
     (None, text.to_string())
 }
 
-/// Markdown-Schreibweise: `:name: `
+/// Markdown notation: `:name: `
 pub fn prefix(icon: Option<&str>) -> String {
     icon.map(|n| format!(":{n}: ")).unwrap_or_default()
 }
 
-/// Text eines Knotens mit Symbol davor (für Folien und Vorschau)
+/// Text of a node with its icon in front (for slides and the preview)
 pub fn label(node: &Node) -> String {
     match node.icon.as_deref().and_then(glyph) {
         Some(g) => format!("{g}  {}", node.text),
@@ -104,7 +104,7 @@ pub fn label(node: &Node) -> String {
     }
 }
 
-/// Auswahl im Kontextmenü. `Some(None)` = Symbol entfernen.
+/// Picker in the context menu. `Some(None)` = remove the icon.
 pub fn picker(ui: &mut egui::Ui, current: Option<&str>) -> Option<Option<String>> {
     let mut picked = None;
     ui.set_min_width(300.0);
@@ -152,13 +152,13 @@ mod tests {
             split_icon(":rocket: Spaceflight"),
             (Some("rocket".into()), "Spaceflight".into())
         );
-        // Unbekannte Namen und Uhrzeiten bleiben Text
+        // Unknown names and times of day stay text
         assert_eq!(split_icon(":nope: Text"), (None, ":nope: Text".into()));
         assert_eq!(
             split_icon("10:30: Meeting"),
             (None, "10:30: Meeting".into())
         );
-        // Jeder Kurzname kommt nur einmal vor
+        // Every short name occurs only once
         for (i, (a, ..)) in ICONS.iter().enumerate() {
             assert!(ICONS[i + 1..].iter().all(|(b, ..)| a != b), "{a}");
         }

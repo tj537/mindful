@@ -7,32 +7,32 @@ use std::path::{Path, PathBuf};
 
 const UNDO_LIMIT: usize = 200;
 
-/// Ansicht eines Dokuments
+/// View of a document
 #[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum Mode {
     #[default]
     Mindmap,
     Markdown,
     Present,
-    /// Kamerafahrt durch die Mindmap
+    /// Camera tour through the mind map
     Tour,
 }
 
 impl Mode {
-    /// Folien oder Kamerafahrt: Vollbild, keine Leisten
+    /// Slides or camera tour: full screen, no bars
     pub fn is_presenting(self) -> bool {
         matches!(self, Mode::Present | Mode::Tour)
     }
 }
 
-/// Kamera der Tour: welcher Punkt der Mindmap in der Mitte ist und wie groß
+/// Camera of the tour: which point of the mind map is in the centre and how large
 #[derive(Clone, Copy, Default)]
 pub struct Camera {
     pub center: Vec2,
     pub zoom: f32,
 }
 
-/// Weiche Kamerafahrt der Mindmap-Ansicht (z. B. bei „Alles anzeigen“)
+/// Smooth camera move of the mind map view (e.g. for "Show all")
 #[derive(Clone, Copy)]
 pub struct ViewAnim {
     pub from_pan: Vec2,
@@ -42,24 +42,24 @@ pub struct ViewAnim {
     pub start: f64,
 }
 
-/// Zustand der Kamerafahrt (nicht gespeichert)
+/// State of the camera tour (not saved)
 #[derive(Default)]
 pub struct TourState {
-    /// Aktuelle Station (0 = Übersicht)
+    /// Current stop (0 = overview)
     pub stop: usize,
-    /// Vorherige Station, für den Scheinwerfer-Übergang
+    /// Previous stop, for the spotlight transition
     pub prev_stop: usize,
-    /// Kamera beim Start des aktuellen Flugs
+    /// Camera at the start of the current flight
     pub from: Camera,
-    /// Startzeit des aktuellen Flugs (egui-Zeit in Sekunden)
+    /// Start time of the current flight (egui time in seconds)
     pub started: f64,
-    /// Rückwärts geblättert: Unterpunkte sofort zeigen statt aufwachsen lassen
+    /// Paged backwards: show sub-points at once instead of letting them grow
     pub backwards: bool,
-    /// Erster Frame steht noch aus: Kamera ohne Flug setzen
+    /// The first frame is still pending: set the camera without a flight
     pub needs_init: bool,
-    /// Beim Aufdecken Ebene für Ebene: wie viele Ebenen unter dem Zweig sichtbar sind
+    /// When revealing level by level: how many levels below the branch are visible
     pub level: usize,
-    /// Kamera im letzten Frame (für Warp-Streifen)
+    /// Camera in the last frame (for warp streaks)
     pub last_cam: Option<(Camera, f64)>,
 }
 
@@ -71,12 +71,12 @@ fn yes() -> bool {
     true
 }
 
-/// Eine geöffnete Mindmap (ein Tab).
+/// An open mind map (one tab).
 #[derive(Serialize, Deserialize)]
 pub struct Document {
     pub map: MindMap,
     pub path: Option<PathBuf>,
-    /// Ungespeicherte Änderungen
+    /// Unsaved changes
     pub dirty: bool,
     #[serde(default)]
     pub mode: Mode,
@@ -85,7 +85,7 @@ pub struct Document {
     pub selected: Option<u64>,
     #[serde(skip)]
     pub editing: Option<u64>,
-    /// Knoten, der ins Bild gerückt werden soll
+    /// Node that should be scrolled into view
     #[serde(skip)]
     pub reveal: Option<u64>,
     #[serde(skip)]
@@ -99,57 +99,57 @@ pub struct Document {
     pub pan: Vec2,
     #[serde(skip, default = "one")]
     pub zoom: f32,
-    /// Beim nächsten Zeichnen alles ins Bild holen
+    /// Bring everything into view on the next draw
     #[serde(skip, default = "yes")]
     pub fit_pending: bool,
-    /// Beim nächsten Zeichnen automatisch anordnen
+    /// Arrange automatically on the next draw
     #[serde(skip)]
     pub layout_pending: bool,
-    /// „Alles anzeigen“ weich animieren statt springen
+    /// Animate "Show all" smoothly instead of jumping
     #[serde(skip)]
     pub fit_smooth: bool,
-    /// Knoten gleiten nach dem Anordnen von den alten Positionen (mit Startzeit)
+    /// Nodes glide from their old positions after arranging (with start time)
     #[serde(skip)]
     pub layout_anim: Option<(HashMap<u64, [f32; 2]>, f64)>,
     #[serde(skip)]
     pub view_anim: Option<ViewAnim>,
 
-    /// Text im Markdown-Editor
+    /// Text in the Markdown editor
     #[serde(skip)]
     pub md_text: String,
-    /// Markdown-Editor soll im nächsten Frame den Fokus bekommen
+    /// The Markdown editor should get the focus in the next frame
     #[serde(skip)]
     pub md_focus: bool,
-    /// Schon ein Rückgängig-Schritt für diese Markdown-Sitzung angelegt?
+    /// Already created an undo step for this Markdown session?
     #[serde(skip)]
     md_checkpointed: bool,
-    /// Aktuelle Folie im Präsentationsmodus
+    /// Current slide in presentation mode
     #[serde(skip)]
     pub slide: usize,
-    /// Wie viele Stichpunkt-Gruppen der aktuellen Folie schon sichtbar sind
+    /// How many bullet groups of the current slide are already visible
     #[serde(skip)]
     pub build: usize,
-    /// Zeitpunkt, zu dem die letzte Gruppe eingeblendet wurde
+    /// Time at which the last group was faded in
     #[serde(skip)]
     pub build_time: f64,
-    /// Zeitpunkt, zu dem die aktuelle Folie erschienen ist (für den Titel-Effekt)
+    /// Time at which the current slide appeared (for the title effect)
     #[serde(skip)]
     pub slide_time: f64,
-    /// Schnellwahl (Taste G) geöffnet
+    /// Quick jump (key G) open
     #[serde(skip)]
     pub strip: bool,
-    /// In der Schnellwahl markierte Folie bzw. Station
+    /// Slide or stop highlighted in the quick jump
     #[serde(skip)]
     pub strip_cursor: usize,
     #[serde(skip)]
     pub tour: TourState,
-    /// Referentenansicht im zweiten Fenster offen
+    /// Presenter view open in the second window
     #[serde(skip)]
     pub presenter: bool,
-    /// Start der Stoppuhr in der Referentenansicht
+    /// Start of the stopwatch in the presenter view
     #[serde(skip)]
     pub presenter_start: Option<f64>,
-    /// QR-Code für die Handy-Fernbedienung wird angezeigt
+    /// QR code for the phone remote is shown
     #[serde(skip)]
     pub remote_open: bool,
 }
@@ -190,7 +190,7 @@ impl Document {
         }
     }
 
-    /// Öffnet eine .mindmap-Datei oder importiert Markdown/Text.
+    /// Opens a .mindmap file or imports Markdown/text.
     pub fn open(path: &Path) -> Result<Self, String> {
         let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
         let ext = path
@@ -202,9 +202,9 @@ impl Document {
         if matches!(ext.as_str(), "md" | "markdown" | "txt") {
             let mut map = MindMap::from_markdown_with_images(&text)
                 .ok_or_else(|| "The file contains no outline".to_string())?;
-            // Bildverweise wie ![](foto.jpg) neben der Datei gleich mit einlesen
+            // Read image references like ![](photo.jpg) next to the file right away
             crate::images::resolve(&mut map, path.parent());
-            // Import: ohne Pfad, damit Speichern nach einem .mindmap-Namen fragt
+            // Import: without a path, so saving asks for a .mindmap name
             let mut doc = Self::new(map, None);
             doc.layout_pending = true;
             doc.dirty = true;
@@ -221,7 +221,7 @@ impl Document {
 
     pub fn save_to(&mut self, path: &Path) -> Result<(), String> {
         self.end_edit();
-        // Bilder, die kein Knoten mehr zeigt, nicht mitspeichern
+        // Don't save pictures that no node shows any more
         self.map.prune_images();
         let text = serde_json::to_string_pretty(&self.map).map_err(|e| e.to_string())?;
         fs::write(path, text).map_err(|e| e.to_string())?;
@@ -230,7 +230,7 @@ impl Document {
         Ok(())
     }
 
-    /// Dateiname, sonst der Text des Mittelpunkts
+    /// File name, otherwise the text of the centre node
     pub fn title(&self) -> String {
         if let Some(stem) = self.path.as_ref().and_then(|p| p.file_stem()) {
             return stem.to_string_lossy().into_owned();
@@ -251,14 +251,14 @@ impl Document {
         short
     }
 
-    // -- Modi -------------------------------------------------------------------
+    // -- Modes ------------------------------------------------------------------
 
     pub fn set_mode(&mut self, mode: Mode) {
         self.end_edit();
         match mode {
             Mode::Markdown => self.reload_markdown(),
             Mode::Present => {
-                // Bei der Folie des ausgewählten Zweigs anfangen
+                // Start at the slide of the selected branch
                 let root = self.map.root();
                 self.slide = self
                     .selected
@@ -268,10 +268,10 @@ impl Document {
                     .unwrap_or(0);
                 self.build = 0;
                 self.strip = false;
-                // NaN = „gerade gestartet“: der erste Frame setzt die echte Zeit,
-                // damit der Titel-Effekt auch auf der ersten Folie läuft
+                // NaN = "just started": the first frame sets the real time,
+                // so the title effect also runs on the first slide
                 self.slide_time = f64::NAN;
-                // Stoppuhr der Referentenansicht startet neu
+                // The presenter view's stopwatch starts again
                 self.presenter_start = None;
             }
             Mode::Tour => {
@@ -287,7 +287,7 @@ impl Document {
                 }
             }
         }
-        // Im Editor getippte Bildpfade (![](~/Bilder/foto.jpg)) beim Verlassen einlesen
+        // Read image paths typed in the editor (![](~/Pictures/photo.jpg)) when leaving
         if self.mode == Mode::Markdown && mode != Mode::Markdown {
             let base = self
                 .path
@@ -304,7 +304,7 @@ impl Document {
         self.md_checkpointed = false;
     }
 
-    /// Nach jeder Änderung im Markdown-Editor: Text in die Mindmap übernehmen.
+    /// After every change in the Markdown editor: apply the text to the mind map.
     pub fn markdown_changed(&mut self) {
         if !self.md_checkpointed {
             let before = self.map.clone();
@@ -316,7 +316,7 @@ impl Document {
         self.fix_selection();
     }
 
-    // -- Rückgängig / Wiederholen ---------------------------------------------
+    // -- Undo / redo ----------------------------------------------------------
 
     fn push_undo(&mut self, before: MindMap) {
         self.undo.push(before);
@@ -327,14 +327,14 @@ impl Document {
         self.dirty = true;
     }
 
-    /// Vor jeder Änderung aufrufen, damit sie rückgängig gemacht werden kann.
+    /// Call before every change so it can be undone.
     pub fn checkpoint(&mut self) {
         self.end_edit();
         let before = self.map.clone();
         self.push_undo(before);
     }
 
-    /// Merkt `before` als Rückgängig-Schritt, falls sich seitdem etwas geändert hat.
+    /// Records `before` as an undo step if anything has changed since.
     pub fn record(&mut self, before: MindMap) {
         if before != self.map {
             self.push_undo(before);
@@ -381,10 +381,10 @@ impl Document {
         }
     }
 
-    // -- Text bearbeiten ------------------------------------------------------
+    // -- Editing text ---------------------------------------------------------
 
-    /// `record`: Textänderung als eigenen Rückgängig-Schritt merken
-    /// (bei frisch angelegten Knoten nicht nötig, das Anlegen ist schon einer).
+    /// `record`: record the text change as its own undo step
+    /// (not needed for freshly created nodes, creating them already is one).
     pub fn begin_edit(&mut self, id: u64, record: bool) {
         self.end_edit();
         self.selected = Some(id);

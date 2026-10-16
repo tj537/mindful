@@ -3,7 +3,7 @@ use eframe::egui::{Color32, Pos2, Rect, Vec2};
 use std::fmt::Write;
 use std::path::Path;
 
-/// Ein Knoten so, wie er exportiert wird (Weltkoordinaten, Zoom 1).
+/// A node as it is exported (world coordinates, zoom 1).
 pub struct ExportNode {
     pub center: Pos2,
     pub size: Vec2,
@@ -15,7 +15,7 @@ pub struct ExportNode {
     pub font_size: f32,
     pub edge_width: f32,
     pub text: String,
-    /// Checkbox: `None` = keine, sonst erledigt ja/nein
+    /// Checkbox: `None` = none, otherwise done yes/no
     pub task: Option<bool>,
 }
 
@@ -69,7 +69,7 @@ pub fn to_svg(nodes: &[ExportNode], theme: &Theme) -> String {
         1.0,
     );
 
-    // Verbindungslinien
+    // Connecting lines
     for n in nodes {
         let Some(a) = n.parent else { continue };
         let e = n.center;
@@ -90,7 +90,7 @@ pub fn to_svg(nodes: &[ExportNode], theme: &Theme) -> String {
         );
     }
 
-    // Knoten
+    // Nodes
     let shadow = if theme.dark { 0.35 } else { 0.12 };
     for n in nodes {
         let r = Rect::from_center_size(n.center, n.size);
@@ -110,7 +110,7 @@ pub fn to_svg(nodes: &[ExportNode], theme: &Theme) -> String {
         let mut decoration = "";
         let mut text_opacity = 1.0;
         if let Some(done) = n.task {
-            // Checkbox wie in der App: links im Knoten, Text rückt nach rechts
+            // Checkbox as in the app: on the left of the node, the text moves right
             let size = 14.0;
             let bx = r.left() + r.height() * 0.5 + 4.0 - size / 2.0;
             let by = n.center.y - size / 2.0;
@@ -166,7 +166,7 @@ pub fn to_svg(nodes: &[ExportNode], theme: &Theme) -> String {
     s
 }
 
-/// Rendert das SVG in doppelter Auflösung als PNG.
+/// Renders the SVG at double resolution as a PNG.
 pub fn svg_to_png(svg: &str, path: &Path) -> Result<(), String> {
     use resvg::{tiny_skia, usvg};
     let scale = 2.0;

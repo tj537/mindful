@@ -1,12 +1,12 @@
-//! „AI prompt“: ein kleines Formular, aus dem ein Prompt für eine beliebige KI
-//! entsteht. Die KI antwortet mit Markdown im Format von Mindful, das man
-//! direkt in den Markdown-Editor einfügen kann.
+//! "AI prompt": a small form that produces a prompt for any AI.
+//! The AI answers with Markdown in Mindful's format, which can be pasted
+//! straight into the Markdown editor.
 
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use egui_phosphor::regular as icon;
 use serde::{Deserialize, Serialize};
 
-/// Umfang der gewünschten Mindmap
+/// Scope of the requested mind map
 #[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum Scope {
     Short,
@@ -37,7 +37,7 @@ impl Scope {
     }
 }
 
-/// Was im Formular eingetragen ist (wird gespeichert)
+/// What is filled in on the form (saved)
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PromptForm {
@@ -45,9 +45,9 @@ pub struct PromptForm {
     pub language: String,
     pub description: String,
     pub scope: Scope,
-    /// Die KI wählt für passende Abschnitte ein Folienlayout (Zeitstrahl, Kreislauf …)
+    /// The AI picks a slide layout for matching sections (timeline, cycle …)
     pub layouts: bool,
-    /// Wann zuletzt kopiert wurde (für die kurze „Copied“-Rückmeldung)
+    /// When it was last copied (for the short "Copied" feedback)
     #[serde(skip)]
     pub copied_at: Option<f64>,
 }
@@ -79,7 +79,7 @@ const LANGUAGES: [&str; 6] = [
     "Português",
 ];
 
-/// Erklärt der KI die Folienlayouts, damit sie für jeden Abschnitt das passende wählt
+/// Explains the slide layouts to the AI so it picks the right one for each section
 const LAYOUT_GUIDE: &str = r###"
 Slide layouts:
 Every "## " section also becomes a slide in Mindful's presentation mode. By default its points are shown as a bullet list. When the content of a section has a clear shape, turn it into a diagram by adding a layout tag at the end of the heading line, for example "## The Water Cycle <!-- cycle -->". Pick the layout from what the content is, not for decoration:
@@ -99,7 +99,7 @@ For the three charts, only use figures you are confident are correct; if you are
 Use a mix: about half of the sections should get a layout, each layout at most once or twice, and the rest stay plain bullet lists. Never put a layout tag on the "# " heading or on bullet points.
 "###;
 
-/// Der fertige Prompt mit den Eingaben an den Platzhaltern
+/// The finished prompt with the inputs at the placeholders
 pub fn build_prompt(form: &PromptForm) -> String {
     let topic = form.topic.trim();
     let language = match form.language.trim() {
@@ -163,7 +163,7 @@ There are many ways to turn beans into coffee.
     )
 }
 
-/// Kleine Überschrift über einem Feld
+/// Small heading above a field
 pub fn field_label(ui: &mut egui::Ui, text: &str) {
     ui.add_space(4.0);
     ui.label(
@@ -174,7 +174,7 @@ pub fn field_label(ui: &mut egui::Ui, text: &str) {
     );
 }
 
-/// Kippschalter statt Häkchen
+/// Toggle switch instead of a checkbox
 pub fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str, hint: &str) {
     ui.horizontal(|ui| {
         let size = Vec2::new(34.0, 20.0);
@@ -206,7 +206,7 @@ pub fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str, hint: &str) {
     });
 }
 
-/// Segmente gleicher Breite, das gewählte farbig
+/// Segments of equal width, the selected one coloured
 fn segmented<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)]) {
     let width = ui.available_width();
     let height = 30.0;
@@ -247,7 +247,7 @@ fn segmented<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: &[(
     }
 }
 
-/// Einzeiliges Eingabefeld mit etwas Luft
+/// Single-line text field with some room
 fn text_field<'a>(text: &'a mut String, hint: &'a str) -> egui::TextEdit<'a> {
     egui::TextEdit::singleline(text)
         .hint_text(hint)
@@ -255,7 +255,7 @@ fn text_field<'a>(text: &'a mut String, hint: &'a str) -> egui::TextEdit<'a> {
         .desired_width(f32::INFINITY)
 }
 
-/// Inhalt des Aufklappmenüs. Gibt zurück, welcher Knopf gedrückt wurde.
+/// Contents of the drop-down menu. Returns which button was pressed.
 pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction> {
     let mut action = None;
     let accent = ui.visuals().selection.stroke.color;
@@ -263,7 +263,7 @@ pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction>
     let now = ui.input(|i| i.time);
     ui.spacing_mut().item_spacing.y = 6.0;
 
-    // Kopf: Symbol im farbigen Kreis, Titel und Untertitel
+    // Header: icon in a coloured circle, title and subtitle
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(Vec2::splat(38.0), Sense::hover());
         ui.painter()
@@ -371,7 +371,7 @@ pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction>
     ui.separator();
     ui.add_space(6.0);
 
-    // Hauptknopf breit und farbig, daneben der zweite Schritt
+    // Main button wide and coloured, the second step next to it
     let ready = !form.topic.trim().is_empty();
     let copied = form.copied_at.is_some_and(|t| now - t < 2.0);
     if copied {
@@ -414,7 +414,7 @@ pub fn form_ui(ui: &mut egui::Ui, form: &mut PromptForm) -> Option<PromptAction>
         }
     });
 
-    // Die drei Schritte als nummerierte Punkte
+    // The three steps as numbered points
     ui.add_space(8.0);
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;

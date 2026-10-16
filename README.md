@@ -271,7 +271,7 @@ build.rs               embeds the icon into the Windows .exe
 
 ## Contributing
 
-Bug reports and ideas are welcome in the [issues](https://github.com/tj537/mindful/issues). For code changes, please open a pull request and run `cargo fmt`, `cargo clippy --all-targets` and `cargo test` first. Most code comments are still in German; English ones are welcome.
+Bug reports and ideas are welcome in the [issues](https://github.com/tj537/mindful/issues). For code changes, please open a pull request and run `cargo fmt`, `cargo clippy --all-targets` and `cargo test` first.
 
 ### Known limitations
 

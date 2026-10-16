@@ -1,9 +1,9 @@
-//! Handy als Fernbedienung: Mindful startet einen kleinen Webserver im
-//! eigenen WLAN. Das Handy öffnet über den QR-Code eine Seite mit großen
-//! Knöpfen, Folientitel, Notizen und Stoppuhr – ohne App und ohne Cloud.
-//! Ein zufälliger Schlüssel in der Adresse sorgt dafür, dass nur wer den
-//! QR-Code sieht, mitsteuern kann. Endet der Vortrag, schließt sich der
-//! Server wieder (`stop`).
+//! Phone as a remote: Mindful starts a small web server in the
+//! local Wi-Fi. Via the QR code the phone opens a page with big
+//! buttons, slide title, notes and stopwatch – no app and no cloud.
+//! A random token in the address makes sure only someone who sees the
+//! QR code can control the talk. When the talk ends, the
+//! server shuts down again (`stop`).
 
 use eframe::egui;
 use serde::Serialize;
@@ -14,17 +14,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// Was das Handy anzeigt
+/// What the phone shows
 #[derive(Clone, Default, Serialize)]
 pub struct RemoteState {
     pub title: String,
     pub next: String,
-    /// 0 = Titelfolie
+    /// 0 = title slide
     pub slide: usize,
     pub total: usize,
     pub point: usize,
     pub points: usize,
-    /// (Stichpunkt, Notiz)
+    /// (bullet, note)
     pub notes: Vec<(String, String)>,
     pub elapsed: u64,
 }
@@ -43,23 +43,23 @@ struct Shared {
 }
 
 pub struct Remote {
-    /// Adresse für den QR-Code
+    /// Address for the QR code
     pub url: String,
     port: u16,
-    /// Gesetzt, wenn der Server aufhören soll
+    /// Set when the server should stop
     stopping: Arc<AtomicBool>,
-    /// Schlüssel in der Adresse (nur Tests lesen ihn direkt)
+    /// Token in the address (only tests read it directly)
     #[cfg_attr(not(test), allow(dead_code))]
     token: String,
     shared: Arc<Mutex<Shared>>,
 }
 
-/// Der laufende Server, falls einer läuft
+/// The running server, if there is one
 static REMOTE: Mutex<Option<Arc<Remote>>> = Mutex::new(None);
-/// Letzter Fehler beim Starten – nicht in jedem Frame neu versuchen
+/// Last error when starting – don't retry in every frame
 static LAST_ERROR: Mutex<Option<(Instant, String)>> = Mutex::new(None);
 
-/// Server starten, falls er noch nicht läuft
+/// Start the server if it isn't running yet
 pub fn start(ctx: &egui::Context) -> Result<Arc<Remote>, String> {
     let mut slot = REMOTE.lock().map_err(|e| e.to_string())?;
     if let Some(remote) = slot.as_ref() {
@@ -85,12 +85,12 @@ pub fn start(ctx: &egui::Context) -> Result<Arc<Remote>, String> {
     }
 }
 
-/// Läuft der Server gerade?
+/// Is the server running right now?
 pub fn running() -> Option<Arc<Remote>> {
     REMOTE.lock().ok()?.clone()
 }
 
-/// Server beenden und den Port schließen (z. B. am Ende des Vortrags)
+/// Stop the server and close the port (e.g. at the end of the talk)
 pub fn stop() {
     let remote = REMOTE.lock().ok().and_then(|mut slot| slot.take());
     if let Some(remote) = remote {
@@ -98,7 +98,7 @@ pub fn stop() {
     }
 }
 
-/// IP-Adresse im eigenen Netz (ohne etwas zu senden: UDP „verbindet“ nur)
+/// IP address in the local network (without sending anything: UDP only "connects")
 fn local_ip() -> Option<String> {
     let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect("192.168.0.1:80").ok()?;
@@ -132,7 +132,7 @@ impl Remote {
             (token.clone(), shared.clone(), stopping.clone());
         std::thread::spawn(move || {
             for stream in listener.incoming() {
-                // Beim Beenden weckt eine Verbindung an uns selbst `incoming` auf
+                // On stop, a connection to ourselves wakes up `incoming`
                 if server_stopping.load(Ordering::Relaxed) {
                     break;
                 }
@@ -153,20 +153,20 @@ impl Remote {
         })
     }
 
-    /// Server-Schleife beenden; danach ist der Port frei
+    /// End the server loop; the port is free afterwards
     fn shutdown(&self) {
         self.stopping.store(true, Ordering::Relaxed);
         let _ = TcpStream::connect(("127.0.0.1", self.port));
     }
 
-    /// Aktuellen Stand fürs Handy hinterlegen
+    /// Store the current state for the phone
     pub fn publish(&self, state: RemoteState) {
         if let Ok(mut s) = self.shared.lock() {
             s.state = state;
         }
     }
 
-    /// Vom Handy gedrückte Knöpfe abholen
+    /// Fetch the buttons pressed on the phone
     pub fn take_commands(&self) -> Vec<Command> {
         self.shared
             .lock()
@@ -174,7 +174,7 @@ impl Remote {
             .unwrap_or_default()
     }
 
-    /// Hat sich in den letzten Sekunden ein Handy gemeldet?
+    /// Has a phone checked in during the last few seconds?
     pub fn connected(&self) -> bool {
         self.shared
             .lock()
@@ -183,7 +183,7 @@ impl Remote {
             .is_some_and(|t| t.elapsed() < Duration::from_secs(4))
     }
 
-    /// QR-Code der Adresse: Breite und Felder (true = dunkel)
+    /// QR code of the address: width and modules (true = dark)
     pub fn qr(&self) -> Option<(usize, Vec<bool>)> {
         let code = qrcode::QrCode::new(self.url.as_bytes()).ok()?;
         let dark = code
@@ -200,7 +200,7 @@ impl Remote {
     }
 }
 
-/// Eine Anfrage beantworten
+/// Answer one request
 fn handle(
     mut stream: TcpStream,
     token: &str,
@@ -208,7 +208,7 @@ fn handle(
     ctx: &egui::Context,
 ) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
-    // Bis zum Ende der Kopfzeilen lesen – eine Anfrage kann in mehreren Teilen ankommen
+    // Read up to the end of the headers – a request can arrive in several parts
     let mut data = Vec::new();
     let mut buf = [0u8; 2048];
     while !data.windows(4).any(|w| w == b"\r\n\r\n") && data.len() < 16 * 1024 {
@@ -278,7 +278,7 @@ const FORBIDDEN: &str = r#"<!doctype html><meta name="viewport" content="width=d
 <body style="font-family:-apple-system,sans-serif;background:#1c1f26;color:#e6e8ee;padding:32px">
 <h2>Mindful remote</h2><p>This link is no longer valid. Scan the QR code in Mindful again.</p>"#;
 
-/// Die Seite fürs Handy
+/// The page for the phone
 const PAGE: &str = r##"<!doctype html>
 <html lang="en">
 <head>
@@ -353,7 +353,7 @@ const PAGE: &str = r##"<!doctype html>
   function press(path) { if (navigator.vibrate) navigator.vibrate(15); call(path, "POST"); }
   $("nextBtn").onclick = () => press("/next");
   $("prev").onclick = () => press("/prev");
-  // Wischen: nach links = weiter, nach rechts = zurück
+  // Swipe: left = next, right = back
   let x0 = null;
   document.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, { passive: true });
   document.addEventListener("touchend", e => {
@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn phone_requests_need_the_token_and_queue_commands() {
         let Ok(remote) = Remote::start(egui::Context::default()) else {
-            // Ohne Netzwerk (z. B. in einer Sandbox) gibt es nichts zu testen
+            // Without a network (e.g. in a sandbox) there is nothing to test
             eprintln!("remote test skipped: no network");
             return;
         };
@@ -421,7 +421,7 @@ mod tests {
         assert!(page.contains("Mindful remote"));
         assert!(remote.qr().is_some());
 
-        // Nach dem Beenden nimmt der Port keine Anfragen mehr an
+        // After stopping, the port no longer accepts requests
         let addr = local.trim_start_matches("http://").to_string();
         remote.shutdown();
         std::thread::sleep(Duration::from_millis(200));

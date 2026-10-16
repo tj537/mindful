@@ -7,23 +7,23 @@ pub struct Theme {
     pub dark: bool,
     pub background: Color32,
     pub grid: Color32,
-    /// Füllung der Knoten ab der 2. Ebene und der Leisten
+    /// Fill of the nodes from level 2 on and of the bars
     pub card: Color32,
-    /// Text auf `card`
+    /// Text on `card`
     pub text: Color32,
-    /// Text auf farbigen Knoten (Mitte und Hauptzweige)
+    /// Text on coloured nodes (centre and main branches)
     pub on_accent: Color32,
     pub root: Color32,
     pub selection: Color32,
-    /// Jeder Hauptzweig bekommt eine dieser Farben
+    /// Every main branch gets one of these colours
     pub branches: [Color32; 6],
 }
 
-/// Name des eigenen Farbschemas (gespeichert wie die anderen über den Namen)
+/// Name of the custom colour scheme (saved by name like the others)
 pub const CUSTOM_NAME: &str = "Custom";
 
-/// Eigene Farben aus dem Farb-Editor. Gitter, Textfarbe auf farbigen Knoten
-/// und hell/dunkel werden daraus berechnet.
+/// Custom colours from the colour editor. The grid, the text colour on coloured nodes
+/// and light/dark are derived from them.
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CustomColors {
@@ -49,7 +49,7 @@ fn from_rgb([r, g, b]: [u8; 3]) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 
-/// Helligkeit 0…1 (für die Wahl der Textfarbe)
+/// Brightness 0…1 (to choose the text colour)
 pub fn luminance(c: Color32) -> f32 {
     (0.299 * c.r() as f32 + 0.587 * c.g() as f32 + 0.114 * c.b() as f32) / 255.0
 }
@@ -71,7 +71,7 @@ impl CustomColors {
         let text = from_rgb(self.text);
         let root = from_rgb(self.root);
         let branches = self.branches.map(from_rgb);
-        // Auf hellen Zweigfarben dunkle Schrift, sonst weiße
+        // Dark text on light branch colours, white otherwise
         let accents = std::iter::once(root).chain(branches);
         let light = accents.map(luminance).sum::<f32>() / 7.0 > 0.62;
         Theme {
@@ -409,13 +409,13 @@ pub const THEMES: [Theme; 16] = [
     },
 ];
 
-/// Mischt zwei Farben (t = 0 → a, t = 1 → b)
+/// Mixes two colours (t = 0 → a, t = 1 → b)
 fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
     rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
 }
 
-/// egui-Optik passend zum Farbschema: flache Buttons, runde Ecken, Akzentfarbe
+/// egui look matching the colour scheme: flat buttons, rounded corners, accent colour
 pub fn visuals_for(theme: &Theme) -> egui::Visuals {
     let mut v = if theme.dark {
         egui::Visuals::dark()
@@ -455,7 +455,7 @@ pub fn visuals_for(theme: &Theme) -> egui::Visuals {
     }
     w.noninteractive.bg_stroke = stroke(1.0, border);
     w.noninteractive.bg_fill = theme.card;
-    // Buttons sind flach und bekommen erst beim Drüberfahren eine Fläche
+    // Buttons are flat and only get a fill on hover
     w.inactive.weak_bg_fill = Color32::TRANSPARENT;
     w.inactive.bg_fill = raised;
     w.inactive.bg_stroke = Stroke::NONE;
@@ -471,7 +471,7 @@ pub fn visuals_for(theme: &Theme) -> egui::Visuals {
     v
 }
 
-/// Abstände und Schriftgrößen, unabhängig vom Farbschema
+/// Spacing and font sizes, independent of the colour scheme
 pub fn apply_spacing(style: &mut egui::Style) {
     use egui::{FontFamily, FontId, TextStyle};
     let s = &mut style.spacing;
@@ -502,7 +502,7 @@ pub fn apply_spacing(style: &mut egui::Style) {
     .into();
 }
 
-/// macOS-Systemschrift (falls vorhanden) und Phosphor-Icons laden
+/// Load the macOS system font (if available) and the Phosphor icons
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     let system_font = [
@@ -533,7 +533,7 @@ mod tests {
 
     #[test]
     fn themes_have_unique_names_and_custom_colours_round_trip() {
-        // Gespeichert wird der Name – er muss eindeutig sein
+        // The name is what gets saved – it must be unique
         for (i, a) in THEMES.iter().enumerate() {
             assert!(
                 THEMES[i + 1..].iter().all(|b| a.name != b.name),
@@ -546,7 +546,7 @@ mod tests {
         assert_eq!(custom.background, THEMES[1].background);
         assert_eq!(custom.branches, THEMES[1].branches);
         assert!(custom.dark);
-        // Helle Zweigfarben bekommen dunkle Schrift, kräftige weiße
+        // Light branch colours get dark text, strong ones white
         let pastel = CustomColors {
             root: [230, 230, 250],
             branches: [[240, 220, 200]; 6],

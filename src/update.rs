@@ -1,6 +1,6 @@
-//! Update-Hinweis: Beim Start fragt Mindful einmal im Hintergrund bei GitHub
-//! nach der neuesten Version. Dafür wird das vorhandene `curl` benutzt
-//! (auf macOS, Windows 10+ und Linux eingebaut) – keine zusätzliche Bibliothek.
+//! Update notice: on startup Mindful asks GitHub once in the background
+//! for the newest version. It uses the `curl` that is already there
+//! (built into macOS, Windows 10+ and Linux) – no extra library.
 
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -8,24 +8,24 @@ use std::sync::{Arc, Mutex};
 const LATEST: &str = "https://api.github.com/repos/tj537/mindful/releases/latest";
 pub const RELEASES: &str = "https://github.com/tj537/mindful/releases/latest";
 
-/// Eine neuere Version, als gerade läuft
+/// A newer version than the one running
 #[derive(Clone, Debug, PartialEq)]
 pub struct Update {
     pub version: String,
     pub url: String,
 }
 
-/// Ergebnis der Prüfung: `None` solange sie läuft
+/// Result of the check: `None` while it is running
 pub type Check = Arc<Mutex<Option<Result<Option<Update>, String>>>>;
 
-/// „v0.2.0“ → (0, 2, 0)
+/// "v0.2.0" → (0, 2, 0)
 fn parse_version(text: &str) -> Option<(u32, u32, u32)> {
     let mut parts = text.trim().trim_start_matches('v').split('.');
     let mut next = || parts.next()?.split(['-', '+']).next()?.parse().ok();
     Some((next()?, next()?, next().unwrap_or(0)))
 }
 
-/// Ist `latest` neuer als `current`?
+/// Is `latest` newer than `current`?
 pub fn is_newer(latest: &str, current: &str) -> bool {
     match (parse_version(latest), parse_version(current)) {
         (Some(l), Some(c)) => l > c,
@@ -33,7 +33,7 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     }
 }
 
-/// Prüfung im Hintergrund starten; `repaint` weckt die Oberfläche danach
+/// Start the check in the background; `repaint` wakes up the UI afterwards
 pub fn start(repaint: impl Fn() + Send + 'static) -> Check {
     let result: Check = Arc::default();
     let slot = result.clone();
@@ -76,7 +76,7 @@ fn fetch() -> Result<Option<Update>, String> {
     }))
 }
 
-/// Unter Windows kein schwarzes Konsolenfenster aufblitzen lassen
+/// On Windows, don't let a black console window flash up
 fn hide_console(command: &mut Command) {
     #[cfg(windows)]
     {
@@ -88,7 +88,7 @@ fn hide_console(command: &mut Command) {
     let _ = command;
 }
 
-/// Eine Webseite im Standardbrowser öffnen
+/// Open a web page in the default browser
 pub fn open_url(url: &str) {
     #[cfg(target_os = "macos")]
     let _ = Command::new("open").arg(url).spawn();
